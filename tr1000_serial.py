@@ -5,6 +5,8 @@ tr1000_serial.py - le as capturas .serlog do espiao (a serial USB do App)
 Uso:
     python3 tr1000_serial.py bruto        captura.serlog [--max N]
     python3 tr1000_serial.py estatisticas captura.serlog
+    python3 tr1000_serial.py pacotes      captura.serlog [--max N]
+    python3 tr1000_serial.py blocos       captura.serlog
 
 E, se a serial carregar SysEx Roland (hipotese H1, REFERENCIA 2.1b), todos os
 comandos do tr1000_sysex.py aceitam o .serlog direto:
@@ -113,6 +115,89 @@ def quadros_sysex(regs):
     return quadros, dict(sobra)
 
 
+# ─────────────────────────────────────────────────────────────
+# O protocolo de pacotes da serial (medido 08/10/2026, REFERENCIA 2.1c)
+#
+# A hipotese H1 (SysEx Roland) caiu na C1-S0: 0,2% dos bytes em quadros F0..F7.
+# O que passa e um protocolo binario proprio, little-endian, em pacotes:
+#   tipo & 0x7F == 0x14: 12 bytes fixos  [tipo][canal][orig][dest][u32][u32]
+#   tipo & 0x7F == 0x15: 16 de cabecalho [tipo][canal][orig][dest][u32][u32]
+#                        [u32 n] + n bytes de carga
+# Essa regra enquadrou a captura inteira, nas duas direcoes, com ZERO byte
+# sobrando (86 KB do App, 1,43 MB da maquina).
+# ─────────────────────────────────────────────────────────────
+PAC_CURTO, PAC_DADOS = 0x14, 0x15
+LER_BLOCO = 0x82            # carga do App: 82 <bloco u16> <inst u32> <indice u16> <n u16>
+BLOCO_LIDO = 0x02           # carga da maquina: 02 <bloco u16> ... <indice u16> <n u16> + n x u32
+
+
+def pacotes(regs):
+    """-> [(direcao, t, bytes do pacote)], remontados sobre o fluxo de cada
+    direcao (read() corta onde quiser). t e a hora do registro em que o
+    pacote TERMINOU de chegar. Byte que nao comeca pacote conhecido vira
+    pacote de 1 byte com tipo None - nao foi visto na S0, e se aparecer e o
+    sinal de que o enquadramento nao e o que achamos."""
+    out = []
+    for tipo_reg, direcao in (("W", "TX"), ("R", "RX")):
+        buf = b""
+        for r in regs:
+            if r["tipo"] != tipo_reg:
+                continue
+            buf += r["dados"]
+            while buf:
+                t = buf[0] & 0x7F
+                if t == PAC_CURTO:
+                    n = 12
+                elif t == PAC_DADOS:
+                    if len(buf) < 16:
+                        break
+                    n = 16 + struct.unpack_from("<I", buf, 12)[0]
+                else:
+                    out.append((direcao, r["t"], buf[:1]))
+                    buf = buf[1:]
+                    continue
+                if len(buf) < n:
+                    break
+                out.append((direcao, r["t"], buf[:n]))
+                buf = buf[n:]
+    out.sort(key=lambda x: x[1])
+    return out
+
+
+def carga(pac):
+    return pac[16:] if pac and (pac[0] & 0x7F) == PAC_DADOS else b""
+
+
+def leituras_de_bloco(pacs):
+    """Os pedidos 82 do App -> {(bloco, instancia): (indice, n)}.
+    A instancia vem no u32 do meio; na S0 ela anda de 65536 em 65536, ou seja,
+    o numero de verdade esta nos 16 bits de cima (inst >> 16)."""
+    out = {}
+    for direcao, t, p in pacs:
+        c = carga(p)
+        if direcao == "TX" and c[:1] == bytes([LER_BLOCO]) and len(c) >= 11:
+            bloco = struct.unpack_from("<H", c, 1)[0]
+            inst = struct.unpack_from("<I", c, 3)[0]
+            indice, n = struct.unpack_from("<HH", c, 7)
+            out[(bloco, inst >> 16)] = (indice, n)
+    return out
+
+
+def valores_de_bloco(pacs):
+    """As respostas 02 da maquina -> [(t, bloco, indice, [u32...])].
+    So as que fecham: n x 4 bytes depois do cabecalho de 11 da carga."""
+    out = []
+    for direcao, t, p in pacs:
+        c = carga(p)
+        if direcao == "RX" and c[:1] == bytes([BLOCO_LIDO]) and len(c) >= 11:
+            bloco = struct.unpack_from("<H", c, 1)[0]
+            indice, n = struct.unpack_from("<HH", c, 7)
+            if len(c) == 11 + 4 * n:
+                out.append((t, bloco, indice,
+                            list(struct.unpack_from(f"<{n}I", c, 11))))
+    return out
+
+
 def carregar(caminho, keep_alive=False, outros=None):
     """O .serlog no formato do tr1000_sysex (dicts com dir, cmd, addr, data,
     t, chk_ok...) - e o que deixa parse/diff/fx/resumo de la funcionarem aqui.
@@ -209,6 +294,36 @@ def cmd_estatisticas(caminho):
             f"[{hexs(g)}]x{n}" for g, n in quads.most_common(6)))
 
 
+def cmd_pacotes(caminho, maximo=None):
+    pacs = pacotes(ler_serlog(caminho))
+    if not pacs:
+        print("nenhum pacote"); return
+    t0 = pacs[0][1]
+    for i, (d, t, p) in enumerate(pacs):
+        if maximo is not None and i >= maximo:
+            print(f"... (+{len(pacs) - maximo} pacotes)"); break
+        c = carga(p)
+        print(f"{t - t0:9.3f} {d} {len(p):5}B  {hexs(p[:12 if not c else 16])}"
+              + (f"  | {hexs(c[:32])}{' ...' if len(c) > 32 else ''}" if c else ""))
+
+
+def cmd_blocos(caminho):
+    """O mapa de blocos que o App leu - o equivalente da lista branca."""
+    pacs = pacotes(ler_serlog(caminho))
+    ruins = sum(1 for _, _, p in pacs if len(p) == 1)
+    print(f"{len(pacs)} pacotes, {ruins} bytes fora de pacote")
+    lidos = leituras_de_bloco(pacs)
+    por_bloco = {}
+    for (bloco, inst), (indice, n) in lidos.items():
+        b = por_bloco.setdefault(bloco, [indice, n, []])
+        b[2].append(inst)
+    print(f"{len(por_bloco)} blocos, {len(lidos)} leituras (bloco x instancia)\n")
+    for bloco, (indice, n, insts) in sorted(por_bloco.items()):
+        insts.sort()
+        inst = f"{insts[0]}..{insts[-1]} ({len(insts)})" if len(insts) > 1 else str(insts[0])
+        print(f"   bloco {bloco:3d}  indice {indice:4d}  n {n:3d}  instancias {inst}")
+
+
 if __name__ == "__main__":
     a = sys.argv
     if len(a) < 3:
@@ -217,5 +332,9 @@ if __name__ == "__main__":
         cmd_bruto(a[2], int(a[a.index("--max") + 1]) if "--max" in a else None)
     elif a[1] == "estatisticas":
         cmd_estatisticas(a[2])
+    elif a[1] == "pacotes":
+        cmd_pacotes(a[2], int(a[a.index("--max") + 1]) if "--max" in a else None)
+    elif a[1] == "blocos":
+        cmd_blocos(a[2])
     else:
         print(__doc__)

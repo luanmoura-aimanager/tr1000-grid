@@ -285,6 +285,53 @@ class TesteSerlog(unittest.TestCase):
         self.assertEqual(outros["abriu-serial"], "sim")
 
 
+class TestePacotesSerial(unittest.TestCase):
+    """O enquadramento medido na C1-S0 (REFERENCIA 2.1c), contra pacotes
+    copiados da captura real: o pedido 82 do bloco 3 e a resposta 02 dele."""
+
+    PEDIDO = bytes.fromhex("15 08 41 F2 01 00 00 00 C0 17 92 21 0B 00 00 00"
+                           "82 03 00 00 00 00 00 70 00 24 01")
+    POLL = bytes.fromhex("14 08 40 F0 9B 00 00 00 00 00 00 05")
+
+    def _resposta(self, valores):
+        import struct
+        c = bytes.fromhex("02 03 00 00 00 00 00 70 00") + struct.pack(
+            "<H", len(valores)) + struct.pack(f"<{len(valores)}I", *valores)
+        return bytes.fromhex("15 08 F0 00 38 73 84 86 00 00 00 00") + \
+            struct.pack("<I", len(c)) + c
+
+    def _regs(self, *pares):
+        return [dict(t=i * 0.001, tipo=t, fd=3, dados=d)
+                for i, (t, d) in enumerate(pares)]
+
+    def test_enquadra_pacote_cortado_e_colado(self):
+        resp = self._resposta([1, 2, 3])
+        regs = self._regs(("W", self.PEDIDO[:5]), ("W", self.PEDIDO[5:] + self.POLL),
+                          ("R", resp[:20]), ("R", resp[20:]))
+        pacs = tr1000_serial.pacotes(regs)
+        self.assertEqual([(d, len(p)) for d, _, p in pacs],
+                         [("TX", 27), ("TX", 12), ("RX", len(resp))])
+
+    def test_pedido_e_resposta_de_bloco(self):
+        pacs = tr1000_serial.pacotes(self._regs(("W", self.PEDIDO),
+                                                ("R", self._resposta([7, 8]))))
+        self.assertEqual(tr1000_serial.leituras_de_bloco(pacs), {(3, 0): (112, 292)})
+        self.assertEqual(tr1000_serial.valores_de_bloco(pacs)[0][1:],
+                         (3, 112, [7, 8]))
+
+    def test_instancia_nos_16_bits_de_cima(self):
+        # na S0 o u32 da instancia andou 0, 65536, 131072... (bloco 13 x 10)
+        import struct
+        ped = bytearray(self.PEDIDO)
+        struct.pack_into("<I", ped, 16 + 3, 9 << 16)
+        pacs = tr1000_serial.pacotes(self._regs(("W", bytes(ped))))
+        self.assertEqual(list(tr1000_serial.leituras_de_bloco(pacs)), [(3, 9)])
+
+    def test_byte_estranho_vira_pacote_de_um(self):
+        pacs = tr1000_serial.pacotes(self._regs(("R", b"\x42" + self.POLL)))
+        self.assertEqual([len(p) for _, _, p in pacs], [1, 12])
+
+
 class TesteEspiaoPreparo(unittest.TestCase):
     """O App em /Applications nunca e escrito: ele so pode aparecer como
     ORIGEM do ditto. Todo o resto mira o cache (ou espiao/, onde mora o

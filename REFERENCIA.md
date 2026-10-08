@@ -146,7 +146,89 @@ ele faz polling — provável fonte do `cur_step`/`cur_vari` (2.2).
 Outras coisas na pasta `~/TR1000 User/`: `update.zip` (27 MB, o firmware baixado pelo App) e
 `app_version.xml`. O firmware fica **intocado**.
 
-### 2.2 O catálogo do TR-1000 App — (catálogo, 07/10/2026)
+### 2.1c O protocolo da serial — C1-S0, 08/10/2026 (medido, salvo onde marcado)
+
+Captura: `capturas/2026-10-08-s0-autoteste.serlog` (1,77 MB, 14 886 registros). O App foi aberto
+pela cópia do espião, esperou "Connected", e foi fechado com Cmd+Q. Máquina parada.
+Autoteste: espião carregou, abriu `/dev/tty.usbmodem31101`.
+
+**A porta:** `tcsetattr` a 9600 e logo depois a **230400** baud.
+
+**H1 caiu.** Não é SysEx Roland: só 0,2–0,3% dos bytes caem em quadros `F0..F7`, e por
+acaso. É um protocolo binário próprio, little-endian, em **pacotes**:
+
+| tipo (`& 0x7F`) | tamanho | forma |
+|---|---|---|
+| `0x14` | 12 B fixos | `[tipo][canal][orig][dest][u32][u32]` |
+| `0x15` | 16 + n | `[tipo][canal][orig][dest][u32][u32][u32 n]` + n bytes de carga |
+
+Essa regra enquadra a captura **inteira**, nas duas direções, com **zero** byte sobrando:
+- App → máquina: 86 KB em 5963 pacotes
+- máquina → App: 1,43 MB em 9141 pacotes
+
+`tr1000_serial.py pacotes` mostra a conversa.
+
+O resto da forma dos pacotes:
+- **Bit 7 do tipo** (`0x94`/`0x95`) aparece só no **canal `02`**: o aperto de mão inicial e
+  um tráfego periódico de 160 B. O canal `08` leva todo o resto.
+- **orig/dest** **(deduzido)**:
+  - O App manda `40 F0` (o poll) e `41 F2` (os pedidos).
+  - A máquina responde `F0 00`.
+  - Parecem endereços de origem/destino de dois "serviços" de cada lado.
+
+**O aperto de mão:**
+- O App manda `94 02 40 F0 FE C0 00 00 00 84 03 03`.
+- A máquina responde 43 B terminando em ASCII `"1.22"`, provavelmente a versão do
+  firmware **(deduzido)**.
+
+**O poll:**
+- O App manda `14 08 40 F0 9B 00 00 00 00 00 00 05` a cada ~100 ms: 4680 vezes.
+- A resposta foi **sempre** `14 08 F0 00 1B 00 00 01 00 00 00 07`.
+- Hipótese: "nada mudou"; a C1-S5 (mexer no painel com o App aberto) testa.
+
+**Listas** (pedido `14 08 41 F2 <cmd> … 01` → um `14` de cabeçalho + um `0x15` por item, a carga
+começando por `<id da lista> <índice u16>`):
+
+| cmd | id | itens | conteúdo |
+|---|---|---|---|
+| `87` | `08` | 104 | categorias ("ALL", "BD E", "BD A", "SD E", …) |
+| `85` | `06` | 442 | GENs ("808 Bass Drum", "909 Snare Drum", "8X Conga", …) |
+| — | `06` (282 B) | 2121 | caminhos de sample (`A:/Roland/TR-1000/SAMPLE…`) |
+| `8D` | `0e` | 331 | INST ("TR-808-1000 BD", …) — bate com as 331 da INST List |
+| `8B`? | `0c` | 128 | nomes de kit ("Dub Techno Kit", …) |
+
+**Os parâmetros — o achado principal:**
+- **Pedido** do App (carga de um `0x15`):
+  `82 <bloco u16> <instância u32> <índice u16> <n u16>`
+- **Resposta** da máquina:
+  `02 <bloco u16> … <índice u16> <n u16>` + **n valores u32**
+- O tamanho fecha sempre. O bloco 3, por exemplo, volta com n = 292 → 1168 B de valores.
+- A instância anda de 65536 em 65536: o número está nos 16 bits de cima.
+- **O índice parece global**: um número único por parâmetro, de 112 a ~2880. Ele é
+  candidato a casar com o catálogo do App, 2.2 **(deduzido)**. Mas o catálogo foi
+  deduplicado pelo linker, então a posição na lista de strings ≠ índice. A ponte certa é
+  a tabela de descritores do binário, ainda não lida.
+
+O App leu **139 blocos, 438 leituras (bloco × instância)** no boot (`tr1000_serial.py
+blocos`). A estrutura que salta aos olhos — **dedução** sobre números medidos, a confirmar
+com gestos (C1-S3/S4, C2):
+
+| blocos | índice / n | instâncias | leitura provável |
+|---|---|---|---|
+| 3 | 112 / 292 | 1 | sistema/projeto |
+| 4–13 | vários, pequenos | 1 (o 13: 10) | kit (o 13 por track?) |
+| 16–24, 26–34, …, 106–114 | os mesmos 9 subblocos (565/27, 2856/30, 2651/15, 2628/11, 2690/11, 2715/27, 602/22, 592/10, 624/40), 10 grupos de 10 em 10 | **2** nos grupos 16, 26, 36, 46; **1** nos outros 6 | **os 10 instrumentos**. Os 4 primeiros têm **layer A/B**, exatamente BD SD LT HT (manual) |
+| 116 | 988 / 248 | 1 | **cabeçalho do pattern** |
+| 117–152 | 12 grupos de 3: 1236/13, 1249/131 (×10), 1380/144 (×10) | | **8 variações + 4 fills**: cabeçalho da variação (13), parâmetros do track na variação (131, ×10 tracks), **steps** (144, ×10 tracks) |
+| 156 | 718 / 270 | 500 | os 500 slots de sample (strings em u32) |
+
+Os **144 do bloco de steps** batem com o catálogo do step (2.2) se forem `note0..63` (64) +
+`probability`, `sub_step`, `cycle`, `shift`, `valid` (5 × 16 = 80) = 144. Parece que **o
+App lê o pattern inteiro ao abrir** — o obstáculo da TR-8S ("não há editor de pattern
+para sniffar") não existe aqui. Nada disso foi escrito; e nada foi provado sobre
+**escrita** (o pedido de escrita ainda não apareceu: o App só leu).
+
+ — (catálogo, 07/10/2026)
 
 O binário do App (`/Applications/Roland/TR-1000 App.app`, versão 1.10, framework JUCE —
 código compartilhado com o app do SP-404MKII, cujas strings aparecem junto) tem uma tabela
@@ -226,9 +308,13 @@ da Chart. Se a Roland publicou algum mapa SysEx, é lá. Baixar antes da C1.
 | "Use CTRL Port" = 1 com o App já aberto: segue na serial; a UI não tem a opção | **medido 08/10** | 2.1b |
 | "Use CTRL Port" = 1 num App aberto do zero | **desconhecido** — a C1-S0 diz | 2.1b |
 | o App fala com a máquina continuamente (~600 B/s) | **medido 08/10** (`lsof`, offset do fd) | 2.1b |
-| a serial carrega SysEx Roland (H1) | **(deduzido)** — a C1-S1 decide | 2.1b |
+| a serial carrega SysEx Roland (H1) | **falso — medido 08/10** (C1-S0: 0,2% em quadros) | 2.1c |
+| transporte: serial USB a 230400, pacotes `0x14` (12 B) / `0x15` (16 + n), enquadramento sem sobra | **medido 08/10** | 2.1c |
+| leitura de parâmetros: `82 bloco inst índice n` → `02 …` + n × u32 | **medido 08/10** | 2.1c |
+| blocos 116–152 = pattern (cabeçalho, 8 var + 4 fills, tracks, steps) | **(deduzido)** da forma | 2.1c |
+| comando de escrita | **desconhecido** — C1-S3 | |
 | espião grava `read`/`write` da serial, quadros remontados | **medido de mesa 08/10** (pty), **não** com o App | 2.1b |
-| model ID | **desconhecido** — sai da C1 | |
+| model ID | **não se aplica** à serial (não é SysEx); a versão `"1.22"` vem no aperto de mão | 2.1c |
 | ordem dos parâmetros por bloco | **(catálogo)** | 2.2 |
 | endereços de qualquer coisa | **desconhecido** | |
 | RQ1 inválido envenena a CTRL? | **desconhecido** — tratar como sim | CLAUDE.md |
