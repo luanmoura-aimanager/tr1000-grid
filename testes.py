@@ -26,6 +26,7 @@ import tr1000_sysex
 import tr1000_serial
 import catalogo_app
 import espiao
+import conexao_serial
 
 # Mensagem real, capturada do site ARIA falando com uma TR-8S (tr8s-grid
 # REFERENCIA 2.9): "pattern atual -> 127". E o unico SysEx Roland medido que
@@ -364,6 +365,137 @@ class TesteGradeDeSteps(unittest.TestCase):
 
     def test_so_pausas_e_apagado(self):
         self.assertEqual(tr1000_serial.grade_de_steps([0xFF] * 64), "." * 16)
+
+
+# Pacotes REAIS da captura knob-bd-tune (08/10/2026)
+R95_REAL = bytes.fromhex("95 02 f0 00 58 db 7b 86 f4 d1 1e 00 1b 00 00 00 7e 00 00 03 00"
+                         "00 00 03 00 5a 01 00 00 5a 01 e0 f8 f1 00 00 00 00 00 31 2e 32 32")
+R03_REAL = bytes.fromhex("15 08 f0 00 78 d6 82 86 f4 a0 87 00 0b 00 00 00 03 9c 00 7e 00"
+                         "00 00 c2 03 c2 03")
+R02_REAL = bytes.fromhex("15 08 f0 00 68 d7 82 86 01 00 00 00 0f 00 00 00 02 9c 00 7e 00"
+                         "00 00 c2 03 01 00 fd 01 00 00")
+W01_REAL = bytes.fromhex("15 08 41 f2 01 00 00 00 c0 88 06 2d 0d 00 00 00 01 9c 00 7e 00"
+                         "00 00 c2 03 fd 01 00 00")
+R82_REAL = bytes.fromhex("15 08 41 f2 00 00 00 00 40 87 06 2d 0b 00 00 00 82 9c 00 7e 00"
+                         "00 00 c2 03 01 00")
+
+
+class _MaquinaFalsa:
+    """Uma TR-1000 de mentira atras da 'porta': responde ao aperto com o 95
+    real, a leitura com um 02 do valor guardado, a escrita com um 03 - em
+    pedacos de 5 bytes, porque a porta de verdade entrega cortado.
+    calada=True nao confirma escrita nenhuma."""
+
+    def __init__(self, calada=False):
+        import struct
+        self.st = struct
+        self.valores = {(156, 126, 0, 962): 1000, (118, 0, 0, 1253): 0xA503C,
+                        (118, 0, 0, 1254): 0xA503C}
+        self.recebido, self.saida, self.calada, self.fechada = [], b"", calada, False
+
+    def escrever(self, b):
+        st = self.st
+        self.recebido.append(bytes(b))
+        if b == tr1000_serial.APERTO:
+            self.saida += R95_REAL + tr1000_serial.POLL
+            return
+        c = tr1000_serial.carga(b)
+        bloco, x, y, i = st.unpack_from("<HHHH", c, 1)
+        if c[0] == tr1000_serial.LER_BLOCO:
+            v = self.valores[(bloco, x, y, i)]
+            corpo = bytes([2]) + c[1:9] + st.pack("<HI", 1, v)
+            self.saida += bytes.fromhex("15 08 F0 00 68 D7 82 86 01 00 00 00") + \
+                st.pack("<I", len(corpo)) + corpo
+        elif c[0] == tr1000_serial.ESCREVER and not self.calada:
+            self.valores[(bloco, x, y, i)] = st.unpack_from("<I", c, 9)[0]
+            corpo = bytes([3]) + c[1:9] + c[7:9]
+            self.saida += bytes.fromhex("15 08 F0 00 78 D6 82 86 F4 A0 87 00") + \
+                st.pack("<I", len(corpo)) + corpo
+
+    def ler(self, limite):
+        pedaco, self.saida = self.saida[:5], self.saida[5:]
+        return pedaco
+
+    def fechar(self):
+        self.fechada = True
+
+
+class TesteEscritaC3(unittest.TestCase):
+    """O cliente da serial da sessao C3 (REFERENCIA 3.1), sem hardware."""
+
+    def test_pacotes_byte_a_byte_iguais_aos_do_app(self):
+        ts = tr1000_serial
+        self.assertEqual(ts.pacote_dados(ts.CAB_ESCRITA,
+                                         ts.carga_escrever(156, 126, 0, 962, 0x1FD)), W01_REAL)
+        self.assertEqual(ts.pacote_dados(ts.CAB_LEITURA,
+                                         ts.carga_ler(156, 126, 0, 962, 1)), R82_REAL)
+
+    def test_respostas_reais(self):
+        ts = tr1000_serial
+        self.assertEqual(ts.versao_95(R95_REAL), "1.22")
+        self.assertEqual(ts.ack_03(R03_REAL), (156, 126, 0, 962))
+        self.assertEqual(ts.resposta_02(R02_REAL), (156, 126, 0, 962, [509]))
+
+    def test_enquadrar_ao_vivo_em_pedacos(self):
+        fluxo = R95_REAL + tr1000_serial.POLL + R03_REAL
+        buf, todos = b"", []
+        for i in range(0, len(fluxo), 7):
+            prontos, buf = tr1000_serial.enquadrar(buf + fluxo[i:i + 7])
+            todos += prontos
+        self.assertEqual(todos, [R95_REAL, tr1000_serial.POLL, R03_REAL])
+        self.assertEqual(buf, b"")
+
+    def test_sessao_completa_com_maquina_falsa(self):
+        m = _MaquinaFalsa()
+        with conexao_serial.ConexaoTR1000(porta=m) as c:
+            self.assertEqual(c.aperto(), "1.22")
+            self.assertEqual(c.ler(156, 126, 0, 962), [1000])
+            self.assertTrue(c.escrever(156, 126, 0, 962, 509))
+            self.assertEqual(c.ler(156, 126, 0, 962), [509])
+        self.assertTrue(m.fechada)
+        self.assertEqual(m.recebido[0], tr1000_serial.APERTO)
+
+    def test_fora_da_lista_nao_manda_nada(self):
+        m = _MaquinaFalsa()
+        with conexao_serial.ConexaoTR1000(porta=m) as c:
+            with self.assertRaises(PermissionError):
+                c.escrever(118, 0, 0, 1257, 0xFF)          # step 3: nao liberado
+            with self.assertRaises(PermissionError):
+                c.pacote_escrita(116, 0, 0, 988, 0)        # cabecalho do pattern
+        self.assertEqual(m.recebido, [])
+
+    def test_sem_confirmacao_para_e_nao_repete(self):
+        m = _MaquinaFalsa(calada=True)
+        with conexao_serial.ConexaoTR1000(porta=m, relogio=_relogio_rapido()) as c:
+            with self.assertRaises(conexao_serial.ErroConexao):
+                c.escrever(118, 0, 0, 1253, 0xFF)
+        escritas = [p for p in m.recebido if tr1000_serial.carga(p)[:1] == b"\x01"]
+        self.assertEqual(len(escritas), 1)
+
+    def test_lista_permitida_e_so_a_da_c3(self):
+        self.assertEqual(set(conexao_serial.ESCRITAS_PERMITIDAS),
+                         {(118, 0, 0, 1253), (118, 0, 0, 1254), (156, 126, 0, 962)})
+
+    def test_a_captura_da_sessao_e_lida_como_as_do_espiao(self):
+        m = _MaquinaFalsa()
+        with tempfile.TemporaryDirectory() as tmp:
+            with conexao_serial.ConexaoTR1000(porta=m) as c:
+                c.captura = os.path.join(tmp, "c3.serlog")
+                c.aperto(); c.ler(156, 126, 0, 962)
+            regs = tr1000_serial.ler_serlog(c.captura)
+            pacs = tr1000_serial.pacotes(regs)
+        self.assertIn(tr1000_serial.APERTO, [p for d, _, p in pacs if d == "TX"])
+        self.assertIn(R95_REAL, [p for d, _, p in pacs if d == "RX"])
+
+
+def _relogio_rapido():
+    """Relogio que anda 0,3 s por consulta: a espera de 1 s acaba logo."""
+    t = [0.0]
+
+    def agora():
+        t[0] += 0.3
+        return t[0]
+    return agora
 
 
 class TesteEspiaoPreparo(unittest.TestCase):

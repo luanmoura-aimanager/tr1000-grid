@@ -102,7 +102,9 @@ então os dois Launchpad viram um só. Toda enumeração e abertura usa `rtmidi`
 | `tr1000_sysex.py` | Parser/diff de capturas do MIDI Monitor; `resumo` tira a lista branca de endereços |
 | `catalogo_app.py` | Extrai o catálogo ordenado de parâmetros do binário do TR-1000 App |
 | `espiao.py` + `espiao/espiao_serial.c` | O App fala com a máquina por **serial USB**, não MIDI: o espião roda uma cópia do App gravando cada byte da serial em `capturas/*.serlog` |
-| `tr1000_serial.py` | Lê os `.serlog` (`bruto`, `estatisticas`); o `tr1000_sysex.py` também os aceita |
+| `tr1000_serial.py` | O protocolo da serial: lê os `.serlog` (`bruto`, `pacotes`, `blocos`, `pattern`, `escritas`, `diffblocos`) e monta pacotes byte a byte iguais aos do App |
+| `conexao_serial.py` | Abre a serial da TR-1000 como o App abre; lê (`82`) e escreve (`01`) — escrita só na lista de 3 endereços da C3 |
+| `sessao_c3.py` | A sessão C3: a primeira escrita nossa, um endereço por vez, com `sim` digitado |
 | `testes.py` | Testes de mesa (`unittest`) |
 | `REFERENCIA.md` | Fonte da verdade: o que está provado, deduzido e desconhecido |
 | `ROTEIRO-C0-C3.md` | As sessões de hardware da fase 0, passo a passo |

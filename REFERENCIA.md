@@ -402,17 +402,22 @@ da Chart. Se a Roland publicou algum mapa SysEx, é lá. Baixar antes da C1.
 
 ### 3.1 Critério de saída da fase 0 (o portão)
 
+Reescrito em 08/10/2026 para a realidade da serial (2.1b/2.1c): não há SysEx nem model ID.
 A fase 1 (o grid escrevendo) só começa quando **todos** estes forem **medidos**:
 
-1. Model ID e formato da mensagem, com checksum fechando em captura real
-2. Endereçamento de pattern × variação provado em **3 patterns** diferentes
-3. Um step ligado/desligado e a velocity dele **escritos por DT1 e ouvidos** pelo Luan
-4. `cur_step` e `cur_vari` lidos corretamente com a máquina tocando, conferidos no visor
-5. WRITE (gravar o pattern) seguido de religar a máquina, e o step sobrevivendo
+| # | critério | estado |
+|---|---|---|
+| 1 | Formato da mensagem provado em captura real (enquadramento sem sobra, aperto de mão com versão) | ✅ 08/10 (C1-S0) |
+| 2 | Ler o pattern pela serial e conferir no painel | ✅ 08/10 (Dub Techno, var A/H) |
+| 3 | **Um step desligado e ligado por escrita NOSSA (`01`), ouvido pelo Luan** | ⏳ C3.1/C3.2 |
+| 4 | Endereçamento pattern × variação provado em **3 patterns** diferentes (o bloco 118+3v muda de conteúdo ao trocar de pattern) | ⏳ |
+| 5 | Step atual / variação que toca lidos com a máquina tocando, conferidos no visor | ⏳ (candidato: bloco 3) |
+| 6 | WRITE (gravar o pattern) seguido de religar a máquina, e o step sobrevivendo | ⏳ |
 
-Se o boot e o backup do App **não** cobrirem a região de pattern, a fase 0 **para** e a
-decisão de como seguir é tomada com o Luan antes de qualquer varredura por sondagem.
-
+A escrita da C3 passa só por `sessao_c3.py` → `conexao_serial.py`, com **lista de 3
+endereços** no código (`ESCRITAS_PERMITIDAS`: os dois slots do step 2 do BD na var A e o
+TUNE do sample do BD), os bytes mostrados e `sim` digitado antes de cada uma. Os pacotes
+são **byte a byte** iguais aos que o App mandou e a máquina aceitou (`TesteEscritaC3`).
 
 ### 3.2 Método: como descobrir coisas nesta máquina
 

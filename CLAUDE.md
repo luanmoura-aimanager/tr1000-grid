@@ -35,6 +35,11 @@ Identity Request universal, que não toca no mapa de endereços.
 Quando a fase 0 liberar leituras: **só RQ1 em endereço que o próprio TR-1000 App pediu**
 (a lista branca que o `tr1000_sysex.py resumo` tira do boot do App).
 
+**A exceção da C3 (08/10/2026):** a máquina fala por serial, não SysEx (REFERENCIA 2.1c), e a
+primeira escrita nossa passa **só** por `sessao_c3.py` → `conexao_serial.py`, com a lista de
+3 endereços `ESCRITAS_PERMITIDAS`, os bytes mostrados e `sim` digitado pelo Luan. Ampliar
+essa lista é decisão dele, não detalhe de código.
+
 ## As armadilhas da TR-8S, a remedir aqui
 
 1. **RQ1 em endereço inválido derrubava a porta CTRL** da TR-8S depois de ~60–75 sondas;

@@ -195,8 +195,57 @@ cada SUBSTEP; CYCLE; **LAYER A/B**; **ALT** do RS; ACCENT; TRG; LAST STEP da var
 track; habilitar variações; trocar pattern (para o endereçamento pattern × variação); Fill
 1–4. E, tocando: `cur_step*`, `cur_vari*`, `seq_run`.
 
-## C3 — primeiras escritas (o portão, REFERENCIA 3.1)
+## C3 — a primeira escrita nossa (o portão, REFERENCIA 3.1)
 
-Um DT1 por vez, num pattern descartável, e **você ouvindo** — reler o que foi escrito prova que a
-máquina aceitou, não que obedeceu (Método, regra 9). Ordem: um step on/off → velocity → mute →
-variações habilitadas → WRITE, e então **desligar e religar** a máquina para ver se sobreviveu.
+**Antes:** TR-1000 App — o original **e** a cópia do espião — **fechados** (Cmd+Q). Máquina
+no pattern **Dub Techno**, var **A**, BD com o step 2 aceso (como ficou do `step-bd2`).
+Rode tudo no **seu Terminal**, na pasta do projeto:
+
+```bash
+cd ~/Documents/Claude/Projects/tr1000-grid
+export PYTHONPATH=~/Library/Python/3.9/lib/python/site-packages
+```
+
+Cada escrita mostra os bytes e pede **`sim`**. Qualquer outra resposta não manda nada.
+Nada aqui é WRITE: fica no buffer de edição, e religar a máquina descarta.
+
+### C3.0 — só leitura
+
+```bash
+python3 sessao_c3.py ler
+```
+
+**O que esperar:**
+- `aperto de mao: versao '1.22'`
+- `BD var A step 2, slots A/B: A503C A503C`
+- `TUNE do BD: 1000`
+
+**Se qualquer um vier diferente, ou der `(!)`, pare** e me mande a saída.
+
+### C3.1 — desligar o step 2 (ouvindo)
+
+1. Aperte **START**. Com o BD selecionado, você ouve o bumbo extra no step 2.
+2. `python3 sessao_c3.py step2 desligar` → confira que são **dois** pacotes →
+   digite `sim`.
+
+**O que esperar:**
+- `ok (03)` duas vezes e `depois: FF FF`
+- **o bumbo do step 2 some**, sem parar a máquina
+- o LED do step 2 apaga
+
+Me diga o que **ouviu e viu**.
+
+### C3.2 — ligar de novo
+
+`python3 sessao_c3.py step2 ligar` → `sim`.
+- **O que esperar:** `depois: A503C A503C` e **o bumbo do step 2 volta**.
+
+### C3.3 — o TUNE de volta ao original
+
+`python3 sessao_c3.py tune 509` → `sim`.
+
+**O que esperar:**
+- `depois: 509`
+- tocando o BD, a afinação **cai** em relação ao máximo de agora
+
+Depois: **STOP**. Não aperte WRITE.

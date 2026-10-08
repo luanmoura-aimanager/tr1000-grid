@@ -139,35 +139,45 @@ ESCRITO = 0x03              # maquina: 03 ... <indice u16>         (o "ok" de ca
 # (0/1); x = slot de sample (0..499) no bloco 156.
 
 
+def enquadrar(buf):
+    """bytes -> (pacotes completos, resto que ainda nao fecha um pacote).
+
+    Byte que nao comeca pacote conhecido sai como pacote de 1 byte - nao foi
+    visto em nenhuma captura, e se aparecer e o sinal de que o enquadramento
+    nao e o que achamos. Usado sobre as capturas (pacotes) e ao vivo
+    (conexao_serial), que le a porta em pedacos."""
+    out = []
+    while buf:
+        t = buf[0] & 0x7F
+        if t == PAC_CURTO:
+            n = 12
+        elif t == PAC_DADOS:
+            if len(buf) < 16:
+                break
+            n = 16 + struct.unpack_from("<I", buf, 12)[0]
+        else:
+            out.append(buf[:1])
+            buf = buf[1:]
+            continue
+        if len(buf) < n:
+            break
+        out.append(buf[:n])
+        buf = buf[n:]
+    return out, buf
+
+
 def pacotes(regs):
     """-> [(direcao, t, bytes do pacote)], remontados sobre o fluxo de cada
     direcao (read() corta onde quiser). t e a hora do registro em que o
-    pacote TERMINOU de chegar. Byte que nao comeca pacote conhecido vira
-    pacote de 1 byte com tipo None - nao foi visto na S0, e se aparecer e o
-    sinal de que o enquadramento nao e o que achamos."""
+    pacote TERMINOU de chegar."""
     out = []
     for tipo_reg, direcao in (("W", "TX"), ("R", "RX")):
         buf = b""
         for r in regs:
             if r["tipo"] != tipo_reg:
                 continue
-            buf += r["dados"]
-            while buf:
-                t = buf[0] & 0x7F
-                if t == PAC_CURTO:
-                    n = 12
-                elif t == PAC_DADOS:
-                    if len(buf) < 16:
-                        break
-                    n = 16 + struct.unpack_from("<I", buf, 12)[0]
-                else:
-                    out.append((direcao, r["t"], buf[:1]))
-                    buf = buf[1:]
-                    continue
-                if len(buf) < n:
-                    break
-                out.append((direcao, r["t"], buf[:n]))
-                buf = buf[n:]
+            prontos, buf = enquadrar(buf + r["dados"])
+            out.extend((direcao, r["t"], p) for p in prontos)
     out.sort(key=lambda x: x[1])
     return out
 
@@ -179,6 +189,66 @@ def carga(pac):
 def _endereco(c):
     """<bloco u16> <x u16> <y u16> <indice u16> da carga (depois do cmd)."""
     return struct.unpack_from("<HHHH", c, 1)
+
+
+# ─────────────────────────────────────────────────────────────
+# Montar pacotes (C3, a primeira escrita nossa - REFERENCIA 3.1)
+#
+# Os cabecalhos sao COPIADOS byte a byte de pacotes que o App mandou e a
+# maquina aceitou (knob-bd-tune, 08/10/2026). Os bytes 4..11 variam no App
+# (parecem ponteiro e nao voltam na resposta: a maquina os ignora - deduzido);
+# usar exatamente um valor visto e o jeito de nao inventar nada.
+# ─────────────────────────────────────────────────────────────
+APERTO = bytes.fromhex("94 02 40 F0 FE C0 00 00 00 84 03 03")       # (medido 08/10)
+POLL = bytes.fromhex("14 08 40 F0 9B 00 00 00 00 00 00 05")         # (medido 08/10)
+CAB_ESCRITA = bytes.fromhex("15 08 41 F2 01 00 00 00 C0 88 06 2D")  # o do 1o 01 do knob
+CAB_LEITURA = bytes.fromhex("15 08 41 F2 00 00 00 00 40 87 06 2D")  # o do 82 de n = 1
+
+
+def pacote_dados(cabecalho12, carga_):
+    """Cabecalho de 12 + u32 tamanho + carga: um pacote 0x15."""
+    return bytes(cabecalho12) + struct.pack("<I", len(carga_)) + bytes(carga_)
+
+
+def carga_ler(bloco, x, y, indice, n=1):
+    return struct.pack("<BHHHHH", LER_BLOCO, bloco, x, y, indice, n)
+
+
+def carga_escrever(bloco, x, y, indice, valor):
+    return struct.pack("<BHHHHI", ESCREVER, bloco, x, y, indice, valor)
+
+
+def resposta_02(pac):
+    """-> (bloco, x, y, indice, [u32...]) de uma resposta de leitura, ou None."""
+    c = carga(pac)
+    if c[:1] != bytes([BLOCO_LIDO]) or len(c) < 11:
+        return None
+    bloco, x, y, indice = _endereco(c)
+    n = struct.unpack_from("<H", c, 9)[0]
+    if len(c) != 11 + 4 * n:
+        return None
+    return bloco, x, y, indice, list(struct.unpack_from(f"<{n}I", c, 11))
+
+
+def ack_03(pac):
+    """-> (bloco, x, y, indice) da confirmacao de uma escrita, ou None.
+    Forma medida: 03 <bloco> <x> <y> <indice> <indice de novo>."""
+    c = carga(pac)
+    if c[:1] != bytes([ESCRITO]) or len(c) < 9:
+        return None
+    return _endereco(c)
+
+
+def versao_95(pac):
+    """A versao em ASCII no fim da resposta ao aperto ('1.22'), ou None."""
+    if not pac or pac[0] != 0x95:
+        return None
+    c = carga(pac)
+    fim = len(c)
+    while fim > 0 and 0x20 <= c[fim - 1] < 0x7F:
+        fim -= 1
+    texto = c[fim:].decode("ascii")
+    return texto or None
 
 
 def leituras_de_bloco(pacs):
