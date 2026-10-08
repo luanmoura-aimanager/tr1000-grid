@@ -7,6 +7,10 @@ sessao_c3.py - a sessao C3: a primeira escrita NOSSA na TR-1000 (o portao da fas
     python3 sessao_c3.py step2 ligar          # BD var A step 2 -> A503C A503C
     python3 sessao_c3.py tune 509             # TUNE do sample do BD (0..1000)
 
+    --sim no fim da linha confirma junto (para rodar pelo "!" do Claude Code,
+    que nao tem teclado): os bytes sao mostrados do mesmo jeito, e o "sim"
+    digitado e o proprio --sim na linha de comando.
+
 Roteiro passo a passo: ROTEIRO-C0-C3.md, C3. O TR-1000 App (original e copia)
 tem que estar FECHADO. Cada escrita: le o valor atual, mostra os bytes que vao
 sair, pede "sim" digitado, escreve UMA vez, espera a confirmacao (03) e rele.
@@ -42,20 +46,28 @@ def cmd_ler():
     print(f"\ncaptura: {c.captura}")
 
 
-def _confirmar(c, enderecos, valores):
+def _confirmar(c, enderecos, valores, ja_confirmado=False):
     print("\nvai sair, um pacote por endereco:")
     for e, v in zip(enderecos, valores):
         print(f"   {cs.ESCRITAS_PERMITIDAS[e]:34} {ts.hexs(c.pacote_escrita(*e, v))}")
-    resp = input('\ndigite "sim" para mandar: ').strip().lower()
+    if ja_confirmado:
+        print('\nconfirmado por --sim na linha de comando')
+        return True
+    try:
+        resp = input('\ndigite "sim" para mandar: ').strip().lower()
+    except EOFError:
+        # sem teclado (o "!" do Claude Code): nao manda, e diz o que fazer
+        print("\n(sem teclado para digitar - rode no Terminal, ou acrescente --sim)")
+        return False
     return resp == "sim"
 
 
-def _escrever(nome, enderecos, valores):
+def _escrever(nome, enderecos, valores, ja_confirmado=False):
     with cs.ConexaoTR1000(nome_captura=f"c3-{nome}") as c:
         print(f"aperto de mao: versao {c.aperto()!r}")
         antes = [c.ler(*e)[0] for e in enderecos]
         print(f"antes:  {_hex(antes)}")
-        if not _confirmar(c, enderecos, valores):
+        if not _confirmar(c, enderecos, valores, ja_confirmado):
             print("nada mandado.")
             return 1
         for e, v in zip(enderecos, valores):
@@ -69,14 +81,16 @@ def _escrever(nome, enderecos, valores):
 
 
 def main(a):
+    sim = "--sim" in a
+    a = [x for x in a if x != "--sim"]
     try:
         if a[:1] == ["ler"]:
             cmd_ler(); return 0
         if a[:1] == ["step2"] and a[1:2] in (["desligar"], ["ligar"]):
             v = PAUSA if a[1] == "desligar" else NOTA_DO_PAINEL
-            return _escrever(f"step2-{a[1]}", STEP2, [v, v])
+            return _escrever(f"step2-{a[1]}", STEP2, [v, v], sim)
         if a[:1] == ["tune"] and len(a) == 2 and a[1].isdigit() and 0 <= int(a[1]) <= 1000:
-            return _escrever(f"tune-{a[1]}", [TUNE], [int(a[1])])
+            return _escrever(f"tune-{a[1]}", [TUNE], [int(a[1])], sim)
     except cs.ErroConexao as e:
         print(f"(!) {e}")
         return 1

@@ -488,6 +488,52 @@ class TesteEscritaC3(unittest.TestCase):
         self.assertIn(R95_REAL, [p for d, _, p in pacs if d == "RX"])
 
 
+class TesteSessaoC3(unittest.TestCase):
+    """A confirmacao: sem teclado nao manda nada; --sim manda."""
+
+    def _rodar(self, argv, entrada=None):
+        import io, contextlib, builtins
+        import sessao_c3
+        m = _MaquinaFalsa()
+        orig_cx, orig_input = conexao_serial.ConexaoTR1000, builtins.input
+
+        class CxFalsa(orig_cx):
+            def __init__(s, nome_captura=None, **k):
+                super().__init__(porta=m)
+        conexao_serial.ConexaoTR1000 = CxFalsa
+
+        def falso_input(prompt=""):
+            if entrada is None:
+                raise EOFError
+            return entrada
+        builtins.input = falso_input
+        try:
+            with contextlib.redirect_stdout(io.StringIO()):
+                codigo = sessao_c3.main(argv)
+        finally:
+            conexao_serial.ConexaoTR1000, builtins.input = orig_cx, orig_input
+        escritas = [p for p in m.recebido if tr1000_serial.carga(p)[:1] == b"\x01"]
+        return codigo, escritas, m
+
+    def test_sem_teclado_nao_manda(self):
+        codigo, escritas, _ = self._rodar(["step2", "desligar"])
+        self.assertEqual((codigo, escritas), (1, []))
+
+    def test_enter_vazio_nao_manda(self):
+        codigo, escritas, _ = self._rodar(["step2", "desligar"], entrada="")
+        self.assertEqual((codigo, escritas), (1, []))
+
+    def test_sim_digitado_manda_os_dois_slots(self):
+        codigo, escritas, m = self._rodar(["step2", "desligar"], entrada="sim")
+        self.assertEqual((codigo, len(escritas)), (0, 2))
+        self.assertEqual(m.valores[(118, 0, 0, 1253)], 0xFF)
+
+    def test_flag_sim_manda(self):
+        codigo, escritas, m = self._rodar(["tune", "509", "--sim"])
+        self.assertEqual((codigo, len(escritas)), (0, 1))
+        self.assertEqual(m.valores[(156, 126, 0, 962)], 509)
+
+
 def _relogio_rapido():
     """Relogio que anda 0,3 s por consulta: a espera de 1 s acaba logo."""
     t = [0.0]
