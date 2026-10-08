@@ -96,13 +96,25 @@ linha `SysEx Roland`, ela traz o model ID de presente: me mande na hora.
 
 O rtmidi não enxerga o que **outro** programa manda; o MIDI Monitor enxerga.
 
-### C1.0 — preparar o MIDI Monitor
+### C1.0 — ligar o "Use CTRL Port" no App (ANTES de tudo)
+
+Medido em 08/10/2026 (REFERENCIA 2.1b): por padrão o App **não usa MIDI**. Ele fala com a
+TR-1000 por uma porta serial USB, e o MIDI Monitor não vê nada. No App, clique na
+**engrenagem ⚙** (canto superior direito) e ligue **"Use CTRL Port"**. Se não achar, me
+avise: eu mudo `<ctrlPort user="0"/>` para `1` em `~/TR1000 User/settings.xml` com o App
+fechado.
+
+**Como saber se funcionou:** no C1.1, o MIDI Monitor enche de SysEx ao abrir o App. Se
+continuar vazio, a opção não fez o que o nome promete, e paramos para decidir o plano B.
+
+### C1.0b — preparar o MIDI Monitor
 
 1. Abra o **MIDI Monitor**. Em **Sources**, marque:
    - em *Spy on output to destinations*: **TR-1000 CTRL** (e também **TR-1000**)
    - em *MIDI sources*: **TR-1000 CTRL** (e também **TR-1000**)
    Se o macOS pedir permissão para o driver de spy, aceite. Sem ele, só metade do diálogo aparece
-2. Em **Filter**, deixe passar *System Exclusive*; **desmarque Clock** (senão o clock afoga tudo)
+   - **Não** marque `TR-1000 MIDI IN`: é a DIN de trás, o App não usa
+2. Em **Filter**, desmarque só **Clock** e **Active Sense** (em Real Time); o resto fica marcado
 3. Aumente o *Remember* para o máximo (o boot do App deve gerar milhares de mensagens)
 
 Cada captura: **Clear** antes, faça o gesto, **File > Save As** em `capturas/` com o nome

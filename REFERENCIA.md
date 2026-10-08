@@ -69,6 +69,36 @@ diz que a TR-1000 não responde a *este* pedido — **não** que ela não tem Sy
 Método). Consequência prática: o autoteste do `sniff` não tem como provar o listener na
 CTRL antes da C1; até lá, silêncio na CTRL é ambíguo.
 
+### 2.1b O App NÃO fala MIDI por padrão — fala serial USB (medido 08/10/2026)
+
+A primeira tentativa da C1 não viu **nada** no MIDI Monitor, e não era o filtro: com o App
+reiniciando sob escuta (`rtmidi` cru nas três entradas `TR-1000*`, clock filtrado, 3 min, o
+PID do App trocando no meio), **zero** mensagens. O `lsof` do processo do App mostrou o
+motivo:
+
+```
+12u CHR /dev/tty.usbmodem31101
+```
+
+A TR-1000 expõe, além do USB MIDI e do áudio, uma **interface serial USB (CDC ACM)**:
+`ioreg` mostra `Roland TR-1000` → `AppleUSBCDCCompositeDevice` → `AppleUSBACMControl`/
+`AppleUSBACMData` → `IOSerialBSDClient` = `/dev/cu.usbmodem31101`. O App 1.10 usa essa porta
+por padrão. O App não abre o USB direto (os únicos IOUserClient dele são de GPU), não usa
+rede e não tem endpoint MIDI privado (a enumeração CoreMIDI com `kMIDIPropertyPrivate` só
+mostra `TR-1000`, `CTRL`, `MIDI OUT 1/2`, `MIDI IN`, todos públicos).
+
+**A chave:** `~/TR1000 User/settings.xml` (o arquivo de config do App) tem
+`<ctrlPort user="0"/>`, que é a opção **"Use CTRL Port"** do App (a string está no binário,
+junto de `Sync F8`). Com ela em 1, a hipótese é que o App passe a falar pela porta MIDI
+`TR-1000 CTRL`, e o MIDI Monitor volte a servir. **Não testado ainda** — é o próximo passo.
+
+Se não passar: o plano B é sniffar a serial. O App tem hardened runtime (`flags=0x10000`,
+sem entitlement de DYLD), então injetar biblioteca exige uma cópia re-assinada; avaliar
+antes de fazer.
+
+Outras coisas na pasta `~/TR1000 User/`: `update.zip` (27 MB, o firmware baixado pelo App) e
+`app_version.xml`. O firmware fica **intocado**.
+
 ### 2.2 O catálogo do TR-1000 App — (catálogo, 07/10/2026)
 
 O binário do App (`/Applications/Roland/TR-1000 App.app`, versão 1.10, framework JUCE —
@@ -145,6 +175,8 @@ da Chart. Se a Roland publicou algum mapa SysEx, é lá. Baixar antes da C1.
 | sem resposta ao Identity Request | **medido 07/10** | 2.1 |
 | nada chegou na CTRL nem na MIDI IN em 8 s parados | **medido 07/10** (sem autoteste na CTRL — ambíguo) | 7.2 |
 | formato Roland RQ1/DT1 na CTRL | **(deduzido)** da TR-8S e da existência da porta | 2.1 |
+| o App fala por **serial USB** (`/dev/tty.usbmodem*`), não MIDI, com `ctrlPort` = 0 | **medido 08/10** | 2.1b |
+| com "Use CTRL Port" ligado, o App fala pela `TR-1000 CTRL` | **(deduzido)** do nome da opção | 2.1b |
 | model ID | **desconhecido** — sai da C1 | |
 | ordem dos parâmetros por bloco | **(catálogo)** | 2.2 |
 | endereços de qualquer coisa | **desconhecido** | |
