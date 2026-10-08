@@ -7,6 +7,7 @@ Uso:
     python3 tr1000_serial.py estatisticas captura.serlog
     python3 tr1000_serial.py pacotes      captura.serlog [--max N]
     python3 tr1000_serial.py blocos       captura.serlog
+    python3 tr1000_serial.py pattern      captura.serlog   # a grade (deduzida)
 
 E, se a serial carregar SysEx Roland (hipotese H1, REFERENCIA 2.1b), todos os
 comandos do tr1000_sysex.py aceitam o .serlog direto:
@@ -294,6 +295,70 @@ def cmd_estatisticas(caminho):
             f"[{hexs(g)}]x{n}" for g, n in quads.most_common(6)))
 
 
+# A leitura do pattern a partir dos blocos (DEDUCAO de 08/10/2026 sobre a S0,
+# a confirmar com o Luan olhando o painel - REFERENCIA 2.1c):
+#   bloco 116            cabecalho: nome em ASCII (1 char por u32), tempo x100
+#   bloco 117 + 3*v      cabecalho da variacao v (0..7 = A..H, 8..11 = Fill 1..4)
+#   bloco 118 + 3*v      os steps do track (instancia 0..9 = BD..RC): note0..63
+#                        = 16 steps x 4 slots; step ligado = algum slot != 0
+#   bloco 119 + 3*v      motion (96 + 48, vazio na S0)
+VARIACOES_SERIAL = ["A", "B", "C", "D", "E", "F", "G", "H",
+                    "Fill 1", "Fill 2", "Fill 3", "Fill 4"]
+TRACKS_SERIAL = ["BD", "SD", "LT", "HT", "RS", "HC", "CH", "OH", "CC", "RC"]
+BLOCO_CAB_PATTERN, BLOCO_VAR0, BLOCOS_POR_VAR = 116, 117, 3
+
+
+def ultimos_valores(pacs):
+    """{(bloco, instancia): [u32...]} - a ultima resposta de cada um."""
+    out = {}
+    for direcao, t, p in pacs:
+        c = carga(p)
+        if direcao == "RX" and c[:1] == bytes([BLOCO_LIDO]) and len(c) >= 11:
+            bloco = struct.unpack_from("<H", c, 1)[0]
+            inst = struct.unpack_from("<I", c, 3)[0] >> 16
+            indice, n = struct.unpack_from("<HH", c, 7)
+            if len(c) == 11 + 4 * n:
+                out[(bloco, inst)] = list(struct.unpack_from(f"<{n}I", c, 11))
+    return out
+
+
+def nome_e_tempo(cab):
+    """Do bloco 116: o nome (u32 por caractere, ate o primeiro valor > 0x7F)
+    e o tempo em BPM (o u32 seguinte / 100)."""
+    nome = []
+    for i, v in enumerate(cab):
+        if v > 0x7F:
+            return "".join(nome).rstrip(), v / 100
+        nome.append(chr(v))
+    return "".join(nome).rstrip(), None
+
+
+def grade_de_steps(valores):
+    """note0..63 (16 steps x 4 slots) -> 'x...x...' por step."""
+    return "".join("x" if any(valores[s * 4 + k] for k in range(4)) else "."
+                   for s in range(16))
+
+
+def cmd_pattern(caminho):
+    vals = ultimos_valores(pacotes(ler_serlog(caminho)))
+    cab = vals.get((BLOCO_CAB_PATTERN, 0))
+    if cab:
+        nome, bpm = nome_e_tempo(cab)
+        print(f"pattern {nome!r}, tempo {bpm} (deduzido do bloco {BLOCO_CAB_PATTERN})")
+    for v, nome_var in enumerate(VARIACOES_SERIAL):
+        bloco = BLOCO_VAR0 + 1 + BLOCOS_POR_VAR * v
+        linhas = []
+        for tr, nome_tr in enumerate(TRACKS_SERIAL):
+            vv = vals.get((bloco, tr))
+            if vv and len(vv) >= 64:
+                g = grade_de_steps(vv)
+                if "x" in g:
+                    linhas.append(f"   {nome_tr:3} {g[:4]} {g[4:8]} {g[8:12]} {g[12:]}")
+        print(f"{nome_var:7}" + ("" if linhas else " vazia"))
+        for l in linhas:
+            print(l)
+
+
 def cmd_pacotes(caminho, maximo=None):
     pacs = pacotes(ler_serlog(caminho))
     if not pacs:
@@ -336,5 +401,7 @@ if __name__ == "__main__":
         cmd_pacotes(a[2], int(a[a.index("--max") + 1]) if "--max" in a else None)
     elif a[1] == "blocos":
         cmd_blocos(a[2])
+    elif a[1] == "pattern":
+        cmd_pattern(a[2])
     else:
         print(__doc__)
