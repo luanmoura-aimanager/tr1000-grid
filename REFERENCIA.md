@@ -394,6 +394,7 @@ da Chart. Se a Roland publicou algum mapa SysEx, é lá. Baixar antes da C1.
 | o mesmo `01` escreve steps (bloco 118+3v) | **(deduzido)** — é o teste C3 | 2.1c |
 | espião grava `read`/`write` da serial, quadros remontados | **medido 08/10** (pty e com o App) | 2.1b |
 | **escrita nossa de um step (`01`) obedecida: bumbo some/volta, LED apaga/acende vermelho** | **medido 08/10, OUVIDO** (C3.1, C3.2) | 3.1 |
+| **escrita nossa de parâmetro de kit (TUNE do sample do BD) obedecida** | **medido 08/10, OUVIDO** e conferido no App (C3.3) | 3.1 |
 | model ID | **não se aplica** à serial (não é SysEx); a versão `"1.22"` vem no aperto de mão | 2.1c |
 | ordem dos parâmetros por bloco | **(catálogo)** | 2.2 |
 | endereços de qualquer coisa | **desconhecido** | |
@@ -435,6 +436,17 @@ A fase 1 (o grid escrevendo) só começa quando **todos** estes forem **medidos*
 - **O Luan, na frente da máquina:** o bumbo do step 2 **voltou**, o LED acendeu
   **vermelho** (layer A tocando, como a 2.1c previa), e a máquina seguiu tocando.
 - **Captura:** `capturas/2026-10-08-c3-step2-ligar.serlog`.
+
+**C3.3 — 08/10/2026, o TUNE do BD de volta ao original, OUVIDO e conferido no App:**
+- **O que saiu:** `sessao_c3.py tune 509`, um `01` no bloco 156, x 126, índice 962,
+  valor 509. O pacote é **idêntico byte a byte** ao primeiro que o App mandou em
+  `knob-bd-tune`.
+- **O que voltou:** `03`; releitura 1000 → 509.
+- **O Luan:** o BD ficou **mais grave**. Abrindo o App original, o TUNE apareceu **bem no
+  centro**.
+- **Captura:** `capturas/2026-10-08-c3-tune-509.serlog`.
+- A máquina voltou ao estado de antes das capturas: step 2 do BD aceso, como o Luan
+  deixou em `step-bd2`, e TUNE 509. Nada foi gravado com WRITE.
 
 **Com C3.1 + C3.2 o critério 3 do portão está cumprido:** lemos e escrevemos steps do
 pattern interno da TR-1000 pela serial, e a máquina obedece de ouvido. Faltam os critérios
