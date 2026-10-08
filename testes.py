@@ -403,8 +403,13 @@ class _MaquinaFalsa:
         c = tr1000_serial.carga(b)
         bloco, x, y, i = st.unpack_from("<HHHH", c, 1)
         if c[0] == tr1000_serial.LER_BLOCO:
-            v = self.valores[(bloco, x, y, i)]
-            corpo = bytes([2]) + c[1:9] + st.pack("<HI", 1, v)
+            n = st.unpack_from("<H", c, 9)[0]
+            if n == 1 and (bloco, x, y, i) in self.valores:
+                vs = [self.valores[(bloco, x, y, i)]]
+            else:
+                vs = list(getattr(self, "blocos", {}).get((bloco, x, y), [0] * n))[:n]
+                vs += [0] * (n - len(vs))
+            corpo = bytes([2]) + c[1:9] + st.pack("<H", n) + st.pack(f"<{n}I", *vs)
             self.saida += bytes.fromhex("15 08 F0 00 68 D7 82 86 01 00 00 00") + \
                 st.pack("<I", len(corpo)) + corpo
         elif c[0] == tr1000_serial.ESCREVER and not self.calada:
@@ -629,6 +634,55 @@ class TesteRevisaoPR2(unittest.TestCase):
         with conexao_serial.ConexaoTR1000(porta=PortaQueCai()) as c:
             with self.assertRaises(conexao_serial.ErroConexao):
                 c.aperto()
+
+
+class TesteSessaoC4(unittest.TestCase):
+    """Leituras ao vivo dos criterios 4 e 5: so le, e le o pattern inteiro."""
+
+    def _com_maquina(self, m, func):
+        import io, contextlib
+        orig = conexao_serial.ConexaoTR1000
+
+        class CxFalsa(orig):
+            def __init__(s, nome_captura=None, **k):
+                super().__init__(porta=m)
+        conexao_serial.ConexaoTR1000 = CxFalsa
+        try:
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                func()
+        finally:
+            conexao_serial.ConexaoTR1000 = orig
+        return buf.getvalue()
+
+    def test_pattern_le_nome_e_grade_sem_escrever(self):
+        import sessao_c4
+        m = _MaquinaFalsa()
+        nome = [ord(ch) for ch in "Dub Techno      "] + [12800]
+        bd = [0] * 131
+        for passo in (0, 4, 8, 12):
+            bd[passo * 4] = bd[passo * 4 + 1] = 0xA503C
+        m.blocos = {(116, 0, 0): nome, (118, 0, 0): bd}
+        saida = self._com_maquina(m, sessao_c4.cmd_pattern)
+        self.assertIn("pattern 'Dub Techno', tempo 128.0", saida)
+        self.assertIn("BD  x... x... x... x...", saida)
+        escritas = [p for p in m.recebido if tr1000_serial.carga(p)[:1] == b"\x01"]
+        self.assertEqual(escritas, [])
+        # 1 aperto + cabecalho + 12 bancos x 10 tracks
+        self.assertEqual(len(m.recebido), 1 + 1 + 120)
+
+    def test_mudancas_so_o_que_muda(self):
+        import sessao_c4
+        amostras = [(0.0, {(3, 7): 0, (3, 8): 5}), (0.1, {(3, 7): 1, (3, 8): 5}),
+                    (0.2, {(3, 7): 1, (3, 8): 5}), (0.3, {(3, 7): 2, (3, 8): 5})]
+        self.assertEqual(sessao_c4.mudancas(amostras),
+                         {(3, 7): [(0.0, 0), (0.1, 1), (0.3, 2)]})
+
+    def test_nao_ha_escrita_no_arquivo(self):
+        with open(os.path.join(AQUI, "sessao_c4.py")) as f:
+            fonte = f.read()
+        self.assertNotIn(".escrever(", fonte)
+        self.assertNotIn("pacote_escrita", fonte)
 
 
 def _relogio_rapido(passo=0.3):

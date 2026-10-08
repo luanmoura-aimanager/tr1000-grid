@@ -455,12 +455,14 @@ def grade_de_steps(valores):
     return "".join(out)
 
 
-def cmd_pattern(caminho):
-    vals = ultimos_valores(pacotes(ler_serlog(caminho)))
+def linhas_do_pattern(vals):
+    """{(bloco, x, y): [u32...]} -> as linhas de texto da grade. Serve as
+    capturas (cmd_pattern) e a leitura ao vivo (sessao_c4.py)."""
+    out = []
     cab = vals.get((BLOCO_CAB_PATTERN, 0, 0))
     if cab:
         nome, bpm = nome_e_tempo(cab)
-        print(f"pattern {nome!r}, tempo {bpm} (deduzido do bloco {BLOCO_CAB_PATTERN})")
+        out.append(f"pattern {nome!r}, tempo {bpm}")
     for v, nome_var in enumerate(VARIACOES_SERIAL):
         bloco = BLOCO_VAR0 + 1 + BLOCOS_POR_VAR * v
         linhas = []
@@ -470,9 +472,14 @@ def cmd_pattern(caminho):
                 g = grade_de_steps(vv)
                 if g.strip("."):
                     linhas.append(f"   {nome_tr:3} {g[:4]} {g[4:8]} {g[8:12]} {g[12:]}")
-        print(f"{nome_var:7}" + ("" if linhas else " vazia"))
-        for l in linhas:
-            print(l)
+        out.append(f"{nome_var:7}" + ("" if linhas else " vazia"))
+        out.extend(linhas)
+    return out
+
+
+def cmd_pattern(caminho):
+    for l in linhas_do_pattern(ultimos_valores(pacotes(ler_serlog(caminho)))):
+        print(l)
 
 
 def cmd_diffblocos(a, b):

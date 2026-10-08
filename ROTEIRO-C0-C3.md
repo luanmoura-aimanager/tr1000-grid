@@ -249,3 +249,31 @@ Me diga o que **ouviu e viu**.
 - tocando o BD, a afinação **cai** em relação ao máximo de agora
 
 Depois: **STOP**. Não aperte WRITE.
+
+## C4 — leituras ao vivo: três patterns e o step atual (critérios 4 e 5)
+
+**Só leitura**: nada aqui escreve na máquina. TR-1000 App (original e cópia) **fechado**.
+Rode pelo `!` ou no Terminal, na pasta do projeto.
+
+### C4.1 — o pattern atual
+
+```bash
+python3 sessao_c4.py pattern
+```
+
+**O que esperar:**
+- `pattern 'Dub Techno', tempo 128.0`
+- var A com o BD em `x... x... x... x...`: o step 2 voltou a apagado depois de religar
+
+### C4.2 — mais dois patterns
+
+No painel, troque para **outro pattern** (qualquer um com notas), parado. Rode `pattern` de
+novo. Me diga o **nome e o BPM** que o visor mostra e os steps de **um** track na var A.
+Repita com um **terceiro** pattern.
+
+### C4.3 — o step atual
+
+1. Máquina **parada**: `python3 sessao_c4.py estado --segundos 5` (o piso de ruído).
+2. Aperte **START** (só a var A, sem VARI CHAIN): `python3 sessao_c4.py estado --segundos 8`.
+
+**O que esperar:** algum valor que muda **só tocando**, em ciclo de 16, no ritmo do tempo.
