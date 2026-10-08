@@ -8,6 +8,9 @@ Uso:
     python3 tr1000_sysex.py fx     um-knob.mmon
     python3 tr1000_sysex.py resumo boot-app.mmon [--json enderecos.json]
 
+Aceita tambem .serlog (a serial USB do App, gravada pelo espiao.py): os
+quadros F0..F7 sao remontados do fluxo e passam pelo mesmo caminho.
+
 Herdado do tr8s_sysex.py (tr8s-grid), com duas mudancas:
   - o cabecalho NAO e fixo. O model ID da TR-1000 e desconhecido ate a sessao
     C1 (REFERENCIA 3); o roland.decodificar descobre o tamanho dele pelo
@@ -139,6 +142,11 @@ def load_mmon(path, keep_alive=False, outros=None):
 def load(path, keep_alive=False, outros=None):
     if path.lower().endswith(".mmon"):
         return load_mmon(path, keep_alive, outros)
+    if path.lower().endswith(".serlog"):
+        # a serial do App (espiao, REFERENCIA 2.1b): quadros F0..F7 remontados
+        # do fluxo e decodificados igual aos do MIDI Monitor
+        import tr1000_serial
+        return tr1000_serial.carregar(path, keep_alive, outros)
     brutos = []
     with open(path, encoding="utf-8", errors="ignore") as f:
         for line in f:

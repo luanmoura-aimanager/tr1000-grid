@@ -10,3 +10,8 @@ capturas/catalogo-app-*.json
 __pycache__/
 *.pyc
 .DS_Store
+
+# O espiao compilado (espiao.py preparar o gera de novo). As capturas .serlog
+# pequenas SAO versionadas, como os .mmon; as grandes (backup) ficam locais e
+# sao listadas na REFERENCIA com tamanho e hash.
+espiao/*.dylib

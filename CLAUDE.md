@@ -47,6 +47,15 @@ Quando a fase 0 liberar leituras: **só RQ1 em endereço que o próprio TR-1000 
    enumeração e abertura usa **rtmidi cru por índice** (`portas.py`); não "simplificar"
    isso de volta. Medido aqui também em 07/10/2026.
 4. **`TR-1000` e `TR-1000 CTRL` casam pelo mesmo trecho de nome.** Use `porta_exata`.
+5. **O TR-1000 App não fala MIDI com a máquina** — fala por uma serial USB
+   (`/dev/tty.usbmodem*`), e o MIDI Monitor não vê nada (REFERENCIA 2.1b, medido em
+   08/10/2026). O "Use CTRL Port" do `settings.xml` não muda isso. Captura do App é com o
+   **espião**: `espiao.py rodar <nome>` → `.serlog` → `tr1000_serial.py` /
+   `tr1000_sysex.py`.
+6. **O espião roda numa CÓPIA do App** em `~/Library/Caches/tr1000-grid/`, re-assinada sem
+   hardened runtime. O App em `/Applications` nunca é escrito (`TesteEspiaoPreparo`), e o
+   original fica **fechado** enquanto a cópia roda: dois Apps na mesma serial cruzariam as
+   respostas.
 
 ## Ambiente
 

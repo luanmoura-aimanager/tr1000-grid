@@ -92,78 +92,99 @@ linha `SysEx Roland`, ela traz o model ID de presente: me mande na hora.
 
 ---
 
-## C1 — sniff do App com o MIDI Monitor (~30 min)
+## C1 — espiar a serial do App (~30 min)
 
-O rtmidi não enxerga o que **outro** programa manda; o MIDI Monitor enxerga.
+> **Mudou em 08/10/2026.** O App não fala MIDI com a máquina: fala por uma serial USB, e o
+> MIDI Monitor não vê nada (REFERENCIA 2.1b). A versão com MIDI Monitor deste roteiro
+> morreu. A captura de prova está em `capturas/2026-10-08-boot-app-serial-vazio.mmon`.
 
-### C1.0 — ligar o "Use CTRL Port" no App (ANTES de tudo)
+O que se usa agora é o **espião**: uma cópia do App (a original fica intocada) com uma
+biblioteca que grava cada byte da serial. **Use sempre `python3 espiao.py rodar <nome>`**
+— ele abre a cópia; você faz o gesto; **fecha a cópia com Cmd+Q**, e a captura fica em
+`capturas/AAAA-MM-DD-<nome>.serlog`.
 
-Medido em 08/10/2026 (REFERENCIA 2.1b): por padrão o App **não usa MIDI**. Ele fala com a
-TR-1000 por uma porta serial USB, e o MIDI Monitor não vê nada. No App, clique na
-**engrenagem ⚙** (canto superior direito) e ligue **"Use CTRL Port"**. Se não achar, me
-avise: eu mudo `<ctrlPort user="0"/>` para `1` em `~/TR1000 User/settings.xml` com o App
-fechado.
+**Proibido nestas sessões**: WRITE (KIT), OVERWRITE (PTN/KIT), Write Inst, Transfer
+Backup **To TR-1000**, Transfer Project, Import Sample. E se a cópia oferecer atualização
+de firmware, **ignore**.
 
-**Como saber se funcionou:** no C1.1, o MIDI Monitor enche de SysEx ao abrir o App. Se
-continuar vazio, a opção não fez o que o nome promete, e paramos para decidir o plano B.
+### C1.0 — preparar a cópia (uma vez)
 
-### C1.0b — preparar o MIDI Monitor
+**Feche o TR-1000 App** (Cmd+Q). No terminal, na pasta do projeto:
 
-1. Abra o **MIDI Monitor**. Em **Sources**, marque:
-   - em *Spy on output to destinations*: **TR-1000 CTRL** (e também **TR-1000**)
-   - em *MIDI sources*: **TR-1000 CTRL** (e também **TR-1000**)
-   Se o macOS pedir permissão para o driver de spy, aceite. Sem ele, só metade do diálogo aparece
-   - **Não** marque `TR-1000 MIDI IN`: é a DIN de trás, o App não usa
-2. Em **Filter**, desmarque só **Clock** e **Active Sense** (em Real Time); o resto fica marcado
-3. Aumente o *Remember* para o máximo (o boot do App deve gerar milhares de mensagens)
+```bash
+python3 espiao.py preparar
+```
 
-Cada captura: **Clear** antes, faça o gesto, **File > Save As** em `capturas/` com o nome
-indicado (`.mmon`). Me avise a cada uma; eu rodo o `tr1000_sysex.py resumo` e respondo antes
-de você seguir para a próxima, porque o boot pode mudar o resto do roteiro.
+**O que esperar:** cinco comandos (`ditto`, `rm`, `xattr`, `codesign`, `clang`), depois:
+- `copia:` com uma linha `flags=` **sem** a palavra `runtime`
+- `original: assinatura VALIDA (intocado)`
 
-### C1.1 — `2026-10-DD-boot-app.mmon` ← a mais importante
+Se aparecer `(!) a copia AINDA tem hardened runtime`, pare e me mande a saída.
 
-TR-1000 **parada**, App **fechado**. **Clear** no MIDI Monitor. Abra o **TR-1000 App** e espere ele
-terminar de carregar (a tela mostrando o kit), mais **10 s** sem tocar em nada. Salve.
+### C1-S0 — o autoteste
 
-**O que esperar:** centenas ou milhares de linhas SysEx. Não precisa olhar — me avise.
+TR-1000 ligada, na USB, **parada**. App original **fechado**.
 
-### C1.2 — `2026-10-DD-boot-app-tocando.mmon`
+```bash
+python3 espiao.py rodar s0-autoteste
+```
 
-Feche o App. Aperte **START** na máquina. **Clear**. Abra o App, espere carregar, mais 10 s. Salve.
-Pare a máquina.
+Abre uma janela do App igual à de sempre. Espere **"Connected"** e o kit aparecer. **Cmd+Q**.
 
-### C1.3 — `mixer-level-bd` e `mixer-mute-bd`
+**O que esperar** no terminal: `autoteste: espiao carregou = sim, abriu a serial = sim`.
+Se qualquer um for `NAO`, pare e me mande a saída — captura sem autoteste não prova nada.
+Um caso especial: `carregou = sim` e `abriu a serial = NAO` com o App mostrando
+"Connected" quer dizer que o App passou a falar **MIDI** (o `ctrlPort` está em 1 desde
+14:36 de 08/10, REFERENCIA 2.1b). Seria boa notícia — aí voltamos ao MIDI Monitor.
+Se o macOS disser que o App "está danificado" ou não pode ser aberto, me avise antes de
+mexer em qualquer configuração de segurança.
 
-Com o App aberto, **Clear** depois que ele terminou de carregar. No **MIXER** do App:
-- suba o nível do **BD** do mínimo ao máximo devagar, uma vez. Salve como `2026-10-DD-mixer-level-bd.mmon`
-- **Clear**. Clique no **mute do BD**, espere 2 s, clique de novo. Salve como `2026-10-DD-mixer-mute-bd.mmon`
+### C1-S1 — `boot-app` ← a mais importante
 
-### C1.4 — `2026-10-DD-kit-bd-tune.mmon`
+Mesmo do S0, com a máquina **parada**, e mais **10 s** parado depois do "Connected":
 
-**Clear**. Na tela **INST** do App, BD, gire o **TUNE** de ponta a ponta e volte. Salve.
+```bash
+python3 espiao.py rodar boot-app
+```
 
-### C1.5 — `painel-ptn` e `painel-var`
+Me avise. Eu rodo o `estatisticas` e o `resumo` e respondo **antes** de você seguir — o boot
+decide o resto do roteiro (se a serial é SysEx Roland, a hipótese H1, ou outra coisa).
 
-App aberto. **Clear**. **No painel da máquina**, troque de pattern 1-01 → 1-02 → 1-01. Salve como
-`2026-10-DD-painel-ptn.mmon`. **Clear**. Troque de variação A → B → A. Salve como
-`2026-10-DD-painel-var.mmon`.
+### C1-S2 — `boot-tocando`
 
-**O que esperar:** se o App atualizar a tela sozinho, a máquina avisa de alguma forma — e
-a captura mostra como.
+Aperte **START** na máquina. Então `python3 espiao.py rodar boot-tocando`, espere conectar,
+mais 10 s, **Cmd+Q**. Pare a máquina.
 
-### C1.6 — `2026-10-DD-backup.mmon` (só leitura, mas demorada)
+### C1-S3 — `knob-bd-tune`
 
-**Clear**. No App, **Export Backup** para uma pasta qualquer do Mac. Espere terminar. Salve a
-captura e me diga **quanto tempo levou** e **o tamanho do arquivo** de backup gerado.
+`python3 espiao.py rodar knob-bd-tune`. Depois de conectar, espere 5 s; na tela **INST**,
+Bass Drum, gire o **TUNE** do GENERATOR de ponta a ponta e volte. Espere 5 s. **Cmd+Q**.
 
-**O que esperar:** é aqui que o pattern inteiro deve passar, se o boot não o leu.
+### C1-S4 — `mixer-mute-bd`
 
-> **Não faça** WRITE KIT nem OVERWRITE nesta sessão. Eles gravam na memória da máquina; entram
-> numa sessão própria, com um kit e um pattern descartáveis, depois que o boot mostrar o
-> formato.
+`python3 espiao.py rodar mixer-mute-bd`. No **MIXER** da cópia, **mute do BD** liga, 2 s,
+desliga. **Cmd+Q**.
 
----
+### C1-S5 — `painel-ptn` e `painel-var`
+
+`python3 espiao.py rodar painel-ptn`: com a cópia conectada, **no painel da máquina** troque
+de pattern 1-01 → 1-02 → 1-01. **Cmd+Q**. Depois `rodar painel-var`: variação A → B → A.
+
+**O que esperar:** se a tela do App acompanhar sozinha, a máquina avisa de algum jeito — e a
+captura mostra como.
+
+### C1-S6 — `backup-to-pc` (só leitura, demorada)
+
+1. **Na máquina**, crie um backup em **INTERNAL** (Reference Manual p.51): **[MENU]** →
+   C6 em **FILE** → [ENTER] → C6 em **BACKUP** → [ENTER] → destino **INTERNAL** → um nome
+   (ex.: `C1S6`) → [ENTER]. Não desligue enquanto aparecer "Executing". O backup **não**
+   inclui pattern/kit com asterisco (editado e não salvo). A transferência do App leva
+   arquivos de backup que já estão na máquina (manual do App p.19).
+2. `python3 espiao.py rodar backup-to-pc`. No ☰ da cópia: **Transfer Backup → To PC**,
+   escolha uma pasta do Mac. Espere terminar. **Cmd+Q**.
+3. Me diga quanto tempo levou e o tamanho do arquivo de backup.
+
+**Nunca "To TR-1000"**: isso grava por cima da memória da máquina.
 
 ## C2 — decodificar o pattern (roteiro a escrever depois da C1)
 

@@ -53,10 +53,19 @@ python3 testes.py                             # testes de mesa, sem porta MIDI
 python3 instalar_hooks.py                     # uma vez por clone
 ```
 
-**Feche o TR-1000 App** antes de rodar qualquer coisa que use a porta CTRL. O CoreMIDI deixa
-os dois abrirem a porta ao mesmo tempo, e na TR-8S isso trocava as respostas entre os dois
-sem erro nenhum aparecendo. A exceção é a sessão C1, em que o App está aberto e quem escuta é
-o MIDI Monitor, não este código.
+**Feche o TR-1000 App** antes de rodar qualquer coisa que use a porta CTRL ou a serial. O
+CoreMIDI deixa os dois abrirem a porta ao mesmo tempo, e na TR-8S isso trocava as respostas
+entre os dois sem erro nenhum aparecendo.
+
+**O App não fala MIDI com a máquina**: fala por uma serial USB (REFERENCIA 2.1b). Para
+capturar o que ele diz, use o espião:
+
+```bash
+python3 espiao.py preparar                 # uma vez: cópia re-assinada do App + espião
+python3 espiao.py rodar boot-app           # abre a cópia; Cmd+Q grava capturas/AAAA-MM-DD-boot-app.serlog
+python3 tr1000_serial.py estatisticas capturas/AAAA-MM-DD-boot-app.serlog
+python3 tr1000_sysex.py resumo capturas/AAAA-MM-DD-boot-app.serlog
+```
 
 ## Os manuais não estão no repositório
 
@@ -92,6 +101,8 @@ então os dois Launchpad viram um só. Toda enumeração e abertura usa `rtmidi`
 | `tr1000.py` | O modelo da máquina, cada constante com a fonte: manual, catálogo, medido ou deduzido |
 | `tr1000_sysex.py` | Parser/diff de capturas do MIDI Monitor; `resumo` tira a lista branca de endereços |
 | `catalogo_app.py` | Extrai o catálogo ordenado de parâmetros do binário do TR-1000 App |
+| `espiao.py` + `espiao/espiao_serial.c` | O App fala com a máquina por **serial USB**, não MIDI: o espião roda uma cópia do App gravando cada byte da serial em `capturas/*.serlog` |
+| `tr1000_serial.py` | Lê os `.serlog` (`bruto`, `estatisticas`); o `tr1000_sysex.py` também os aceita |
 | `testes.py` | Testes de mesa (`unittest`) |
 | `REFERENCIA.md` | Fonte da verdade: o que está provado, deduzido e desconhecido |
 | `ROTEIRO-C0-C3.md` | As sessões de hardware da fase 0, passo a passo |

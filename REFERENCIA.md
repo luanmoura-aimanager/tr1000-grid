@@ -87,14 +87,61 @@ por padrão. O App não abre o USB direto (os únicos IOUserClient dele são de 
 rede e não tem endpoint MIDI privado (a enumeração CoreMIDI com `kMIDIPropertyPrivate` só
 mostra `TR-1000`, `CTRL`, `MIDI OUT 1/2`, `MIDI IN`, todos públicos).
 
-**A chave:** `~/TR1000 User/settings.xml` (o arquivo de config do App) tem
-`<ctrlPort user="0"/>`, que é a opção **"Use CTRL Port"** do App (a string está no binário,
-junto de `Sync F8`). Com ela em 1, a hipótese é que o App passe a falar pela porta MIDI
-`TR-1000 CTRL`, e o MIDI Monitor volte a servir. **Não testado ainda** — é o próximo passo.
+**"Use CTRL Port" não troca o transporte com o App aberto, e a UI não tem a opção**
+(medido 08/10/2026). O `~/TR1000 User/settings.xml` tem `<ctrlPort user="…"/>`, e a string
+"Use CTRL Port" está no binário. A sequência observada:
 
-Se não passar: o plano B é sniffar a serial. O App tem hardened runtime (`flags=0x10000`,
-sem entitlement de DYLD), então injetar biblioteca exige uma cópia re-assinada; avaliar
-antes de fazer.
+| hora | o que aconteceu | `ctrlPort` no arquivo |
+|---|---|---|
+| antes de 14:00 | eu troquei 0 → 1 com o App fechado | 1 |
+| 14:00:22 | App aberto (pid 16057); abriu a serial; 120 s de escuta `rtmidi`: zero MIDI | **0** às 14:00:40 (mtime 14:00) |
+| 14:36:22 | o Luan abriu a ⚙ do App (só tem *Scale Factor*) e o App regravou o arquivo | **1** |
+| 15:04 | o mesmo App segue na serial: `lsof` mostra o fd em `0t2394308` (~2,4 MB trafegados desde 14:00) | 1 |
+
+Ou seja: o valor em memória parece ser 1 (foi o que ele gravou às 14:36), e mesmo assim o
+App fala pela serial. O que **não** se sabe: se um App aberto **do zero** com `1` já salvo
+troca de transporte. A C1-S0 responde de graça (a cópia lê o mesmo arquivo): se o
+autoteste disser "abriu a serial = NAO", é isso. A interface não tem a opção — a ⚙ só
+oferece *Scale Factor*, e o ☰ é Import/Export Sample, Transfer Backup/Project, Reload/Write
+Inst, Init Generator, About. É código herdado do app do SP-404MKII (as strings estão no
+mesmo binário).
+
+**O App conversa o tempo todo**, não só no boot: ~2,4 MB em ~65 min, uns 600 B/s. Ou seja,
+ele faz polling — provável fonte do `cur_step`/`cur_vari` (2.2).
+
+**Plano B — espiar a serial (implementado em 08/10/2026):**
+- **`espiao/espiao_serial.c`:** biblioteca que entra no processo do App por
+  `DYLD_INSERT_LIBRARIES` e grava cada byte lido e escrito em `/dev/tty.*`/`/dev/cu.*`,
+  com hora em ns. **Só observa**: chama a função real e devolve o que ela devolveu.
+  - Intercepta: `open`, `openat`, `close`, `read`, `write`, `readv`, `writev`, `ioctl` e
+    `tcsetattr`.
+  - É exatamente o que o App importa para a serial: `nm -u` mostra também `poll`, `fcntl`,
+    `tcgetattr` e `cfsetspeed`. A porta é achada por IOKit (`IOServiceGetMatchingServices`).
+- **A cópia do App:** o App tem hardened runtime (`flags=0x10000(runtime)`), e com ele o
+  dyld ignora `DYLD_INSERT_LIBRARIES`.
+  - `espiao.py preparar` faz uma **cópia** em `~/Library/Caches/tr1000-grid/` e a re-assina
+    ad hoc, sem a flag.
+  - O App não confere a própria assinatura: não importa `SecCode`, não tem entitlements nem
+    segmento `__RESTRICT`.
+  - O original em `/Applications` não é tocado.
+- **Formato `.serlog`:** cabeçalho `TR1KSER1` + versão u32. Cada registro é
+  `t_ns u64 | tipo u8 | fd u32 | n u32 | n bytes`.
+  - Tipos: `S` início (o pid vai no campo fd), `O` open, `C` close, `R` read, `W` write,
+    `I` ioctl, `T` tcsetattr.
+  - Leitor: `tr1000_serial.py` (`bruto`, `estatisticas`). Todos os comandos do
+    `tr1000_sysex.py` aceitam `.serlog`, que passa pelo mesmo caminho do `.mmon`.
+- **Hipótese H1** **(deduzido)**: a serial carrega SysEx Roland (RQ1/DT1).
+  - Por quê: o `ReadAllParametersReq` do App e a TR-8S.
+  - O leitor remonta os quadros `F0..F7` sobre o fluxo, porque `read()` corta onde quiser,
+    e conta os bytes que caem **fora** de quadro: muita sobra = H1 errada.
+- **Conferido de mesa, sem o App** (08/10/2026): um programa de teste numa pty com caminho
+  `.../dev/tty.teste`, rodando com o espião injetado.
+  - Um DT1 escrito em dois `write` voltou como um quadro.
+  - Dois quadros lidos num `readv` só saíram separados.
+  - O `tcsetattr` mostrou 115200.
+  - O `tr1000_sysex.py parse` leu o `.serlog` direto.
+- **Ainda não rodou com o App**: o `preparar` (a re-assinatura da cópia) fica para o Luan
+  rodar. A sessão C1-S0 é o teste de verdade.
 
 Outras coisas na pasta `~/TR1000 User/`: `update.zip` (27 MB, o firmware baixado pelo App) e
 `app_version.xml`. O firmware fica **intocado**.
@@ -176,7 +223,11 @@ da Chart. Se a Roland publicou algum mapa SysEx, é lá. Baixar antes da C1.
 | nada chegou na CTRL nem na MIDI IN em 8 s parados | **medido 07/10** (sem autoteste na CTRL — ambíguo) | 7.2 |
 | formato Roland RQ1/DT1 na CTRL | **(deduzido)** da TR-8S e da existência da porta | 2.1 |
 | o App fala por **serial USB** (`/dev/tty.usbmodem*`), não MIDI, com `ctrlPort` = 0 | **medido 08/10** | 2.1b |
-| com "Use CTRL Port" ligado, o App fala pela `TR-1000 CTRL` | **(deduzido)** do nome da opção | 2.1b |
+| "Use CTRL Port" = 1 com o App já aberto: segue na serial; a UI não tem a opção | **medido 08/10** | 2.1b |
+| "Use CTRL Port" = 1 num App aberto do zero | **desconhecido** — a C1-S0 diz | 2.1b |
+| o App fala com a máquina continuamente (~600 B/s) | **medido 08/10** (`lsof`, offset do fd) | 2.1b |
+| a serial carrega SysEx Roland (H1) | **(deduzido)** — a C1-S1 decide | 2.1b |
+| espião grava `read`/`write` da serial, quadros remontados | **medido de mesa 08/10** (pty), **não** com o App | 2.1b |
 | model ID | **desconhecido** — sai da C1 | |
 | ordem dos parâmetros por bloco | **(catálogo)** | 2.2 |
 | endereços de qualquer coisa | **desconhecido** | |
@@ -286,7 +337,7 @@ Do barato para o caro (regra 8 do Método). O passo a passo para o Luan está no
 | sessão | ferramenta | responde |
 |---|---|---|
 | **C0** escuta passiva | `lp_tr1000.py escutar` | clock parada × tocando; o painel transmite nota/CC/PC?; a máquina empurra SysEx? |
-| **C1** sniff do App | MIDI Monitor (spy) + `tr1000_sysex.py resumo/fx/diff` | **model ID**, formato, **mapa de endereços e tamanhos** (boot), lista branca de RQ1, keep-alive, mute, WRITE, formato de bulk |
+| **C1** sniff do App | ~~MIDI Monitor~~ → **espião da serial** (`espiao.py` + `tr1000_serial.py`, 2.1b) + `tr1000_sysex.py resumo/fx/diff` | **model ID**, formato, **mapa de endereços e tamanhos** (boot), lista branca de RQ1, keep-alive, mute, WRITE, formato de bulk |
 | **C2** decodificar o pattern | `snap`/`snapdiff` (a portar do tr8s-grid), **só em endereços da lista branca** | layout do step, layer A/B, ALT, prob, sub, cycle, last step, máscara de variações, `cur_step`/`cur_vari` |
 | **C3** primeiras escritas | um DT1 por vez, ouvido | o portão (3.1) |
 

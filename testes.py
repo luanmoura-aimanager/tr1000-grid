@@ -23,7 +23,9 @@ sys.path.insert(0, AQUI)
 import roland
 import tr1000
 import tr1000_sysex
+import tr1000_serial
 import catalogo_app
+import espiao
 
 # Mensagem real, capturada do site ARIA falando com uma TR-8S (tr8s-grid
 # REFERENCIA 2.9): "pattern atual -> 127". E o unico SysEx Roland medido que
@@ -213,6 +215,107 @@ class TesteCapturas(unittest.TestCase):
         msgs = [_m("TX", roland.RQ1, (0x10, 0, 0, 0),
                    roland.tamanho_7bits(16), t) for t in (0, 0.01)]
         self.assertEqual(tr1000_sysex.resumir(msgs)["keepalive"], [])
+
+
+class TesteSerlog(unittest.TestCase):
+    """O leitor do .serlog contra capturas sinteticas no MESMO formato que o
+    espiao/espiao_serial.c grava (tr1000_serial.serializar). O espiao em si foi
+    conferido de ponta a ponta numa pty em 08/10/2026 (REFERENCIA 2.1b); o
+    teste de verdade dele e a sessao C1-S0, com o App."""
+
+    def _gravar(self, registros):
+        f = tempfile.NamedTemporaryFile(suffix=".serlog", delete=False)
+        f.write(tr1000_serial.serializar(registros)); f.close()
+        self.addCleanup(os.unlink, f.name)
+        return f.name
+
+    def test_le_os_registros(self):
+        c = self._gravar([(1_000_000_000, "S", 42, b"/app"),
+                          (1_500_000_000, "O", 7, b"/dev/tty.usbmodem31101"),
+                          (2_000_000_000, "W", 7, b"\x01\x02")])
+        regs = tr1000_serial.ler_serlog(c)
+        self.assertEqual([r["tipo"] for r in regs], ["S", "O", "W"])
+        self.assertEqual(regs[2]["dados"], b"\x01\x02")
+        self.assertAlmostEqual(regs[1]["t"], 1.5)
+        self.assertEqual(tr1000_serial.autoteste(regs), (True, True))
+
+    def test_sem_o_open_o_autoteste_reprova(self):
+        c = self._gravar([(0, "S", 1, b"/app")])
+        self.assertEqual(tr1000_serial.autoteste(tr1000_serial.ler_serlog(c)),
+                         (True, False))
+
+    def test_magico_errado_recusa(self):
+        f = tempfile.NamedTemporaryFile(suffix=".serlog", delete=False)
+        f.write(b"XXXXXXXX\x01\x00\x00\x00"); f.close()
+        self.addCleanup(os.unlink, f.name)
+        with self.assertRaises(ValueError):
+            tr1000_serial.ler_serlog(f.name)
+
+    def test_quadro_quebrado_em_tres_reads_e_dois_num_read(self):
+        q = bytes(TR8S_REAL)
+        c = self._gravar([(0, "O", 3, b"/dev/tty.usbmodem1"),
+                          (1, "R", 3, q[:4]), (2, "R", 3, q[4:9]),
+                          (3, "R", 3, q[9:]),
+                          (4, "R", 3, q + q)])
+        quadros, sobra = tr1000_serial.quadros_sysex(tr1000_serial.ler_serlog(c))
+        self.assertEqual(len(quadros), 3)
+        self.assertTrue(all(d == "RX" and b == TR8S_REAL[1:-1]
+                            for d, b, _ in quadros))
+        self.assertEqual(sobra, {})
+
+    def test_bytes_fora_de_quadro_contam(self):
+        # muita sobra = a hipotese H1 (serial = SysEx Roland) esta errada
+        c = self._gravar([(0, "W", 3, b"\xAA\x55\x01" + bytes(TR8S_REAL))])
+        quadros, sobra = tr1000_serial.quadros_sysex(tr1000_serial.ler_serlog(c))
+        self.assertEqual(len(quadros), 1)
+        self.assertEqual(sobra, {"TX": 3})
+
+    def test_resumo_pelo_tr1000_sysex(self):
+        # o .serlog passa pelo MESMO caminho do .mmon: lista branca de graca
+        rq = roland.montar_rq1(TR8S_CAB, (0x20, 0, 0, 0), 128)
+        dt = roland.montar_dt1(TR8S_CAB, (0x20, 0, 0, 0), [0] * 128)
+        c = self._gravar([(0, "O", 3, b"/dev/tty.usbmodem1"),
+                          (1_000_000, "W", 3, bytes(rq)),
+                          (2_000_000, "R", 3, bytes(dt))])
+        outros = {}
+        msgs = tr1000_sysex.load(c, outros=outros)
+        r = tr1000_sysex.resumir(msgs)
+        self.assertEqual(r["leituras"], [dict(addr="20 00 00 00", tamanho=128,
+                                              vezes=1, respondeu=True)])
+        self.assertEqual(outros["abriu-serial"], "sim")
+
+
+class TesteEspiaoPreparo(unittest.TestCase):
+    """O App em /Applications nunca e escrito: ele so pode aparecer como
+    ORIGEM do ditto. Todo o resto mira o cache (ou espiao/, onde mora o
+    .dylib). Confere a lista de comandos sem rodar nada."""
+
+    def test_nada_escreve_no_original(self):
+        permitido = (espiao.CACHE, os.path.join(AQUI, "espiao"))
+        for cmd in espiao.comandos_preparar():
+            caminhos = [a for a in cmd[1:] if a.startswith("/")]
+            if cmd[0] == "ditto":
+                self.assertEqual(caminhos[0], espiao.ORIGINAL)
+                caminhos = caminhos[1:]
+            if cmd[0] == "clang":
+                caminhos = [cmd[cmd.index("-o") + 1]]      # so a saida
+            for c in caminhos:
+                self.assertTrue(c.startswith(permitido), f"{cmd[0]} mira {c}")
+
+    def test_copia_mora_no_cache(self):
+        self.assertTrue(espiao.COPIA.startswith(espiao.CACHE + os.sep))
+        self.assertFalse(espiao.COPIA.startswith("/Applications"))
+
+    def test_assinatura_nova_nao_herda_o_runtime(self):
+        cs = [c for c in espiao.comandos_preparar() if c[0] == "codesign"][0]
+        self.assertIn("--force", cs)
+        self.assertFalse(any(a.startswith("--preserve-metadata") or
+                             a == "--options" for a in cs))
+
+    def test_nome_da_captura(self):
+        import datetime
+        c = espiao.caminho_captura("boot-app", datetime.date(2026, 10, 8))
+        self.assertTrue(c.endswith("capturas/2026-10-08-boot-app.serlog"))
 
 
 class TesteFx(unittest.TestCase):
