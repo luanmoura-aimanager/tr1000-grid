@@ -197,6 +197,34 @@ começando por `<id da lista> <índice u16>`):
 | `8D` | `0e` | 331 | INST ("TR-808-1000 BD", …) — bate com as 331 da INST List |
 | `8B`? | `0c` | 128 | nomes de kit ("Dub Techno Kit", …) |
 
+**O endereço, corrigido em 08/10/2026 (knob-bd-tune):** toda carga de parâmetro é
+`<cmd u8> <bloco u16> <x u16> <y u16> <índice u16> …`. O que eu tinha lido como "instância
+u32 nos 16 bits de cima" são **dois u16**:
+- **y** = track (0..9 = BD..RC) ou layer (0/1);
+- **x** = slot de sample (0..499), no bloco 156.
+
+**A ESCRITA — medida em 08/10/2026, captura `knob-bd-tune`** (o Luan girou o TUNE do
+GENERATOR do BD no App, ~28 s):
+
+```
+App → máquina   01 <bloco> <x> <y> <índice> <u32 valor>        escrita
+máquina → App   03 <bloco> <x> <y> <índice> <índice>           confirmação (857 das 864)
+```
+
+- 864 escritas, **todas** no mesmo endereço: bloco **156**, x **126**, y 0, índice **962**.
+- O BD do kit usa o GEN de sample "Hybrid Kick 03", então o TUNE do GENERATOR mexe no **slot
+  de sample** 126, e não num parâmetro do track — o mesmo bloco 156 que o boot lê
+  (índices 718..987 por slot).
+- Valores: começou em **509**, foi até **0** e até **1000**, terminou em 1000. Faixa
+  0..1000, centro ~500 **(deduzido)**.
+- Antes de escrever, o App releu só esse parâmetro: `82 9C 00 7E 00 00 00 C2 03 01 00` (n = 1).
+- **Não confirmado de ouvido**: o Luan não relatou se o som mudou.
+- `tr1000_serial.py escritas` lista as escritas de uma captura.
+
+O que isso destrava: o mesmo `01` deve escrever **qualquer** índice, inclusive os steps.
+Ex.: BD var A step 2 layer A = bloco 118, x 0, y 0, índice 1249 + 4·1 + 0 = 1253.
+**Hipótese — nenhum byte nosso foi mandado à máquina** (portão da fase 0, 3.1).
+
 **Os parâmetros — o achado principal:**
 - **Pedido** do App (carga de um `0x15`):
   `82 <bloco u16> <instância u32> <índice u16> <n u16>`
@@ -358,7 +386,8 @@ da Chart. Se a Roland publicou algum mapa SysEx, é lá. Baixar antes da C1.
 | piso de ruído entre dois boots sem gesto: zero (139 blocos iguais) | **medido 08/10** (`ruido-1`/`ruido-2`) | 2.1c |
 | bloco 3 `[128]` = variação selecionada no painel (8 = H, 1 = A) | **(deduzido)** de dois diffs | 2.1c |
 | velocity no byte do meio da nota; `[64..79]` = probability | **(deduzido)** | 2.1c |
-| comando de escrita | **desconhecido** — C1-S3 | |
+| comando de escrita: `01 bloco x y índice u32` → `03 …` | **medido 08/10** (App escrevendo; nunca por nós) | 2.1c |
+| o mesmo `01` escreve steps (bloco 118+3v) | **(deduzido)** — é o teste C3 | 2.1c |
 | espião grava `read`/`write` da serial, quadros remontados | **medido de mesa 08/10** (pty), **não** com o App | 2.1b |
 | model ID | **não se aplica** à serial (não é SysEx); a versão `"1.22"` vem no aperto de mão | 2.1c |
 | ordem dos parâmetros por bloco | **(catálogo)** | 2.2 |

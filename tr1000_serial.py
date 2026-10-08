@@ -8,6 +8,7 @@ Uso:
     python3 tr1000_serial.py pacotes      captura.serlog [--max N]
     python3 tr1000_serial.py blocos       captura.serlog
     python3 tr1000_serial.py pattern      captura.serlog   # a grade
+    python3 tr1000_serial.py escritas     captura.serlog   # os 01 do App
     python3 tr1000_serial.py diffblocos   a.serlog b.serlog
 
 E, se a serial carregar SysEx Roland (hipotese H1, REFERENCIA 2.1b), todos os
@@ -129,8 +130,13 @@ def quadros_sysex(regs):
 # sobrando (86 KB do App, 1,43 MB da maquina).
 # ─────────────────────────────────────────────────────────────
 PAC_CURTO, PAC_DADOS = 0x14, 0x15
-LER_BLOCO = 0x82            # carga do App: 82 <bloco u16> <inst u32> <indice u16> <n u16>
-BLOCO_LIDO = 0x02           # carga da maquina: 02 <bloco u16> ... <indice u16> <n u16> + n x u32
+# Cargas (todas: <cmd u8> <bloco u16> <x u16> <y u16> <indice u16> ...):
+LER_BLOCO = 0x82            # App:     82 ... <n u16>              (medido 08/10)
+BLOCO_LIDO = 0x02           # maquina: 02 ... <n u16> + n x u32    (medido 08/10)
+ESCREVER = 0x01             # App:     01 ... <valor u32>          (medido 08/10, knob-bd-tune)
+ESCRITO = 0x03              # maquina: 03 ... <indice u16>         (o "ok" de cada 01)
+# x e y sao os dois indices de instancia: y = track (0..9 = BD..RC) ou layer
+# (0/1); x = slot de sample (0..499) no bloco 156.
 
 
 def pacotes(regs):
@@ -170,32 +176,44 @@ def carga(pac):
     return pac[16:] if pac and (pac[0] & 0x7F) == PAC_DADOS else b""
 
 
+def _endereco(c):
+    """<bloco u16> <x u16> <y u16> <indice u16> da carga (depois do cmd)."""
+    return struct.unpack_from("<HHHH", c, 1)
+
+
 def leituras_de_bloco(pacs):
-    """Os pedidos 82 do App -> {(bloco, instancia): (indice, n)}.
-    A instancia vem no u32 do meio; na S0 ela anda de 65536 em 65536, ou seja,
-    o numero de verdade esta nos 16 bits de cima (inst >> 16)."""
+    """Os pedidos 82 do App -> {(bloco, x, y): (indice, n)}."""
     out = {}
     for direcao, t, p in pacs:
         c = carga(p)
         if direcao == "TX" and c[:1] == bytes([LER_BLOCO]) and len(c) >= 11:
-            bloco = struct.unpack_from("<H", c, 1)[0]
-            inst = struct.unpack_from("<I", c, 3)[0]
-            indice, n = struct.unpack_from("<HH", c, 7)
-            out[(bloco, inst >> 16)] = (indice, n)
+            bloco, x, y, indice = _endereco(c)
+            out[(bloco, x, y)] = (indice, struct.unpack_from("<H", c, 9)[0])
+    return out
+
+
+def escritas(pacs):
+    """Os 01 do App -> [(t, bloco, x, y, indice, valor)], na ordem."""
+    out = []
+    for direcao, t, p in pacs:
+        c = carga(p)
+        if direcao == "TX" and c[:1] == bytes([ESCREVER]) and len(c) >= 13:
+            bloco, x, y, indice = _endereco(c)
+            out.append((t, bloco, x, y, indice, struct.unpack_from("<I", c, 9)[0]))
     return out
 
 
 def valores_de_bloco(pacs):
-    """As respostas 02 da maquina -> [(t, bloco, indice, [u32...])].
+    """As respostas 02 da maquina -> [(t, bloco, x, y, indice, [u32...])].
     So as que fecham: n x 4 bytes depois do cabecalho de 11 da carga."""
     out = []
     for direcao, t, p in pacs:
         c = carga(p)
         if direcao == "RX" and c[:1] == bytes([BLOCO_LIDO]) and len(c) >= 11:
-            bloco = struct.unpack_from("<H", c, 1)[0]
-            indice, n = struct.unpack_from("<HH", c, 7)
+            bloco, x, y, indice = _endereco(c)
+            n = struct.unpack_from("<H", c, 9)[0]
             if len(c) == 11 + 4 * n:
-                out.append((t, bloco, indice,
+                out.append((t, bloco, x, y, indice,
                             list(struct.unpack_from(f"<{n}I", c, 11))))
     return out
 
@@ -311,17 +329,8 @@ BLOCO_CAB_PATTERN, BLOCO_VAR0, BLOCOS_POR_VAR = 116, 117, 3
 
 
 def ultimos_valores(pacs):
-    """{(bloco, instancia): [u32...]} - a ultima resposta de cada um."""
-    out = {}
-    for direcao, t, p in pacs:
-        c = carga(p)
-        if direcao == "RX" and c[:1] == bytes([BLOCO_LIDO]) and len(c) >= 11:
-            bloco = struct.unpack_from("<H", c, 1)[0]
-            inst = struct.unpack_from("<I", c, 3)[0] >> 16
-            indice, n = struct.unpack_from("<HH", c, 7)
-            if len(c) == 11 + 4 * n:
-                out[(bloco, inst)] = list(struct.unpack_from(f"<{n}I", c, 11))
-    return out
+    """{(bloco, x, y): [u32...]} - a ultima resposta de cada um."""
+    return {(b, x, y): v for _, b, x, y, _, v in valores_de_bloco(pacs)}
 
 
 def nome_e_tempo(cab):
@@ -370,7 +379,7 @@ def grade_de_steps(valores):
 
 def cmd_pattern(caminho):
     vals = ultimos_valores(pacotes(ler_serlog(caminho)))
-    cab = vals.get((BLOCO_CAB_PATTERN, 0))
+    cab = vals.get((BLOCO_CAB_PATTERN, 0, 0))
     if cab:
         nome, bpm = nome_e_tempo(cab)
         print(f"pattern {nome!r}, tempo {bpm} (deduzido do bloco {BLOCO_CAB_PATTERN})")
@@ -378,7 +387,7 @@ def cmd_pattern(caminho):
         bloco = BLOCO_VAR0 + 1 + BLOCOS_POR_VAR * v
         linhas = []
         for tr, nome_tr in enumerate(TRACKS_SERIAL):
-            vv = vals.get((bloco, tr))
+            vv = vals.get((bloco, 0, tr))
             if vv and len(vv) >= 64:
                 g = grade_de_steps(vv)
                 if g.strip("."):
@@ -405,7 +414,7 @@ def cmd_diffblocos(a, b):
         if not difs and len(x) == len(y):
             continue
         mudou += 1
-        print(f"bloco {k[0]:3d} inst {k[1]}:")
+        print(f"bloco {k[0]:3d} x {k[1]} y {k[2]}:")
         for i, p, q in difs[:40]:
             extra = f"  (step {i // 4 + 1}, slot {i % 4}{' = layer ' + 'AB'[i % 4] if i % 4 < 2 else ''})" if \
                 k[0] >= BLOCO_VAR0 and (k[0] - BLOCO_VAR0) % BLOCOS_POR_VAR == 1 and i < 64 else ""
@@ -435,14 +444,33 @@ def cmd_blocos(caminho):
     print(f"{len(pacs)} pacotes, {ruins} bytes fora de pacote")
     lidos = leituras_de_bloco(pacs)
     por_bloco = {}
-    for (bloco, inst), (indice, n) in lidos.items():
-        b = por_bloco.setdefault(bloco, [indice, n, []])
-        b[2].append(inst)
+    for (bloco, x, y), (indice, n) in lidos.items():
+        b = por_bloco.setdefault((bloco, indice, n), [set(), set()])
+        b[0].add(x); b[1].add(y)
     print(f"{len(por_bloco)} blocos, {len(lidos)} leituras (bloco x instancia)\n")
-    for bloco, (indice, n, insts) in sorted(por_bloco.items()):
-        insts.sort()
-        inst = f"{insts[0]}..{insts[-1]} ({len(insts)})" if len(insts) > 1 else str(insts[0])
-        print(f"   bloco {bloco:3d}  indice {indice:4d}  n {n:3d}  instancias {inst}")
+
+    def faixa(v):
+        v = sorted(v)
+        return f"{v[0]}..{v[-1]} ({len(v)})" if len(v) > 1 else str(v[0])
+    for (bloco, indice, n), (xs, ys) in sorted(por_bloco.items()):
+        print(f"   bloco {bloco:3d}  indice {indice:4d}  n {n:3d}  x {faixa(xs):12} y {faixa(ys)}")
+
+
+def cmd_escritas(caminho):
+    """Os 01 do App, agrupados por endereco, com a faixa de valores vista."""
+    ws = escritas(pacotes(ler_serlog(caminho)))
+    if not ws:
+        print("nenhuma escrita (01) do App nesta captura"); return
+    grupos = {}
+    for t, b, x, y, i, v in ws:
+        grupos.setdefault((b, x, y, i), []).append((t, v))
+    t0 = ws[0][0]
+    print(f"{len(ws)} escritas em {len(grupos)} enderecos\n")
+    for (b, x, y, i), tv in grupos.items():
+        vs = [v for _, v in tv]
+        print(f"   bloco {b:3d} x {x:3d} y {y} indice {i:4d}: {len(vs)} escritas "
+              f"de {tv[0][0] - t0:.1f} a {tv[-1][0] - t0:.1f} s, valores "
+              f"{vs[0]} -> min {min(vs)} / max {max(vs)} -> {vs[-1]}")
 
 
 if __name__ == "__main__":
@@ -459,6 +487,8 @@ if __name__ == "__main__":
         cmd_blocos(a[2])
     elif a[1] == "pattern":
         cmd_pattern(a[2])
+    elif a[1] == "escritas":
+        cmd_escritas(a[2])
     elif a[1] == "diffblocos" and len(a) >= 4:
         cmd_diffblocos(a[2], a[3])
     else:

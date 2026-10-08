@@ -315,17 +315,26 @@ class TestePacotesSerial(unittest.TestCase):
     def test_pedido_e_resposta_de_bloco(self):
         pacs = tr1000_serial.pacotes(self._regs(("W", self.PEDIDO),
                                                 ("R", self._resposta([7, 8]))))
-        self.assertEqual(tr1000_serial.leituras_de_bloco(pacs), {(3, 0): (112, 292)})
+        self.assertEqual(tr1000_serial.leituras_de_bloco(pacs),
+                         {(3, 0, 0): (112, 292)})
         self.assertEqual(tr1000_serial.valores_de_bloco(pacs)[0][1:],
-                         (3, 112, [7, 8]))
+                         (3, 0, 0, 112, [7, 8]))
 
-    def test_instancia_nos_16_bits_de_cima(self):
-        # na S0 o u32 da instancia andou 0, 65536, 131072... (bloco 13 x 10)
+    def test_x_e_y_sao_dois_u16(self):
+        # bloco 13 da S0: y = 0..9 (o track); bloco 156: x = 0..499 (o slot)
         import struct
         ped = bytearray(self.PEDIDO)
-        struct.pack_into("<I", ped, 16 + 3, 9 << 16)
+        struct.pack_into("<HH", ped, 16 + 3, 126, 9)
         pacs = tr1000_serial.pacotes(self._regs(("W", bytes(ped))))
-        self.assertEqual(list(tr1000_serial.leituras_de_bloco(pacs)), [(3, 9)])
+        self.assertEqual(list(tr1000_serial.leituras_de_bloco(pacs)), [(3, 126, 9)])
+
+    def test_escrita_real_do_knob(self):
+        # knob-bd-tune (08/10/2026): o TUNE do BD, primeiro valor escrito
+        esc = bytes.fromhex("15 08 41 F2 01 00 00 00 E0 52 AF 2F 0D 00 00 00"
+                            "01 9C 00 7E 00 00 00 C2 03 FD 01 00 00")
+        pacs = tr1000_serial.pacotes(self._regs(("W", esc)))
+        self.assertEqual([w[1:] for w in tr1000_serial.escritas(pacs)],
+                         [(156, 126, 0, 962, 0x1FD)])
 
     def test_byte_estranho_vira_pacote_de_um(self):
         pacs = tr1000_serial.pacotes(self._regs(("R", b"\x42" + self.POLL)))
