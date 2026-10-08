@@ -1,0 +1,290 @@
+# TR-1000 Grid — Referência
+
+Base de conhecimento do projeto: o que se sabe do protocolo da TR-1000, de onde veio cada
+coisa, e o que falta. **Ler antes de mexer em qualquer coisa** — a seção 3 separa o que
+está provado do que é só dedução, e essa distinção é o que impede retrabalho caro.
+
+Estrutura e método herdados do `../tr8s-grid/REFERENCIA.md`, onde a TR-8S foi decifrada
+entre 08 e 18/08/2026. **Nada medido na TR-8S é fato aqui** — entra como hipótese.
+
+Etiquetas usadas em todo o documento (e nos comentários do código):
+
+| etiqueta | significa |
+|---|---|
+| **(medido DD/MM)** | visto nesta TR-1000, com o método da 3.2 |
+| **(manual X p.N)** | está no manual da Roland. Diz o que a máquina *pode*, não o que *faz* aqui |
+| **(catálogo)** | ordem de nomes no binário do TR-1000 App 1.10 (2.2). Hipótese forte de ordem, nunca endereço |
+| **(TR-8S)** | era assim na TR-8S. Hipótese fraca |
+| **(deduzido)** | inferência nossa |
+
+---
+
+## 1. Objetivo do projeto
+
+Dois Launchpad Mini MK3 lado a lado (16×8) editando **o pattern interno da TR-1000** por
+SysEx, em tempo real, como o tr8s-grid faz com a TR-8S. Decisão de 07/10/2026: **só SysEx no
+pattern interno** — nada de sequenciador externo mandando notas. A máquina toca sozinha, e o
+pattern sobrevive com o Mac desligado.
+
+O que a TR-1000 traz e o grid quer aproveitar (manual RM p.12–31):
+
+- **10 tracks** (BD SD LT HT RS HC CH OH CC RC — não há MT) **+ ACCENT + TRG**: 12 linhas
+- **Layer A/B** nos quatro primeiros (dois GEN misturados pelo MIX); **ALT** nos outros seis
+- **8 variações + 4 fills** (a TR-8S tinha 2 fills), FIRST/LAST STEP por variação **e por
+  track** (polimetria), DIRECTION por track (FWD, BWD, P-P, RND...)
+- Por step: VELOCITY, START (micro-timing), SUBSTEP (1/2, 1/3, 1/4, Flam, tercinas 1–4,
+  quiálteras 1–5), PROB, **CYCLE** (1/1, 2/2, 1/3, 5/8, "1st Only"...), slice
+- STEP LOOP, ROLL, snapshots, MORPH, motion
+
+Prioridades combinadas: linhas com layer A/B e ALT; variação e step **por track**;
+parâmetros de step; página de performance.
+
+---
+
+## 2. Protocolo
+
+### 2.1 Portas — (medido 07/10/2026)
+
+`lp_tr1000.py ports`, TR-1000 na USB, App fechado:
+
+| direção | nome | uso |
+|---|---|---|
+| in/out | `TR-1000` | clock, notas, CC (manual) |
+| in/out | `TR-1000 CTRL` | onde o App fala — candidata ao SysEx, como a `TR-8S CTRL` |
+| in | `TR-1000 MIDI IN` | a DIN de entrada vista pela USB (deduzido) |
+| out | `TR-1000 MIDI OUT 1`, `TR-1000 MIDI OUT 2` | as DIN de saída (deduzido) |
+
+`TR-1000` é prefixo de `TR-1000 CTRL`: abrir por trecho de nome pega as duas. O código usa
+`portas.porta_exata`.
+
+**Formato SysEx: desconhecido.** O `roland.py` assume a família moderna da Roland
+(`F0 41 <dev> <model> <cmd> <addr 4B> <dados> <chk> F7`, RQ1 = 11, DT1 = 12) porque era o da
+TR-8S e é o que o App de uma máquina Roland de 2025 quase certamente usa — mas o **model
+ID** e o próprio formato só ficam provados na sessão C1. O decodificador não precisa saber o
+model ID: ele acha o tamanho pelo checksum.
+
+**Identity Request universal (`F0 7E 7F 06 01 F7`): sem resposta** (medido 07/10/2026),
+mandado na CTRL e na comum, escutando as três entradas por 1,5 s cada, App fechado. Isso só
+diz que a TR-1000 não responde a *este* pedido — **não** que ela não tem SysEx (regra 7 do
+Método). Consequência prática: o autoteste do `sniff` não tem como provar o listener na
+CTRL antes da C1; até lá, silêncio na CTRL é ambíguo.
+
+### 2.2 O catálogo do TR-1000 App — (catálogo, 07/10/2026)
+
+O binário do App (`/Applications/Roland/TR-1000 App.app`, versão 1.10, framework JUCE —
+código compartilhado com o app do SP-404MKII, cujas strings aparecem junto) tem uma tabela
+**contígua** de 2400 nomes de parâmetro, em ordem. `python3 catalogo_app.py` a extrai e a
+fatia em blocos pelas âncoras abaixo (os nomes dos blocos e as fronteiras são nossos):
+
+| bloco | começa em | o que tem (resumo) |
+|---|---|---|
+| sistema | `Bright` | display, Auto Save, Project Num, atenuações das saídas |
+| midi | `Device ID` | Omni, Pattern Ch., Kit Ch., Inst Note (normal, A, B, Alt) de cada track, Through, **Tx/Rx Bank Select**, Tx/Rx Edit Data, Tx Nudge, Tx Shuffle, MIDI Out 1/2, MIDI Mode |
+| performance | `KIT_NUM` | `KIT_NUM`, `PTN_NUM`, `NEXT_PTN_NUM`, VOLUME, SEQ_TRIG, SEQ_START, `LAST_STEP`, `MUTE_BTN`, ACCENT, SUB_BTN, Shuffle, MOTION_REC, Nudge, RANDOM_PTN, `SUB_STEP_MODE`, PTN_SEL, CTRL_KNOB1..11, `FILLIN_SEL_BTN`, MANUAL_TRIG_BTN, CurTempo, LEVEL SLIDER1..11, `seq_run`, **`cur_step_master`, `cur_step0..10`, `cur_vari_master`, `cur_vari0..10`**, `vari_req`, `sw_fill`, seq_song_mode, `fillin_state`, `loop_step_sw`, `loop_step0..15`, `roll_sw`, motion_knob_tmp0..53 |
+| projeto | `Tempo Source` | Tempo Sync, TR-REC Mode, Fill In Trigger, Pattern Lock, Normal/Weak Velocity, Mute Mode, Track Sync, Sync Delay, Ext In, Trig In/Out |
+| kit | `CUSTOM LED` | cores, nomes, sends, side chain, mods, layers, níveis A/B, nomes de sample |
+| pattern | `Name1` | nome (16), **Tempo, Variation**, Flam Space, MOTION SW, Accent, Accent Depth, KIT Ref SW, Master Prob, Pattern Gain, TRK GAIN1..10, Scale, Scale Trk1..11, Shuffle Trk1..11, **Begin/End Step A..H, Fill 1..4, Track1..11**, End Step Track SW1..11, AUTO SW/CYC, grooves, QUANTIZE |
+| step | `Accent Weak` | Trigger, **`note0..`, `probability0..`, `sub_step`, `cycle`, `shift`, `trk_shift`**, motion, param, valid, pattern, mode, loop, variation, grv_timing, grv_velo |
+| hardware | `ANA DEBUG` | calibração e detecção dos circuitos analógicos — **nunca tocar** |
+| efeitos_inst | `PRE DLY` | parâmetros de reverb/delay/MFX/IFX e dos GEN |
+
+O que isso muda em relação à TR-8S:
+
+- **A variação que toca é legível, por track** (`cur_vari0..10`), se esse bloco for o que
+  parece. Na TR-8S não estava em lugar nenhum que a gente lesse, e o grid deduzia contando
+  clock (`CicloVars`), com "?" quando não sabia. Aqui o playhead pode ser exato e polimétrico.
+- **`ServerApp::ReadAllParametersReq`** existe: o App lê tudo ao abrir. Na TR-8S, o
+  obstáculo registrado era "o App da TR-1000 edita só kits, não há editor de pattern para
+  sniffar" (tr8s REFERENCIA 8). O catálogo mostra que o App **conhece** o pattern e o step,
+  e o boot deve ler ao menos o cabeçalho do pattern — a C1 diz.
+- A performance tem a mesma cara do bloco `01 00 00 00` da TR-8S (kit, pattern atual,
+  próximo pattern...) **(TR-8S)**.
+
+**Ressalva principal — é vocabulário, não layout** (achado na revisão de 07/10/2026): a
+tabela sai da seção de strings do binário, onde o linker guarda cada string idêntica **uma
+vez só**. Os 2400 nomes têm **zero** repetidos, o que já denuncia a deduplicação: o `CTRL1`
+de cada instrumento, os `PRM1..`, os `LEVEL` aparecem só na primeira ocorrência, e um bloco
+de 10 instrumentos vira um conjunto de nomes. A ordem só é candidata a ordem de offset onde
+os nomes são únicos por natureza — a performance (`cur_step0..10`) e o cabeçalho do pattern
+(`Begin Step A..H`) — e mesmo ali é hipótese.
+
+Outras ressalvas: a ordem dos nomes **não** é prova de ordem de offset — parâmetros de 2 bytes,
+reservas e alinhamento quebram a correspondência um-para-um. E as contagens das séries
+(`note0..63`; `probability`, `sub_step`, `cycle`, `shift` e `valid` em `0..15`; `motion0..95`;
+`variation`, `grv_timing` e `grv_velo` em `0..127`) ainda não têm interpretação. Os de 16
+casam com 16 steps; `note0..63` pode ser 16 steps × 4 sub-steps; 128 pode ser 8 variações × 16.
+Hipóteses, nada mais.
+
+### 2.3 O MIDI documentado — (manual MIC p.1–2, RM p.46–48)
+
+Vale como plano B de leitura e para a página de performance, não como caminho de escrita
+do pattern:
+
+- **Canais:** Pattern Ch. 10 (troca pattern e kit), Kit Ch. 1 (só kit)
+- **Notas** (Single Ch.): BD 36 (A 35, B 99), SD 38 (40, 104), LT 43 (41, 105), HT 50 (48, 112),
+  RS 37 (ALT 56), HC 39 (54), CH 42 (44), OH 46 (58), CC 49 (61), RC 51 (63), TRG 84. Em
+  `tr1000.NOTAS_PADRAO`. Mudáveis em MENU > SYSTEM > MIDI > Inst Note
+- **66 CCs**, Tx e Rx (`tr1000.CC`), com `Rx/Tx Edit Data` = ON. MORPH = 89, MFX ON = 15,
+  AFX ON = 19. **Sem CC:** mute, variação, fill, steps, accent level, volume, tempo
+- **Program Change** 0–127, sem Bank Select na chart (mas o catálogo tem `Tx/Rx Bank
+  Select` — divergência a medir)
+- **Clock, Start, Continue, Stop**; **SPP** só em Song Mode
+- **SysEx:** ✗ na chart. A da TR-8S também era ✗ — a chart não é evidência de ausência
+
+**Falta no `manuals/`:** o documento *MIDI Implementation* (Owner's Manual p.1), separado
+da Chart. Se a Roland publicou algum mapa SysEx, é lá. Baixar antes da C1.
+
+---
+
+## 3. O que está provado vs. deduzido vs. desconhecido
+
+| item | estado | onde |
+|---|---|---|
+| nomes e quantidade das portas | **medido 07/10** | 2.1 |
+| clock contínuo na `TR-1000`, ~51 pulsos/s (≈128 bpm) | **medido 07/10** — se parada ou tocando, **desconhecido** | 7.2 |
+| sem resposta ao Identity Request | **medido 07/10** | 2.1 |
+| nada chegou na CTRL nem na MIDI IN em 8 s parados | **medido 07/10** (sem autoteste na CTRL — ambíguo) | 7.2 |
+| formato Roland RQ1/DT1 na CTRL | **(deduzido)** da TR-8S e da existência da porta | 2.1 |
+| model ID | **desconhecido** — sai da C1 | |
+| ordem dos parâmetros por bloco | **(catálogo)** | 2.2 |
+| endereços de qualquer coisa | **desconhecido** | |
+| RQ1 inválido envenena a CTRL? | **desconhecido** — tratar como sim | CLAUDE.md |
+| a máquina empurra estado sozinha? | **desconhecido** (a TR-8S empurrava o step atual) | C0/C1 |
+| o painel transmite nota/CC/PC? | **desconhecido** (a TR-8S não transmitia CC) | C0 |
+
+### 3.1 Critério de saída da fase 0 (o portão)
+
+A fase 1 (o grid escrevendo) só começa quando **todos** estes forem **medidos**:
+
+1. Model ID e formato da mensagem, com checksum fechando em captura real
+2. Endereçamento de pattern × variação provado em **3 patterns** diferentes
+3. Um step ligado/desligado e a velocity dele **escritos por DT1 e ouvidos** pelo Luan
+4. `cur_step` e `cur_vari` lidos corretamente com a máquina tocando, conferidos no visor
+5. WRITE (gravar o pattern) seguido de religar a máquina, e o step sobrevivendo
+
+Se o boot e o backup do App **não** cobrirem a região de pattern, a fase 0 **para** e a
+decisão de como seguir é tomada com o Luan antes de qualquer varredura por sondagem.
+
+
+### 3.2 Método: como descobrir coisas nesta máquina
+
+> Copiado **sem mudança** do tr8s-grid (REFERENCIA 3.2 de lá). Os exemplos são da TR-8S;
+> as regras valem iguais aqui, e foi por isso que vieram inteiras.
+
+Destilado da sessão de 14/08/2026, que decodificou o mute, o ALT e o step atual em algumas
+horas depois de meses de itens parados. O que mudou não foi a sorte — foram estas regras.
+Elas custaram caro para aprender e são baratas de seguir.
+
+**1. Autoteste sempre, e periódico.** Sem ele, "não apareceu nada" é ambíguo entre a
+máquina calada e o listener surdo, e a leitura errada vira achado no documento. Foi o
+autoteste que tornou confiável o resultado negativo do `sniff`, e foi a falta dele que
+produziu os 15 endereços fantasma da 3.1 — a primeira versão do `varrer` conferia se a
+máquina respondia **uma vez, no começo**, e não viu que ela morreu no meio.
+
+**2. Piso de ruído antes de qualquer diff.** Dois snapshots sem tocar em nada, e compare.
+Custa 10 segundos. Sem essa medida, um byte que muda sozinho — e existem, como o offset 90
+do nó de pattern — vira "achado" no primeiro diff que você olhar.
+
+**3. Um gesto por vez, e o inverso logo em seguida.** O valor tem que voltar. Mutar o BD e
+desmutar o BD prova mais que mutar cinco instrumentos, porque o retorno elimina
+coincidência.
+
+**4. Segundo passe em todo achado.** Endereço de verdade responde duas vezes; falso
+positivo não. É uma linha de código e teria matado os 15 fantasmas sozinha.
+
+**5. Ler blocos, não sondar bytes.** Uma leitura de 128 bytes cobre o que 128 sondas
+cobririam, é ~100× mais rápida e **não envenena a porta** (3.1). A varredura byte a byte
+existe para mapear fronteiras de região, e é o último recurso, não o primeiro.
+
+**6. O que muda sem motivo aparente merece uma pergunta antes de virar ruído.** O byte de
+step atual (2.8) apareceu como "ruído que muda sozinho" num diff de mute e quase foi
+descartado. Ele acabou consertando dois bugs do playhead.
+
+**7. Teste negativo não vira afirmação geral.** O CC de LEVEL não silenciar virou "não dá
+para silenciar por software", e essa frase ficou errada no documento por um dia — tempo em
+que um recurso funcionando parecia impossível (seção 10). Registre o que **foi** testado,
+não a generalização que ele sugere.
+
+**8. A ordem certa é do barato para o caro.** `snap`/`snapdiff` nos endereços conhecidos →
+leitura em bloco de regiões novas → varredura → MIDI Monitor. Cada degrau só se justifica
+quando o anterior não alcança; a sessão de 14/08 quase começou pelo caro e teria gasto
+várias religadas da máquina à toa.
+
+**9. O que o hardware confirma vale mais que o que o round-trip confirma.** Escrever um
+valor e reler prova que a máquina *aceitou*, não que ela *obedeceu*. O mute só virou fato
+quando o Luan ouviu os chimbais sumirem.
+
+---
+
+## 5. Launchpad Mini MK3
+
+Mesmo hardware do tr8s-grid, medido aqui em 07/10/2026: quatro portas com nomes idênticos
+(`LPMiniMK3 DAW` e `LPMiniMK3 MIDI`, ×2). Toda a seção 5 da REFERENCIA de lá vale: programmer
+mode (`F0 00 20 29 02 0D 0E 01 F7`), notas = linha×10+coluna (11–88), CC 91–98 na fileira de
+cima e 89…19 na coluna de cena, cor RGB por SysEx `F0 00 20 29 02 0D 03 ...`, `learn` com três
+pads por aparelho para descobrir a rotação. A camada entra como `launchpad.py` na fase 1, sem
+mudança de lógica.
+
+---
+
+## 6. Configurações da TR-1000 que importam — (manual RM p.47–48)
+
+MENU > SYSTEM > MIDI. A anotar como estão na máquina do Luan durante a C0:
+
+| parâmetro | por que importa |
+|---|---|
+| Pattern Ch. / Kit Ch. | onde o program change age |
+| Tx/Rx Edit Data | sem ON, nenhum CC passa (página de performance) |
+| Tx/Rx Program Change | |
+| Rx Start Stop Cont | |
+| TX Note / RX Note | se o painel manda nota quando toca — útil para a C0 |
+| USB MIDI Through / Soft Through | eco que pode confundir uma captura |
+| MIDI Mode | Single Ch. ou Each Track Ch. (muda o mapa de notas) |
+| Tempo Sync (projeto) | Auto/MIDI/USB/INT — o Mac **não** deve virar mestre de clock sem querer |
+
+---
+
+## 7. Fase 0 — o plano de captura
+
+Do barato para o caro (regra 8 do Método). O passo a passo para o Luan está no
+`ROTEIRO-C0-C3.md`; aqui fica o porquê e o que cada um responde.
+
+### 7.1 As sessões
+
+| sessão | ferramenta | responde |
+|---|---|---|
+| **C0** escuta passiva | `lp_tr1000.py escutar` | clock parada × tocando; o painel transmite nota/CC/PC?; a máquina empurra SysEx? |
+| **C1** sniff do App | MIDI Monitor (spy) + `tr1000_sysex.py resumo/fx/diff` | **model ID**, formato, **mapa de endereços e tamanhos** (boot), lista branca de RQ1, keep-alive, mute, WRITE, formato de bulk |
+| **C2** decodificar o pattern | `snap`/`snapdiff` (a portar do tr8s-grid), **só em endereços da lista branca** | layout do step, layer A/B, ALT, prob, sub, cycle, last step, máscara de variações, `cur_step`/`cur_vari` |
+| **C3** primeiras escritas | um DT1 por vez, ouvido | o portão (3.1) |
+
+Regra que atravessa todas: **nunca RQ1 em endereço que o App não pediu**.
+
+### 7.2 Medições de 07/10/2026 (sessão zero, sem o Luan mexer)
+
+- `ports`: tabela da 2.1
+- `identidade`: ninguém respondeu (2.1)
+- `escutar --segundos 8`: `TR-1000` mandou **409 clocks** (51 51 51 51 52 51 51 51 por
+  segundo ≈ 127,5 bpm) e nada mais; CTRL e MIDI IN mudas. **O estado da máquina (parada ou
+  tocando) não foi anotado**, então isto ainda não responde à armadilha 2. É a primeira
+  pergunta da C0.
+
+---
+
+## 8. Ideias registradas, não implementadas
+
+- **Leitura por CC como plano B:** se `Tx Edit Data` funcionar de verdade (a TR-8S não
+  transmitia), os knobs do painel chegam de graça para a página de mixer
+- **Polimetria visível:** com FIRST/LAST STEP por track, pintar fora da janela de cada
+  track em cinza, e o playhead de cada linha andando no seu próprio passo
+
+---
+
+## 9. Referências
+
+- `../tr8s-grid/REFERENCIA.md` — a TR-8S decifrada; seções 2.9 (mapa oficial via ARIA),
+  3.1 (envenenamento da CTRL), 3.2 (Método), 5 (Launchpad), 7 (portas)
+- `../TR-8S-SysEx/` (compuphonic) — o mapa oficial da TR-8S em `js/Tr8s/Tr8sData.js`; vale
+  procurar se a Roland publicou algo equivalente para a TR-1000 (ARIA, Roland Cloud)
+- Manuais em `manuals/` (fora do git) — ver README
+- Launchpad Mini MK3 Programmer's Reference (Novation)
