@@ -342,9 +342,16 @@ class TesteGradeDeSteps(unittest.TestCase):
                  F, F, F, F,  F, F, F, F,  F, n, 0, 0,  0, 0, 0, 0,
                  F, n, F, F,  F, n, 0, 0,  0, 0, 0, 0,  m, m, F, F,
                  F, n, F, F,  0, 0, 0, 0,  F, m, 0, 0,  F, n, 0, 0]
-        # vermelho 4 e 12; verde 2 7 9 10 13 15 16; o resto apagado
+        # vermelho 4 e 12 (layers A+B); verde 2 7 9 10 13 15 16 (so o B)
         self.assertEqual(tr1000_serial.grade_de_steps(slots),
-                         ".o.x..o.oo.xo.oo")
+                         ".b.x..b.bb.xb.bb")
+
+    def test_step_ligado_no_painel(self):
+        # step-bd2 (08/10/2026): o step 2 do BD ligado no painel virou
+        # A503C nos slots 0 e 1 - os dois layers, como os outros BD
+        v = [0] * 64
+        v[4] = v[5] = 0xA503C
+        self.assertEqual(tr1000_serial.grade_de_steps(v)[:3], ".x.")
 
     def test_so_pausas_e_apagado(self):
         self.assertEqual(tr1000_serial.grade_de_steps([0xFF] * 64), "." * 16)

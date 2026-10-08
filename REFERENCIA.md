@@ -242,12 +242,21 @@ na máquina parada:
 **Layout do bloco de steps** (n = 131, instância = track 0..9 = BD..RC) — **medido** onde o
 painel conferiu, **deduzido** no resto:
 
-- `[0..63]`: 16 steps × **4 slots** (`[step*4 + slot]`), um por posição de sub-step.
-  - `0x00` = o slot não existe.
-  - `0xFF` = pausa.
-  - Qualquer outro valor = **nota**.
-  - **O step toca se algum slot tem nota (medido).** Nota no 1º slot acende **vermelho**;
-    só em slot posterior acende **verde** (sub-step fora do tempo).
+- `[0..63]`: 16 steps × **4 slots** (`[step*4 + slot]`). **Os slots são LAYERS, não
+  sub-steps.**
+  - **Medido** em 08/10 nos 12 bancos do Dub Techno: os tracks de layer (BD SD LT HT) só
+    usam os slots 0 e 1; os simples (RS…RC) só o slot 0.
+  - Slot 0 = **layer A** (ou o som normal), slot 1 = **layer B**. Slots 2–3 sem uso visto;
+    o ALT dos tracks simples é o candidato **(deduzido)**.
+  - `0x00` = vazio; `0xFF` = pausa; outro valor = **nota**.
+  - Um step ligado e desligado de novo vira `FF`, não `0`: visto na var H do BD entre a S0
+    e o ruido-1.
+  - **O step toca se algum slot tem nota (medido).**
+  - **Cores no painel (medido no SD da var A):** layer A tocando (com ou sem o B) =
+    **vermelho**; só o layer B (`FF nota`) = **verde**.
+  - **Step ligado no painel (medido, `step-bd2`):** var A, BD, step 2: slots `0 0 0 0` →
+    `A503C A503C 0 0`, os dois layers — igual aos outros BD do pattern. Contra o
+    `ruido-2`, só isso mudou no pattern. Fora dele, o bloco 3 `[128]` foi de 8 para 1.
 - O valor da nota, ex.: `0xA503C` = `A` `50` `3C`.
   - O byte do meio parece a **velocity**: `0x50` = 80, a "Normal Velocity" do manual;
     `0x5A` = 90; os CH variam `0x32`…`0x68`, como chimbal humanizado **(deduzido)**.
@@ -345,6 +354,9 @@ da Chart. Se a Roland publicou algum mapa SysEx, é lá. Baixar antes da C1.
 | transporte: serial USB a 230400, pacotes `0x14` (12 B) / `0x15` (16 + n), enquadramento sem sobra | **medido 08/10** | 2.1c |
 | leitura de parâmetros: `82 bloco inst índice n` → `02 …` + n × u32 | **medido 08/10** | 2.1c |
 | ler o pattern pela serial (nome, tempo, steps 118+3v, slots 0/FF/nota) | **medido 08/10**, conferido no painel | 2.1c |
+| slots 0/1 do step = layer A/B; vermelho = A, verde = só B | **medido 08/10** | 2.1c |
+| piso de ruído entre dois boots sem gesto: zero (139 blocos iguais) | **medido 08/10** (`ruido-1`/`ruido-2`) | 2.1c |
+| bloco 3 `[128]` = variação selecionada no painel (8 = H, 1 = A) | **(deduzido)** de dois diffs | 2.1c |
 | velocity no byte do meio da nota; `[64..79]` = probability | **(deduzido)** | 2.1c |
 | comando de escrita | **desconhecido** — C1-S3 | |
 | espião grava `read`/`write` da serial, quadros remontados | **medido de mesa 08/10** (pty), **não** com o App | 2.1b |

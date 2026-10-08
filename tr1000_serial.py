@@ -301,7 +301,8 @@ def cmd_estatisticas(caminho):
 #   bloco 116            cabecalho: nome em ASCII (1 char por u32), tempo x100
 #   bloco 117 + 3*v      cabecalho da variacao v (0..7 = A..H, 8..11 = Fill 1..4)
 #   bloco 118 + 3*v      os steps do track (instancia 0..9 = BD..RC): note0..63
-#                        = 16 steps x 4 slots; step ligado = algum slot != 0
+#                        = 16 steps x 4 slots (slot 0 = layer A, 1 = layer B);
+#                        o step toca se algum slot nao e 0 nem FF
 #   bloco 119 + 3*v      motion (96 + 48, vazio na S0)
 VARIACOES_SERIAL = ["A", "B", "C", "D", "E", "F", "G", "H",
                     "Fill 1", "Fill 2", "Fill 3", "Fill 4"]
@@ -335,28 +336,33 @@ def nome_e_tempo(cab):
 
 
 SLOT_VAZIO, SLOT_PAUSA = 0x00, 0xFF
+SLOT_LAYER_A, SLOT_LAYER_B = 0, 1
 
 
 def slot_toca(v):
-    """Um slot de sub-step com nota. 0 = slot que nao existe, 0xFF = pausa.
-    Conferido no painel em 08/10/2026 (REFERENCIA 2.1c): todo step com um slot
-    fora desses dois acendeu, todo step so de 0/FF ficou apagado - inclusive a
-    var H do BD inteira de FF, que o Luan viu toda apagada."""
+    """Um slot com nota. 0 = vazio, 0xFF = pausa (step ligado e desligado de
+    novo vira FF, nao 0 - visto na var H do BD, ruido-1 de 08/10/2026)."""
     return v not in (SLOT_VAZIO, SLOT_PAUSA)
 
 
 def grade_de_steps(valores):
-    """note0..63 (16 steps x 4 slots) -> uma letra por step:
-    'x' nota no 1o slot (no tempo: LED vermelho no painel),
-    'o' nota so em slot depois do 1o (sub-step fora do tempo: LED verde),
-    '.' nada toca."""
+    """note0..63 = 16 steps x 4 slots -> uma letra por step.
+
+    Os slots NAO sao sub-steps: sao layers (medido 08/10/2026, REFERENCIA
+    2.1c). Nos 12 bancos do Dub Techno os tracks de layer (BD SD LT HT) so
+    usam os slots 0 e 1, e os simples (RS..RC) so o slot 0. Slot 0 = layer A
+    (ou o som normal), slot 1 = layer B; 2 e 3 sem uso visto (ALT?).
+      'x' toca o layer A (com ou sem o B): LED VERMELHO no painel
+      'b' so o layer B:                    LED VERDE no painel
+      '.' nada toca
+    As cores foram conferidas pelo Luan no SD da var A."""
     out = []
     for s in range(16):
         slots = valores[s * 4:s * 4 + 4]
-        if slot_toca(slots[0]):
+        if slot_toca(slots[SLOT_LAYER_A]):
             out.append("x")
         elif any(slot_toca(v) for v in slots[1:]):
-            out.append("o")
+            out.append("b")
         else:
             out.append(".")
     return "".join(out)
@@ -401,7 +407,7 @@ def cmd_diffblocos(a, b):
         mudou += 1
         print(f"bloco {k[0]:3d} inst {k[1]}:")
         for i, p, q in difs[:40]:
-            extra = f"  (step {i // 4 + 1}, slot {i % 4})" if \
+            extra = f"  (step {i // 4 + 1}, slot {i % 4}{' = layer ' + 'AB'[i % 4] if i % 4 < 2 else ''})" if \
                 k[0] >= BLOCO_VAR0 and (k[0] - BLOCO_VAR0) % BLOCOS_POR_VAR == 1 and i < 64 else ""
             print(f"   [{i:3d}] {p:X} -> {q:X}{extra}")
         if len(difs) > 40:
