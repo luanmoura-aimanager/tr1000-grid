@@ -7,7 +7,8 @@ Uso:
     python3 tr1000_serial.py estatisticas captura.serlog
     python3 tr1000_serial.py pacotes      captura.serlog [--max N]
     python3 tr1000_serial.py blocos       captura.serlog
-    python3 tr1000_serial.py pattern      captura.serlog   # a grade (deduzida)
+    python3 tr1000_serial.py pattern      captura.serlog   # a grade
+    python3 tr1000_serial.py diffblocos   a.serlog b.serlog
 
 E, se a serial carregar SysEx Roland (hipotese H1, REFERENCIA 2.1b), todos os
 comandos do tr1000_sysex.py aceitam o .serlog direto:
@@ -333,10 +334,32 @@ def nome_e_tempo(cab):
     return "".join(nome).rstrip(), None
 
 
+SLOT_VAZIO, SLOT_PAUSA = 0x00, 0xFF
+
+
+def slot_toca(v):
+    """Um slot de sub-step com nota. 0 = slot que nao existe, 0xFF = pausa.
+    Conferido no painel em 08/10/2026 (REFERENCIA 2.1c): todo step com um slot
+    fora desses dois acendeu, todo step so de 0/FF ficou apagado - inclusive a
+    var H do BD inteira de FF, que o Luan viu toda apagada."""
+    return v not in (SLOT_VAZIO, SLOT_PAUSA)
+
+
 def grade_de_steps(valores):
-    """note0..63 (16 steps x 4 slots) -> 'x...x...' por step."""
-    return "".join("x" if any(valores[s * 4 + k] for k in range(4)) else "."
-                   for s in range(16))
+    """note0..63 (16 steps x 4 slots) -> uma letra por step:
+    'x' nota no 1o slot (no tempo: LED vermelho no painel),
+    'o' nota so em slot depois do 1o (sub-step fora do tempo: LED verde),
+    '.' nada toca."""
+    out = []
+    for s in range(16):
+        slots = valores[s * 4:s * 4 + 4]
+        if slot_toca(slots[0]):
+            out.append("x")
+        elif any(slot_toca(v) for v in slots[1:]):
+            out.append("o")
+        else:
+            out.append(".")
+    return "".join(out)
 
 
 def cmd_pattern(caminho):
@@ -352,11 +375,38 @@ def cmd_pattern(caminho):
             vv = vals.get((bloco, tr))
             if vv and len(vv) >= 64:
                 g = grade_de_steps(vv)
-                if "x" in g:
+                if g.strip("."):
                     linhas.append(f"   {nome_tr:3} {g[:4]} {g[4:8]} {g[8:12]} {g[12:]}")
         print(f"{nome_var:7}" + ("" if linhas else " vazia"))
         for l in linhas:
             print(l)
+
+
+def cmd_diffblocos(a, b):
+    """O que mudou nos valores entre duas capturas, bloco a bloco - o
+    snapdiff da serial: abre a copia, fecha, faz UM gesto no painel, abre de
+    novo (o boot rele tudo), e compara. Metodo, regra 2: rode antes com duas
+    capturas SEM gesto no meio para medir o piso de ruido."""
+    va = ultimos_valores(pacotes(ler_serlog(a)))
+    vb = ultimos_valores(pacotes(ler_serlog(b)))
+    so_a = sorted(set(va) - set(vb)); so_b = sorted(set(vb) - set(va))
+    if so_a: print(f"so em {a}: {so_a}")
+    if so_b: print(f"so em {b}: {so_b}")
+    mudou = 0
+    for k in sorted(set(va) & set(vb)):
+        x, y = va[k], vb[k]
+        difs = [(i, p, q) for i, (p, q) in enumerate(zip(x, y)) if p != q]
+        if not difs and len(x) == len(y):
+            continue
+        mudou += 1
+        print(f"bloco {k[0]:3d} inst {k[1]}:")
+        for i, p, q in difs[:40]:
+            extra = f"  (step {i // 4 + 1}, slot {i % 4})" if \
+                k[0] >= BLOCO_VAR0 and (k[0] - BLOCO_VAR0) % BLOCOS_POR_VAR == 1 and i < 64 else ""
+            print(f"   [{i:3d}] {p:X} -> {q:X}{extra}")
+        if len(difs) > 40:
+            print(f"   ... +{len(difs) - 40}")
+    print(f"\n{mudou} blocos com diferenca")
 
 
 def cmd_pacotes(caminho, maximo=None):
@@ -403,5 +453,7 @@ if __name__ == "__main__":
         cmd_blocos(a[2])
     elif a[1] == "pattern":
         cmd_pattern(a[2])
+    elif a[1] == "diffblocos" and len(a) >= 4:
+        cmd_diffblocos(a[2], a[3])
     else:
         print(__doc__)

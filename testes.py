@@ -332,6 +332,24 @@ class TestePacotesSerial(unittest.TestCase):
         self.assertEqual([len(p) for _, _, p in pacs], [1, 12])
 
 
+class TesteGradeDeSteps(unittest.TestCase):
+    """Os slots reais da S0 contra o que o Luan viu no painel (08/10/2026):
+    SD var A e BD var H."""
+
+    def test_sd_var_a_bate_com_os_leds(self):
+        F, n, m = 0xFF, 0xA503C, 0xA5A3C
+        slots = [F, F, F, F,  F, n, 0, 0,  0, 0, 0, 0,  m, m, F, F,
+                 F, F, F, F,  F, F, F, F,  F, n, 0, 0,  0, 0, 0, 0,
+                 F, n, F, F,  F, n, 0, 0,  0, 0, 0, 0,  m, m, F, F,
+                 F, n, F, F,  0, 0, 0, 0,  F, m, 0, 0,  F, n, 0, 0]
+        # vermelho 4 e 12; verde 2 7 9 10 13 15 16; o resto apagado
+        self.assertEqual(tr1000_serial.grade_de_steps(slots),
+                         ".o.x..o.oo.xo.oo")
+
+    def test_so_pausas_e_apagado(self):
+        self.assertEqual(tr1000_serial.grade_de_steps([0xFF] * 64), "." * 16)
+
+
 class TesteEspiaoPreparo(unittest.TestCase):
     """O App em /Applications nunca e escrito: ele so pode aparecer como
     ORIGEM do ditto. Todo o resto mira o cache (ou espiao/, onde mora o

@@ -222,11 +222,44 @@ com gestos (C1-S3/S4, C2):
 | 117–152 | 12 grupos de 3: 1236/13, 1249/131 (×10), 1380/144 (×10) | | **8 variações + 4 fills**: cabeçalho da variação (13), parâmetros do track na variação (131, ×10 tracks), **steps** (144, ×10 tracks) |
 | 156 | 718 / 270 | 500 | os 500 slots de sample (strings em u32) |
 
-Os **144 do bloco de steps** batem com o catálogo do step (2.2) se forem `note0..63` (64) +
-`probability`, `sub_step`, `cycle`, `shift`, `valid` (5 × 16 = 80) = 144. Parece que **o
-App lê o pattern inteiro ao abrir** — o obstáculo da TR-8S ("não há editor de pattern
-para sniffar") não existe aqui. Nada disso foi escrito; e nada foi provado sobre
-**escrita** (o pedido de escrita ainda não apareceu: o App só leu).
+**Correção da primeira leitura:** os steps estão no bloco **118 + 3v** (n = 131), não no
+119. O 119 + 3v (144) estava vazio e casa com `motion0..95` + `motion_valid0..47` = 144 do
+catálogo.
+
+#### A leitura do pattern CONFERIDA NO PAINEL (08/10/2026)
+
+`tr1000_serial.py pattern capturas/2026-10-08-s0-autoteste.serlog` contra o que o Luan viu
+na máquina parada:
+
+| o que se leu na captura | o painel |
+|---|---|
+| bloco 116: nome `"Dub Techno"` (um caractere ASCII por u32), depois `0x3200` = 12800 → **128,00 BPM** | ✅ "Dub Techno", 128 |
+| var A, BD: steps 1, 5, 9, 13 | ✅ LEDs vermelhos em 1 5 9 13 |
+| var A, OH: 3, 7, 11, 15 | ✅ |
+| var A, SD: nota no 1º slot em 4 e 12; nota só em slot posterior em 2 7 9 10 13 15 16; o resto sem nota | ✅ **vermelho** em 4 e 12, **verde** em 2 7 9 10 13 15 16, apagado/cinza no resto |
+| var H, BD: os 16 steps só com `FF` | ✅ todos apagados |
+
+**Layout do bloco de steps** (n = 131, instância = track 0..9 = BD..RC) — **medido** onde o
+painel conferiu, **deduzido** no resto:
+
+- `[0..63]`: 16 steps × **4 slots** (`[step*4 + slot]`), um por posição de sub-step.
+  - `0x00` = o slot não existe.
+  - `0xFF` = pausa.
+  - Qualquer outro valor = **nota**.
+  - **O step toca se algum slot tem nota (medido).** Nota no 1º slot acende **vermelho**;
+    só em slot posterior acende **verde** (sub-step fora do tempo).
+- O valor da nota, ex.: `0xA503C` = `A` `50` `3C`.
+  - O byte do meio parece a **velocity**: `0x50` = 80, a "Normal Velocity" do manual;
+    `0x5A` = 90; os CH variam `0x32`…`0x68`, como chimbal humanizado **(deduzido)**.
+  - `0x3C` = 60 e o nibble `A` sem leitura ainda.
+- `[64..79]`: todos `0x64` = 100 — **probability 100%** **(deduzido)**.
+- `[80..130]`: zeros quase sempre; um `3` no step 1 do SD (`[96]`). Candidatos: sub_step,
+  cycle, shift **(deduzido)**.
+
+Parece que **o App lê o pattern inteiro ao abrir** — o obstáculo da TR-8S ("não há editor
+de pattern para sniffar") não existe aqui. A **leitura** do pattern está provada contra o
+painel. **Escrita: nada provado** — o App só leu; o comando de escrita ainda não apareceu
+(C1-S3).
 
  — (catálogo, 07/10/2026)
 
@@ -311,7 +344,8 @@ da Chart. Se a Roland publicou algum mapa SysEx, é lá. Baixar antes da C1.
 | a serial carrega SysEx Roland (H1) | **falso — medido 08/10** (C1-S0: 0,2% em quadros) | 2.1c |
 | transporte: serial USB a 230400, pacotes `0x14` (12 B) / `0x15` (16 + n), enquadramento sem sobra | **medido 08/10** | 2.1c |
 | leitura de parâmetros: `82 bloco inst índice n` → `02 …` + n × u32 | **medido 08/10** | 2.1c |
-| blocos 116–152 = pattern (cabeçalho, 8 var + 4 fills, tracks, steps) | **(deduzido)** da forma | 2.1c |
+| ler o pattern pela serial (nome, tempo, steps 118+3v, slots 0/FF/nota) | **medido 08/10**, conferido no painel | 2.1c |
+| velocity no byte do meio da nota; `[64..79]` = probability | **(deduzido)** | 2.1c |
 | comando de escrita | **desconhecido** — C1-S3 | |
 | espião grava `read`/`write` da serial, quadros remontados | **medido de mesa 08/10** (pty), **não** com o App | 2.1b |
 | model ID | **não se aplica** à serial (não é SysEx); a versão `"1.22"` vem no aperto de mão | 2.1c |
