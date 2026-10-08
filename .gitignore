@@ -1,0 +1,12 @@
+# Manuais da Roland: obra de terceiros, nao redistribuida aqui.
+# Baixe em roland.com/support - o README diz quais sao e a REFERENCIA cita
+# cada um por pagina.
+manuals/*.pdf
+
+# Catalogo extraido do binario do TR-1000 App (catalogo_app.py): derivado do
+# software da Roland, fica so local. O extrator e versionado; rode-o de novo.
+capturas/catalogo-app-*.json
+
+__pycache__/
+*.pyc
+.DS_Store

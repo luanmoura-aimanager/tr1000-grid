@@ -1,0 +1,37 @@
+# Testes de mesa a cada push e a cada PR.
+#
+# NADA aqui toca hardware: os testes nao abrem porta MIDI e nao precisam da
+# TR-1000. O que este workflow protege e o que da para provar sem ela - a
+# aritmetica Roland contra a unica mensagem real que temos, o parser das
+# capturas, o extrator do catalogo e o portao da fase 0.
+# Verde aqui NAO significa "funciona": significa "nao quebrou o que ja estava
+# provado". Quem diz que funciona continua sendo o Luan na frente da maquina
+# (CLAUDE.md).
+name: testes
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  mesa:
+    # 22.04 e nao ubuntu-latest: o Mac do projeto roda Python 3.9 (o do Command
+    # Line Tools), e testar na mesma versao evita descobrir incompatibilidade
+    # de sintaxe so quando o Luan roda (no tr8s-grid ja aconteceu com f-string
+    # multilinha, que e 3.12+)
+    runs-on: ubuntu-22.04
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.9"
+
+      # Os testes da fase 0 nao importam mido nem rtmidi (so roland.py,
+      # tr1000.py, tr1000_sysex.py e catalogo_app.py, que sao stdlib puro).
+      # Quando o motor da fase 1 entrar nos testes, voltam as dependencias de
+      # MIDI daqui do tr8s-grid (libasound2-dev, libjack-jackd2-dev, mido,
+      # python-rtmidi).
+      - name: testes de mesa
+        run: python3 testes.py
