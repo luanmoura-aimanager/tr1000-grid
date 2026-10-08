@@ -75,7 +75,8 @@ def _descrever(msg):
             return (f"SysEx Roland cab {roland.hexs(d['cabecalho'])}  "
                     f"{roland.CMDS[d['cmd']]} {roland.hexs(d['addr'])}  "
                     f"{len(d['data'])}B {roland.hexs(d['data'][:16])}"
-                    + ("" if d["chk_ok"] else "  <-- CHECKSUM RUIM"))
+                    + ("" if d["chk_ok"] else "  <-- CHECKSUM RUIM")
+                    + ("  <-- model ID ambiguo" if d["ambiguo"] else ""))
         ident = roland.decodificar_identidade(msg.data)
         if ident:
             return f"Identity Reply {roland.hexs(ident['bruto'])}"
@@ -110,29 +111,35 @@ def cmd_escutar(argv):
     entradas = _entradas_tr1000()
     if not entradas:
         print("Nenhuma porta TR-1000. A maquina esta ligada e na USB?"); return
-    abertas = [EntradaMIDI(i, n, ignorar_sense=False, callback=True)
-               for i, n in entradas]
-    f = open(arquivo, "w") if arquivo else None
-    print("Escutando: " + ", ".join(f"[{p.idx}] {p.name}" for p in abertas))
-
-    # AUTOTESTE: sem ele, "nao chegou nada" e ambiguo entre maquina calada e
-    # listener surdo (Metodo, regra 1). Primeiro o que vier sozinho; se nada
-    # vier, o Identity Request - que nao e RQ1 e nao arrisca a porta.
-    vivo = _autoteste(abertas)
-    print("autoteste: " + (
-        f"chegou {vivo} - o listener esta bom, silencio daqui pra frente e "
-        "silencio de verdade." if vivo else
-        "(!) nada chegou, nem resposta ao Identity Request. Nao da pra "
-        "distinguir maquina calada de listener surdo - o App esta aberto "
-        "segurando as portas?"))
-    print(f"\nMexa na maquina (pare, toque, knobs, pads, botoes). "
-          f"{'Ctrl+C pra sair.' if segundos is None else f'{segundos:.0f} s.'}\n")
-
+    # Tudo que abre porta ou arquivo fica DENTRO do try: um Ctrl+C no meio do
+    # autoteste (ate ~4,5 s) ou uma porta que falha ao abrir deixava as ja
+    # abertas sem close - exatamente o "escutar morto deixando a porta aberta"
+    # que precedeu a CTRL muda no tr8s-grid (revisao de 07/10/2026)
+    abertas, f = [], None
     contagem = {}             # (porta, tipo) -> n
-    clock_por_s = {}          # segundo inteiro -> pulsos (so na porta comum)
+    clock_por_s = {}          # segundo inteiro -> pulsos, SO na porta comum
     t0 = time.time()
-    fim = None if segundos is None else t0 + segundos
     try:
+        for i, n in entradas:
+            abertas.append(EntradaMIDI(i, n, ignorar_sense=False, callback=True))
+        f = open(arquivo, "w") if arquivo else None
+        print("Escutando: " + ", ".join(f"[{p.idx}] {p.name}" for p in abertas))
+
+        # AUTOTESTE: sem ele, "nao chegou nada" e ambiguo entre maquina calada
+        # e listener surdo (Metodo, regra 1). Primeiro o que vier sozinho; se
+        # nada vier, o Identity Request - que nao e RQ1 e nao arrisca a porta.
+        vivo = _autoteste(abertas)
+        print("autoteste: " + (
+            f"chegou {vivo} - o listener esta bom, silencio daqui pra frente e "
+            "silencio de verdade." if vivo else
+            "(!) nada chegou, nem resposta ao Identity Request. Nao da pra "
+            "distinguir maquina calada de listener surdo - o App esta aberto "
+            "segurando as portas?"))
+        print(f"\nMexa na maquina (pare, toque, knobs, pads, botoes). "
+              f"{'Ctrl+C pra sair.' if segundos is None else f'{segundos:.0f} s.'}\n")
+
+        t0 = time.time()
+        fim = None if segundos is None else t0 + segundos
         while fim is None or time.time() < fim:
             for p in abertas:
                 for msg in p.iter_pending():
@@ -140,12 +147,20 @@ def cmd_escutar(argv):
                     contagem[k] = contagem.get(k, 0) + 1
                     agora = time.time()
                     if msg.type == "clock":
-                        s = int(agora - t0)
-                        clock_por_s[s] = clock_por_s.get(s, 0) + 1
+                        # a pergunta da C0 e sobre o clock da porta COMUM; clock
+                        # na CTRL ou vindo de fora pela MIDI IN dobraria a conta
+                        # (o resumo por porta, abaixo, mostra cada um)
+                        if p.name == tr1000.PORTA_COMUM:
+                            s = int(agora - t0)
+                            clock_por_s[s] = clock_por_s.get(s, 0) + 1
                         continue
                     if msg.type == "active_sensing":
                         continue
-                    linha = (f"{time.strftime('%H:%M:%S')}.{int(agora % 1 * 1000):03d}"
+                    # hora e milissegundo do MESMO instante: dois relogios
+                    # lidos em momentos diferentes trocavam a ordem dos eventos
+                    # na virada do segundo
+                    linha = (f"{time.strftime('%H:%M:%S', time.localtime(agora))}"
+                             f".{int(agora % 1 * 1000):03d}"
                              f"  [{p.name}]  {_descrever(msg)}")
                     print(linha)
                     if f:
@@ -162,11 +177,17 @@ def cmd_escutar(argv):
     print("\n── resumo ──")
     for (porta, tipo), n in sorted(contagem.items()):
         print(f"   {porta:18} {tipo:16} {n}")
+    # so segundos INTEIROS: o ultimo pedaco (3,002 s de uma janela de 3 s)
+    # aparecia como um "0" no fim, que se le como "o clock parou"
+    duracao = max(1, int(time.time() - t0))
     if clock_por_s:
-        seq = [clock_por_s.get(s, 0) for s in range(max(clock_por_s) + 1)]
-        print("   clock por segundo: " + " ".join(str(x) for x in seq))
+        seq = [clock_por_s.get(s, 0) for s in range(duracao)]
+        print(f"   clock por segundo em {tr1000.PORTA_COMUM}: "
+              + " ".join(str(x) for x in seq))
         print("   (24 por seminima: 48/s = 120 bpm. Clock com a maquina "
               "PARADA e o que a C0 quer saber - anote quando parou/tocou)")
+    else:
+        print(f"   nenhum clock em {tr1000.PORTA_COMUM}")
 
 
 def _autoteste(abertas):
@@ -214,8 +235,10 @@ def cmd_identidade():
     entradas = _entradas_tr1000()
     if not entradas:
         print("Nenhuma porta TR-1000."); return
-    abertas = [EntradaMIDI(i, n) for i, n in entradas]
+    abertas = []
     try:
+        for i, n in entradas:
+            abertas.append(EntradaMIDI(i, n))
         respostas = _identidade(abertas)
     finally:
         for p in abertas:
@@ -253,34 +276,36 @@ def cmd_sniff(argv):
     pi = porta_exata(tr1000.PORTA_CTRL)
     if not pi:
         print(f"Porta {tr1000.PORTA_CTRL!r} nao encontrada."); return
-    f = open(arquivo, "w") if arquivo else None
-    vistos = 0
-    with EntradaMIDI(*pi, callback=True) as tin:
+    f, tin, vistos = None, None, 0
+    try:
+        tin = EntradaMIDI(*pi, callback=True)
+        f = open(arquivo, "w") if arquivo else None
         r = _identidade([tin], saidas=(tr1000.PORTA_CTRL,))
         print("autoteste: " + ("a CTRL respondeu ao Identity Request - o "
               "listener esta bom." if r else "(!) a CTRL nao respondeu ao "
               "Identity Request. Silencio daqui pra frente NAO prova nada."))
         print("\nMexa na maquina. Ctrl+C pra sair.\n")
-        try:
-            while True:
-                for msg in tin.iter_pending():
-                    if msg.type != "sysex":
-                        continue
-                    vistos += 1
-                    print(f"{time.strftime('%H:%M:%S')}  {_descrever(msg)}")
-                    if f:
-                        # formato que o tr1000_sysex.py parse le
-                        f.write("  " + time.strftime('%H:%M:%S')
-                                + f"   From {tr1000.PORTA_CTRL}   "
-                                + roland.hexs([0xF0] + list(msg.data) + [0xF7])
-                                + "\n")
-                        f.flush()
-                time.sleep(0.003)
-        except KeyboardInterrupt:
-            print(f"\n{vistos} mensagens SysEx.")
-        finally:
-            if f:
-                f.close()
+        while True:
+            for msg in tin.iter_pending():
+                if msg.type != "sysex":
+                    continue
+                vistos += 1
+                print(f"{time.strftime('%H:%M:%S')}  {_descrever(msg)}")
+                if f:
+                    # formato que o tr1000_sysex.py parse le
+                    f.write("  " + time.strftime('%H:%M:%S')
+                            + f"   From {tr1000.PORTA_CTRL}   "
+                            + roland.hexs([0xF0] + list(msg.data) + [0xF7])
+                            + "\n")
+                    f.flush()
+            time.sleep(0.003)
+    except KeyboardInterrupt:
+        print(f"\n{vistos} mensagens SysEx.")
+    finally:
+        if tin:
+            tin.close()
+        if f:
+            f.close()
 
 
 COMANDOS = {

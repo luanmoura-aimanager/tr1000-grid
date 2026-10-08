@@ -73,7 +73,7 @@ CTRL antes da C1; até lá, silêncio na CTRL é ambíguo.
 
 O binário do App (`/Applications/Roland/TR-1000 App.app`, versão 1.10, framework JUCE —
 código compartilhado com o app do SP-404MKII, cujas strings aparecem junto) tem uma tabela
-**contígua** de 2401 nomes de parâmetro, na ordem. `python3 catalogo_app.py` a extrai e a
+**contígua** de 2400 nomes de parâmetro, em ordem. `python3 catalogo_app.py` a extrai e a
 fatia em blocos pelas âncoras abaixo (os nomes dos blocos e as fronteiras são nossos):
 
 | bloco | começa em | o que tem (resumo) |
@@ -100,7 +100,15 @@ O que isso muda em relação à TR-8S:
 - A performance tem a mesma cara do bloco `01 00 00 00` da TR-8S (kit, pattern atual,
   próximo pattern...) **(TR-8S)**.
 
-Ressalvas: a ordem dos nomes **não** é prova de ordem de offset — parâmetros de 2 bytes,
+**Ressalva principal — é vocabulário, não layout** (achado na revisão de 07/10/2026): a
+tabela sai da seção de strings do binário, onde o linker guarda cada string idêntica **uma
+vez só**. Os 2400 nomes têm **zero** repetidos, o que já denuncia a deduplicação: o `CTRL1`
+de cada instrumento, os `PRM1..`, os `LEVEL` aparecem só na primeira ocorrência, e um bloco
+de 10 instrumentos vira um conjunto de nomes. A ordem só é candidata a ordem de offset onde
+os nomes são únicos por natureza — a performance (`cur_step0..10`) e o cabeçalho do pattern
+(`Begin Step A..H`) — e mesmo ali é hipótese.
+
+Outras ressalvas: a ordem dos nomes **não** é prova de ordem de offset — parâmetros de 2 bytes,
 reservas e alinhamento quebram a correspondência um-para-um. E as contagens das séries
 (`note0..63`; `probability`, `sub_step`, `cycle`, `shift` e `valid` em `0..15`; `motion0..95`;
 `variation`, `grv_timing` e `grv_velo` em `0..127`) ainda não têm interpretação. Os de 16

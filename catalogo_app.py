@@ -16,9 +16,16 @@ O QUE ISTO E (REFERENCIA 2.2)
     `strings`, na versao 1.10 do App.
 
 O QUE ISTO NAO E
+    Nao e o layout: e o VOCABULARIO. A tabela vem da secao de strings do
+    binario, onde o linker guarda cada string identica UMA vez so. Todo nome
+    que se repete na tabela real (o CTRL1 de cada instrumento, PRM1..,
+    LEVEL...) aparece so na primeira ocorrencia - no App 1.10 sao 2401 nomes e
+    ZERO repetidos, o que ja diz que houve deduplicacao. Um bloco de 10
+    instrumentos vira um conjunto de nomes so (revisao de 07/10/2026).
+
     Nao e mapa de enderecos. A ORDEM dos nomes e uma HIPOTESE de ordem de
-    offsets dentro de cada bloco - forte (a TR-8S do ARIA tinha a mesma cara),
-    mas nao medida. Nenhum endereco sai daqui; eles saem da sessao C1 (sniff do
+    offsets so onde os nomes sao unicos (performance, cabecalho do pattern) -
+    e mesmo ali, nao medida. Nenhum endereco sai daqui; eles saem da sessao C1 (sniff do
     App), e o catalogo serve para dar NOME ao que a captura mostrar.
 
     O JSON gerado vai para capturas/ e fica FORA do git (.gitignore): e
@@ -90,7 +97,18 @@ def _regiao_contigua(strs, ancora=ANCORA.decode()):
         if strs[fim + 1][0] - (o + len(s)) > FOLGA_MAX:
             break
         fim += 1
-    return strs[ini:fim + 1]
+    regiao = strs[ini:fim + 1]
+    # Com MIN_STR = 1, qualquer byte imprimivel seguido de NUL perto da tabela
+    # entra nas pontas: no App 1.10 a regiao terminava em "... ABS END MSB | 10"
+    # (revisao de 07/10/2026). Nome de parametro comeca com letra ou "_".
+    while regiao and not _NOME.match(regiao[0][1]):
+        regiao = regiao[1:]
+    while regiao and not _NOME.match(regiao[-1][1]):
+        regiao = regiao[:-1]
+    return regiao
+
+
+_NOME = re.compile(r"^[A-Za-z_]")
 
 
 _SERIE = re.compile(r"^(.*?)(\d+)$")
@@ -185,8 +203,10 @@ def main(argv):
     with open(destino, "w") as f:
         json.dump({"app_versao": versao, "binario": caminho,
                    "offset_ini": regiao[0][0], "offset_fim": regiao[-1][0],
-                   "aviso": "ordem = hipotese de offsets; nenhum endereco "
-                            "sai daqui (REFERENCIA 2.2)",
+                   "aviso": "vocabulario em ordem de primeira ocorrencia; "
+                            "nomes repetidos foram deduplicados pelo linker, "
+                            "entao NAO e layout de offsets nem mapa de "
+                            "enderecos (REFERENCIA 2.2)",
                    "blocos": saida}, f, indent=1)
     print(f"gravado em {os.path.relpath(destino, AQUI)} (fora do git)")
     return 0

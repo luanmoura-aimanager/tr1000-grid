@@ -28,10 +28,23 @@ jobs:
         with:
           python-version: "3.9"
 
-      # Os testes da fase 0 nao importam mido nem rtmidi (so roland.py,
-      # tr1000.py, tr1000_sysex.py e catalogo_app.py, que sao stdlib puro).
-      # Quando o motor da fase 1 entrar nos testes, voltam as dependencias de
-      # MIDI daqui do tr8s-grid (libasound2-dev, libjack-jackd2-dev, mido,
-      # python-rtmidi).
+      # O TestePortaoDaFase0 importa o lp_tr1000, que importa mido E rtmidi no
+      # topo. Sem os dois, o teste do portao se PULA (skipTest) - e um portao
+      # pulado no CI e um portao que nao existe. O python-rtmidi compila C++
+      # quando nao ha wheel; estas duas bibliotecas fazem a compilacao passar
+      - name: dependencias de MIDI do sistema
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev libjack-jackd2-dev
+
+      - name: mido e python-rtmidi
+        run: python -m pip install --upgrade pip mido python-rtmidi
+
+      # falha se algum teste foi pulado: no CI o portao TEM que rodar
       - name: testes de mesa
-        run: python3 testes.py
+        shell: bash          # bash explicito = -eo pipefail: o tee nao engole a falha
+        run: |
+          python3 testes.py 2>&1 | tee saida.txt
+          if grep -q "skipped" saida.txt; then
+            echo "teste pulado no CI - o portao da fase 0 nao rodou"; exit 1
+          fi

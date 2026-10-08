@@ -87,21 +87,34 @@ def montar_rq1(cabecalho, addr, tamanho):
     return [0xF0] + list(cabecalho) + [RQ1] + body + [checksum(body), 0xF7]
 
 
-def decodificar(msg, cabecalho=None):
-    """Uma mensagem SysEx Roland -> dict, ou None se nao for uma.
-
-    `msg` pode vir com ou sem F0/F7. Com `cabecalho` conhecido, so aceita esse.
-    Sem ele, tenta model IDs de 1 a 4 bytes e fica com o tamanho em que o
-    comando e RQ1/DT1 E o checksum fecha. Ambiguidade (dois tamanhos fechando)
-    volta como None em vez de chute: preferimos nao decodificar a decodificar
-    errado sem aviso - a regra 7 do Metodo (REFERENCIA 3.2) vale para codigo.
-
-    Retorna dict(cabecalho, dev, modelo, cmd, addr, data, chk_ok)."""
+def sem_f0f7(msg):
+    """Os bytes de uma SysEx sem o F0 do comeco e o F7 do fim, se houver."""
     b = list(msg)
     if b and b[0] == 0xF0:
         b = b[1:]
     if b and b[-1] == 0xF7:
         b = b[:-1]
+    return b
+
+
+def decodificar(msg, cabecalho=None):
+    """Uma mensagem SysEx Roland -> dict, ou None se nao for uma.
+
+    `msg` pode vir com ou sem F0/F7. Com `cabecalho` conhecido, so aceita esse.
+    Sem ele, tenta model IDs de 1 a 4 bytes e fica com o tamanho em que o
+    comando e RQ1/DT1 E o checksum fecha.
+
+    Mensagem estragada NAO some: se nenhum tamanho fecha o checksum mas so um
+    tem a estrutura de RQ1/DT1, ela volta com chk_ok=False - quem le a captura
+    precisa VER o byte corrompido, nao achar que a transferencia foi limpa
+    (revisao de 07/10/2026). Se mais de um tamanho serve (dois fechando, ou
+    nenhum fechando e dois com estrutura), volta o de model ID mais longo com
+    ambiguo=True: e o palpite da familia moderna, marcado como palpite (regra 7
+    do Metodo). Numa captura inteira, o certo e achar o cabecalho dominante
+    (cabecalho_dominante) e decodificar tudo de novo com ele.
+
+    Retorna dict(cabecalho, dev, modelo, cmd, addr, data, chk_ok, ambiguo)."""
+    b = sem_f0f7(msg)
     if len(b) < 2 + 1 + 1 + 4 + 1 or b[0] != ROLAND:
         return None
 
@@ -116,19 +129,35 @@ def decodificar(msg, cabecalho=None):
         data = b[i_cmd + 5:-1]
         chk = b[-1]
         return dict(cabecalho=b[:i_cmd], dev=b[1], modelo=tuple(b[2:i_cmd]),
-                    cmd=cmd, addr=addr, data=data,
+                    cmd=cmd, addr=addr, data=data, ambiguo=False,
                     chk_ok=chk == checksum(list(addr) + data))
 
     if cabecalho is not None:
         n = len(cabecalho) - 2
-        if b[:len(cabecalho)] != list(cabecalho):
+        if n < 1 or b[:len(cabecalho)] != list(cabecalho):
             return None
         return tentar(n)
 
-    bons = [r for r in (tentar(n) for n in (4, 3, 2, 1)) if r and r["chk_ok"]]
-    if len(bons) == 1:
-        return bons[0]
-    return None
+    estruturais = [r for r in (tentar(n) for n in (4, 3, 2, 1)) if r]
+    bons = [r for r in estruturais if r["chk_ok"]]
+    candidatos = bons or estruturais
+    if not candidatos:
+        return None
+    r = candidatos[0]                      # o de model ID mais longo
+    r["ambiguo"] = len(candidatos) > 1
+    return r
+
+
+def cabecalho_dominante(mensagens):
+    """O cabecalho [41, dev, model...] mais comum entre as mensagens que
+    decodificam SEM ambiguidade e com checksum certo, ou None."""
+    conta = {}
+    for m in mensagens:
+        r = decodificar(m)
+        if r and r["chk_ok"] and not r["ambiguo"]:
+            k = tuple(r["cabecalho"])
+            conta[k] = conta.get(k, 0) + 1
+    return list(max(conta, key=conta.get)) if conta else None
 
 
 def decodificar_identidade(msg):
@@ -137,11 +166,7 @@ def decodificar_identidade(msg):
     F0 7E <dev> 06 02 <fab> <familia 2B> <membro 2B> <versao 4B> F7
     Roland: fab = 41. Os bytes de familia/membro sao o que a Roland chama de
     "device family code" e "device family number code"."""
-    b = list(msg)
-    if b and b[0] == 0xF0:
-        b = b[1:]
-    if b and b[-1] == 0xF7:
-        b = b[:-1]
+    b = sem_f0f7(msg)
     if len(b) < 4 or b[0] != 0x7E or b[2] != 0x06 or b[3] != 0x02:
         return None
     resto = b[4:]

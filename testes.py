@@ -12,7 +12,8 @@ Na fase 0 o que se prova de mesa e pouco e e de proposito:
     contra uma mensagem REAL da TR-8S, que e o unico parente medido
   - o parser/resumo das capturas, que vai ler o boot do App na sessao C1
   - o extrator do catalogo, contra um binario de mentira
-  - o portao da fase 0: o lp_tr1000.py nao monta DT1 nem RQ1
+  - o portao da fase 0: cada comando do lp_tr1000.py roda contra portas
+    falsas, e o unico SysEx que pode sair e o Identity Request
 """
 import os, py_compile, sys, tempfile, unittest
 
@@ -58,14 +59,34 @@ class TesteRoland(unittest.TestCase):
         self.assertIsNone(roland.decodificar(TR8S_REAL, cabecalho=outro))
         self.assertIsNotNone(roland.decodificar(TR8S_REAL, cabecalho=TR8S_CAB))
 
-    def test_checksum_ruim_nao_vira_chute(self):
-        # sem cabecalho conhecido, so aceita o tamanho de model ID em que o
-        # checksum fecha; estragado, nao decodifica - melhor que decodificar
-        # errado sem aviso
+    def test_checksum_ruim_aparece_como_ruim(self):
+        # mensagem estragada NAO some: volta marcada, para quem le a captura
+        # ver o byte corrompido (revisao de 07/10/2026)
         ruim = list(TR8S_REAL); ruim[-2] = 0x00
-        self.assertIsNone(roland.decodificar(ruim))
-        d = roland.decodificar(ruim, cabecalho=TR8S_CAB)
+        d = roland.decodificar(ruim)
+        self.assertIsNotNone(d)
         self.assertFalse(d["chk_ok"])
+        self.assertEqual(d["cabecalho"], TR8S_CAB)
+        self.assertFalse(roland.decodificar(ruim, cabecalho=TR8S_CAB)["chk_ok"])
+
+    def test_dois_tamanhos_fechando_e_ambiguo(self):
+        # model de 1 byte (0x6F) com endereco comecando em 0x11: lido como
+        # model de 3 bytes, o "cmd" vira o 0x11 do endereco - e o checksum
+        # tambem pode fechar. Tem que voltar marcado, nao sumir
+        cab1 = [0x41, 0x10, 0x6F]
+        m = roland.montar_dt1(cab1, (0x11, 0x00, 0x00, 0x00), [0x00, 0x00])
+        d = roland.decodificar(m)
+        self.assertIsNotNone(d)
+        com_cab = roland.decodificar(m, cabecalho=cab1)
+        self.assertTrue(com_cab["chk_ok"])
+        self.assertFalse(com_cab["ambiguo"])
+
+    def test_cabecalho_dominante(self):
+        outra = roland.montar_dt1(TR8S_CAB, (0x10, 0, 0, 0), [5])
+        ruim = list(TR8S_REAL); ruim[-2] = 0
+        self.assertEqual(roland.cabecalho_dominante([TR8S_REAL, outra, ruim]),
+                         TR8S_CAB)
+        self.assertIsNone(roland.cabecalho_dominante([]))
 
     def test_model_id_de_outro_tamanho(self):
         # model de 3 bytes, como o de varias maquinas Roland antigas
@@ -121,6 +142,25 @@ class TesteCapturas(unittest.TestCase):
         self.assertEqual(m["dir"], "TX")
         self.assertEqual(m["addr"], (1, 0, 0, 1))
 
+    def test_porta_comum_colada_no_hexa(self):
+        # "TR-1000" termina em digitos hexa: sem o lookbehind, o casamento
+        # comecava no "00" de "1000" e a linha sumia (revisao de 07/10/2026)
+        linha = "22:01:02.123\tFrom TR-1000\t" + roland.hexs(TR8S_REAL)
+        m = tr1000_sysex.parse_line(linha)
+        self.assertIsNotNone(m)
+        self.assertEqual(m["addr"], (1, 0, 0, 1))
+
+    def test_captura_de_texto_marca_o_checksum_ruim(self):
+        ruim = list(TR8S_REAL); ruim[-2] = 0
+        with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False) as f:
+            for b in (TR8S_REAL, TR8S_REAL, ruim):
+                f.write("  10:00:00   From TR-1000 CTRL   " + roland.hexs(b) + "\n")
+        try:
+            msgs = tr1000_sysex.load(f.name)
+        finally:
+            os.unlink(f.name)
+        self.assertEqual([m["chk_ok"] for m in msgs], [True, True, False])
+
     def test_o_formato_que_o_sniff_grava_e_lido(self):
         # o lp_tr1000 sniff --arquivo escreve "From TR-1000 CTRL" + hex
         linha = "  22:01:02   From TR-1000 CTRL   " + roland.hexs(TR8S_REAL)
@@ -159,6 +199,30 @@ class TesteCapturas(unittest.TestCase):
         self.assertEqual(tr1000_sysex.resumir(msgs)["keepalive"], [])
 
 
+class TesteFx(unittest.TestCase):
+    def _rodar(self, msgs):
+        import io, contextlib
+        orig = tr1000_sysex.load
+        tr1000_sysex.load = lambda *a, **k: msgs
+        try:
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                tr1000_sysex.cmd_fx("x.mmon")
+            return buf.getvalue()
+        finally:
+            tr1000_sysex.load = orig
+
+    def test_escrita_curta_mostra_todos_os_bytes(self):
+        saida = self._rodar([_m("TX", roland.DT1, (0x10, 0, 0, 0x20),
+                                [0x01, 0x7F], 0)])
+        self.assertIn("01, 7F", saida)
+        self.assertIn("(2 bytes)", saida)
+
+    def test_dt1_sem_dados_nao_quebra(self):
+        saida = self._rodar([_m("TX", roland.DT1, (0x10, 0, 0, 0x20), [], 0)])
+        self.assertIn("nenhuma MUDANCA", saida)
+
+
 class TesteCatalogo(unittest.TestCase):
     def test_serie_comprime(self):
         self.assertEqual(catalogo_app.comprimir(["note0", "note1", "note2", "X"]),
@@ -188,6 +252,13 @@ class TesteCatalogo(unittest.TestCase):
         nomes = [s for _, s in regiao]
         self.assertEqual(nomes, ["Bright", "Device ID", "KIT_NUM", "PTN_NUM"])
 
+    def test_lixo_nas_pontas_sai(self):
+        # no App 1.10 a regiao terminava em "... ABS END MSB | 10"
+        dados = (b"\xff" * 64 + b"\x009\x00Bright\x00KIT_NUM\x00ABS END MSB"
+                 b"\x0010\x00" + b"\xff" * 64)
+        nomes = [s for _, s in catalogo_app.extrair(dados)[0]]
+        self.assertEqual(nomes, ["Bright", "KIT_NUM", "ABS END MSB"])
+
     def test_sem_ancora_nao_inventa(self):
         regiao, _ = catalogo_app.extrair(b"\x00nada\x00aqui\x00")
         self.assertEqual(regiao, [])
@@ -214,16 +285,117 @@ class TesteModeloDoManual(unittest.TestCase):
         self.assertEqual(len(tr1000.LINHAS), 12)
 
 
+class _EntradaFalsa:
+    """Porta de entrada de mentira: nada chega. Depois de muitas leituras
+    levanta KeyboardInterrupt, que e como o Luan sai do sniff."""
+    abertas = []
+
+    def __init__(self, idx, nome=None, **k):
+        self.idx, self.name, self.fechada, self.leituras = idx, nome, False, 0
+        _EntradaFalsa.abertas.append(self)
+
+    def iter_pending(self):
+        self.leituras += 1
+        if self.leituras > 300:
+            raise KeyboardInterrupt
+        return []
+
+    def close(self):
+        self.fechada = True
+
+    def __enter__(self): return self
+    def __exit__(self, *e): self.close()
+
+
+class _SaidaFalsa:
+    enviados = []
+
+    def __init__(self, idx, nome=None):
+        self.idx, self.name = idx, nome
+
+    def send(self, msg):
+        _SaidaFalsa.enviados.append(list(msg.bytes()))
+
+    def send_bytes(self, b):
+        _SaidaFalsa.enviados.append(list(b))
+
+    def close(self): pass
+    def __enter__(self): return self
+    def __exit__(self, *e): self.close()
+
+
 class TestePortaoDaFase0(unittest.TestCase):
     """Nada escreve no mapa de enderecos antes de a fase 0 terminar
-    (REFERENCIA 3, criterio de saida). Quando a sessao C3 provar a primeira
-    escrita, este teste sai junto com o PR que a usar - nao antes."""
+    (REFERENCIA 3.1). Quando a sessao C3 provar a primeira escrita, este teste
+    muda junto com o PR que a usar - nao antes.
 
-    def test_cli_nao_monta_dt1_nem_rq1(self):
-        with open(os.path.join(AQUI, "lp_tr1000.py")) as f:
-            fonte = f.read()
-        for proibido in ("montar_dt1", "montar_rq1"):
-            self.assertNotIn(proibido, fonte)
+    Comportamental, nao textual (revisao de 07/10/2026): procurar a palavra
+    "montar_rq1" no fonte deixava passar um RQ1 montado na mao. Aqui as portas
+    sao falsas, cada comando da CLI roda, e o que SAIU e conferido byte a byte:
+    o unico SysEx permitido e o Identity Request universal."""
+
+    PORTAS_IN = [(4, "TR-1000"), (5, "TR-1000 CTRL"), (6, "TR-1000 MIDI IN")]
+    PORTAS_OUT = [(4, "TR-1000"), (5, "TR-1000 CTRL"), (6, "TR-1000 MIDI OUT 1")]
+
+    def setUp(self):
+        try:
+            import lp_tr1000
+        except ImportError as e:            # mido/rtmidi ausentes
+            self.skipTest(f"lp_tr1000 nao importa aqui: {e}")
+        self.lp = lp_tr1000
+        self._orig = {k: getattr(lp_tr1000, k) for k in
+                      ("EntradaMIDI", "SaidaMIDI", "listar_portas",
+                       "porta_exata", "AUTOTESTE_S")}
+        _EntradaFalsa.abertas, _SaidaFalsa.enviados = [], []
+        listar = lambda entradas=True: list(
+            self.PORTAS_IN if entradas else self.PORTAS_OUT)
+        lp_tr1000.EntradaMIDI = _EntradaFalsa
+        lp_tr1000.SaidaMIDI = _SaidaFalsa
+        lp_tr1000.listar_portas = listar
+        lp_tr1000.porta_exata = lambda nome, entradas=True, portas=None: next(
+            ((i, n) for i, n in listar(entradas) if n == nome), None)
+        lp_tr1000.AUTOTESTE_S = 0.01
+
+    def tearDown(self):
+        for k, v in self._orig.items():
+            setattr(self.lp, k, v)
+
+    def _rodar(self, comando, argv):
+        import io, contextlib
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.lp.COMANDOS[comando](argv)
+
+    def _so_identidade(self):
+        self.assertTrue(_SaidaFalsa.enviados)          # o autoteste rodou
+        for b in _SaidaFalsa.enviados:
+            self.assertEqual(b, roland.IDENTITY_REQUEST)
+
+    def _tudo_fechado(self):
+        self.assertTrue(_EntradaFalsa.abertas)
+        for p in _EntradaFalsa.abertas:
+            self.assertTrue(p.fechada, f"porta {p.name} ficou aberta")
+
+    def test_identidade(self):
+        self._rodar("identidade", [])
+        self._so_identidade(); self._tudo_fechado()
+
+    def test_escutar(self):
+        self._rodar("escutar", ["--segundos", "0.05"])
+        self._so_identidade(); self._tudo_fechado()
+
+    def test_sniff_sai_no_ctrl_c_fechando_tudo(self):
+        self._rodar("sniff", [])
+        self._so_identidade(); self._tudo_fechado()
+
+    def test_ports_nao_manda_nada(self):
+        import mido
+        orig = (mido.get_input_names, mido.get_output_names)
+        mido.get_input_names = mido.get_output_names = lambda: []
+        try:
+            self._rodar("ports", [])
+        finally:
+            mido.get_input_names, mido.get_output_names = orig
+        self.assertEqual(_SaidaFalsa.enviados, [])
 
 
 class TesteSintaxe(unittest.TestCase):

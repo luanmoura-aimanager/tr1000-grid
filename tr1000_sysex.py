@@ -36,24 +36,57 @@ from roland import RQ1, DT1, CMDS, hexs
 KEEPALIVE = set()
 
 
-def _msg(direcao, bytes_sem_f0f7, t=None, endpoint=""):
-    r = roland.decodificar(bytes_sem_f0f7)
-    if r is None:
-        return None
-    r.update(dir=direcao, t=t, endpoint=endpoint)
-    return r
+# Uma SysEx crua de uma linha de texto: comeca em F0 que NAO e o fim de outro
+# numero hexa. Sem o lookbehind, em "From TR-1000\tF0 41 ..." o casamento mais
+# a esquerda comecava no "00" de "1000" e a linha inteira era descartada
+# (revisao de 07/10/2026). So "TR-1000 CTRL" escapava, porque "CT" quebra a
+# sequencia.
+_SYSEX_TEXTO = re.compile(r'(?<![0-9A-Fa-f])(F0(?:\s+[0-9A-Fa-f]{2}){9,})')
 
 
-def parse_line(line):
-    """Extrai uma mensagem SysEx Roland de uma linha do log do MIDI Monitor."""
-    m = re.search(r'((?:[0-9A-Fa-f]{2}\s+){10,}[0-9A-Fa-f]{2})', line)
+def _bruto_da_linha(line):
+    """(direcao, bytes sem F0/F7) de uma linha de texto, ou None."""
+    m = _SYSEX_TEXTO.search(line)
     if not m:
         return None
     b = [int(x, 16) for x in m.group(1).split()]
-    if b[0] != 0xF0 or b[-1] != 0xF7:
+    if b[-1] != 0xF7:
         return None
-    direcao = "TX" if "To " in line else "RX"
-    return _msg(direcao, b[1:-1])
+    return ("TX" if "To " in line else "RX"), b[1:-1]
+
+
+def decodificar_lista(brutos, keep_alive=False, outros=None):
+    """[(direcao, bytes, t, endpoint)] -> [dict], em DUAS passadas.
+
+    A primeira acha o cabecalho dominante da captura (as mensagens que
+    decodificam sem ambiguidade e com checksum certo). A segunda decodifica
+    TUDO com ele - inclusive as de checksum ruim, que assim aparecem como
+    ruins em vez de sumirem (roland.decodificar). O que nao casa com o
+    dominante e decodificado sozinho e conta como outro cabecalho."""
+    cab = roland.cabecalho_dominante(b for _, b, _, _ in brutos)
+    msgs = []
+    for direcao, b, t, ep in brutos:
+        r = (roland.decodificar(b, cabecalho=cab) if cab else None) \
+            or roland.decodificar(b)
+        if r is None:
+            if outros is not None:
+                outros["sysex-nao-roland"] = outros.get("sysex-nao-roland", 0) + 1
+            continue
+        if not keep_alive and r["addr"] in KEEPALIVE:
+            continue
+        r.update(dir=direcao, t=t, endpoint=ep)
+        msgs.append(r)
+    return msgs
+
+
+def parse_line(line):
+    """Uma mensagem SysEx Roland de uma linha do log do MIDI Monitor, ou None.
+    Linha solta nao tem captura em volta: decodifica sem cabecalho dominante."""
+    bruto = _bruto_da_linha(line)
+    if bruto is None:
+        return None
+    r = decodificar_lista([(bruto[0], bruto[1], None, "")], keep_alive=True)
+    return r[0] if r else None
 
 
 def load_mmon(path, keep_alive=False, outros=None):
@@ -73,11 +106,10 @@ def load_mmon(path, keep_alive=False, outros=None):
     def deref(u):
         return objs[u.data] if isinstance(u, plistlib.UID) else u
 
-    msgs = []
+    brutos = []
     for o in objs:
         if not (isinstance(o, dict) and "statusByte" in o):
             continue
-        t = o.get("clockTimeStamp")
         if o["statusByte"] != 0xF0:
             if outros is not None:
                 outros[o["statusByte"]] = outros.get(o["statusByte"], 0) + 1
@@ -85,43 +117,36 @@ def load_mmon(path, keep_alive=False, outros=None):
         bruto = deref(o["data"])
         b = list(bruto["NS.data"] if isinstance(bruto, dict) else bruto)
         ep = str(deref(o.get("originatingEndpoint", "")))
-        r = _msg("TX" if ep.startswith("To ") else "RX", b, t, ep)
-        if r is None:
-            if outros is not None:
-                outros["sysex-nao-roland"] = outros.get("sysex-nao-roland", 0) + 1
-            continue
-        if not keep_alive and r["addr"] in KEEPALIVE:
-            continue
-        msgs.append(r)
-    msgs.sort(key=lambda m: m["t"] or 0)
-    return msgs
+        brutos.append(("TX" if ep.startswith("To ") else "RX", b,
+                       o.get("clockTimeStamp"), ep))
+    brutos.sort(key=lambda x: x[2] or 0)
+    return decodificar_lista(brutos, keep_alive, outros)
 
 
 def load(path, keep_alive=False, outros=None):
     if path.lower().endswith(".mmon"):
         return load_mmon(path, keep_alive, outros)
-    msgs = []
+    brutos = []
     with open(path, encoding="utf-8", errors="ignore") as f:
         for line in f:
-            msg = parse_line(line)
-            if not msg:
-                continue
-            if not keep_alive and msg["addr"] in KEEPALIVE:
-                continue
-            msgs.append(msg)
-    return msgs
+            bruto = _bruto_da_linha(line)
+            if bruto:
+                brutos.append((bruto[0], bruto[1], None, ""))
+    return decodificar_lista(brutos, keep_alive, outros)
 
 
-def fmt_addr(a):
-    return " ".join(f"{x:02X}" for x in a)
+fmt_addr = hexs          # um formatador so: as chaves "20 00 00 00" do JSON e
+                         # dos testes dependem dele nao divergir do roland.hexs
 
 
 def cmd_parse(path):
     outros = {}
     msgs = load(path, outros=outros)
     bad = sum(1 for m in msgs if not m["chk_ok"])
+    amb = sum(1 for m in msgs if m["ambiguo"])
     cabs = sorted({tuple(m["cabecalho"]) for m in msgs})
-    print(f"{path}: {len(msgs)} mensagens Roland, {bad} com checksum invalido")
+    print(f"{path}: {len(msgs)} mensagens Roland, {bad} com checksum invalido, "
+          f"{amb} com model ID ambiguo")
     print(f"cabecalhos vistos: {', '.join(hexs(c) for c in cabs) or '-'}")
     if outros:
         print("outras mensagens (nao listadas): " + ", ".join(
@@ -134,7 +159,8 @@ def cmd_parse(path):
             preview = f"pede {roland.de_7bits(m['data'][:4])} B"
         else:
             preview = hexs(m["data"][:12]) + ("..." if n > 12 else "")
-        flag = "" if m["chk_ok"] else "  <-- CHECKSUM RUIM"
+        flag = ("" if m["chk_ok"] else "  <-- CHECKSUM RUIM") + \
+               ("  <-- model ID ambiguo" if m["ambiguo"] else "")
         print(f"{m['dir']} {CMDS.get(m['cmd'], hex(m['cmd'])):4} "
               f"addr {fmt_addr(m['addr'])}  {n:5}B  {preview}{flag}")
 
@@ -201,9 +227,13 @@ def cmd_fx(path):
                     if a != b]
             if difs and len(difs) <= 4:
                 eventos.append((chave, difs))
-        elif len(m["data"]) <= 4:
-            # escrita curta: o proprio endereco ja aponta o offset
-            eventos.append((chave, [(0, None, m["data"][0])]))
+        elif 0 < len(m["data"]) <= 4:
+            # escrita curta: o proprio endereco ja aponta o offset. TODOS os
+            # bytes, nao so o primeiro - um parametro de 2 bytes escrito num
+            # DT1 curto mostrava so o MSB (revisao de 07/10/2026). DT1 sem
+            # dados nao vira evento (antes era IndexError)
+            eventos.append((chave, [(i, None, v)
+                                    for i, v in enumerate(m["data"])]))
         anterior[chave] = list(m["data"])
 
     if not eventos:
