@@ -218,7 +218,11 @@ máquina → App   03 <bloco> <x> <y> <índice> <índice>           confirmaçã
 - Valores: começou em **509**, foi até **0** e até **1000**, terminou em 1000. Faixa
   0..1000, centro ~500 **(deduzido)**.
 - Antes de escrever, o App releu só esse parâmetro: `82 9C 00 7E 00 00 00 C2 03 01 00` (n = 1).
-- **Não confirmado de ouvido**: o Luan não relatou se o som mudou.
+- **A máquina guardou o valor (medido, round-trip):** o Luan abriu o App original de novo
+  depois da captura, e o TUNE do BD apareceu no **máximo** — o App lê os valores da máquina
+  ao abrir, então o 1000 estava nela. Isso prova que a máquina **aceitou**, não que o som
+  mudou (Método, regra 9): o Luan não sabia como soava antes. O kit é o 001 "Dub Techno
+  Kit", BD "DubTechno Kit BD". **Deixado em 1000; o original era 509.**
 - `tr1000_serial.py escritas` lista as escritas de uma captura.
 
 O que isso destrava: o mesmo `01` deve escrever **qualquer** índice, inclusive os steps.
