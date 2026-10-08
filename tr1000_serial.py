@@ -130,6 +130,10 @@ def quadros_sysex(regs):
 # sobrando (86 KB do App, 1,43 MB da maquina).
 # ─────────────────────────────────────────────────────────────
 PAC_CURTO, PAC_DADOS = 0x14, 0x15
+# Maior carga vista: 1195 B (S0). Um "tamanho" muito acima disso e lixo -
+# um byte desalinhado que por acaso vale 0x15 - e nao pode travar o fluxo
+# esperando megabytes que nunca vem (revisao do PR #2).
+MAX_CARGA = 1 << 16
 # Cargas (todas: <cmd u8> <bloco u16> <x u16> <y u16> <indice u16> ...):
 LER_BLOCO = 0x82            # App:     82 ... <n u16>              (medido 08/10)
 BLOCO_LIDO = 0x02           # maquina: 02 ... <n u16> + n x u32    (medido 08/10)
@@ -155,8 +159,12 @@ def enquadrar(buf):
             if len(buf) < 16:
                 break
             n = 16 + struct.unpack_from("<I", buf, 12)[0]
+            if n - 16 > MAX_CARGA:
+                n = None                     # tamanho absurdo: nao e cabecalho
         else:
-            out.append(buf[:1])
+            n = None
+        if n is None:
+            out.append(buf[:1])              # byte solto; tenta realinhar no proximo
             buf = buf[1:]
             continue
         if len(buf) < n:
@@ -486,8 +494,10 @@ def cmd_diffblocos(a, b):
         mudou += 1
         print(f"bloco {k[0]:3d} x {k[1]} y {k[2]}:")
         for i, p, q in difs[:40]:
-            extra = f"  (step {i // 4 + 1}, slot {i % 4}{' = layer ' + 'AB'[i % 4] if i % 4 < 2 else ''})" if \
-                k[0] >= BLOCO_VAR0 and (k[0] - BLOCO_VAR0) % BLOCOS_POR_VAR == 1 and i < 64 else ""
+            eh_steps = (BLOCO_VAR0 <= k[0] < BLOCO_VAR0 + BLOCOS_POR_VAR * len(VARIACOES_SERIAL)
+                        and (k[0] - BLOCO_VAR0) % BLOCOS_POR_VAR == 1 and i < 64)
+            extra = f"  (step {i // 4 + 1}, slot {i % 4}{' = layer ' + 'AB'[i % 4] if i % 4 < 2 else ''})" \
+                if eh_steps else ""
             print(f"   [{i:3d}] {p:X} -> {q:X}{extra}")
         if len(difs) > 40:
             print(f"   ... +{len(difs) - 40}")

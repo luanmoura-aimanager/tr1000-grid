@@ -386,9 +386,10 @@ class _MaquinaFalsa:
     pedacos de 5 bytes, porque a porta de verdade entrega cortado.
     calada=True nao confirma escrita nenhuma."""
 
-    def __init__(self, calada=False):
+    def __init__(self, calada=False, confirma_ate=None):
         import struct
         self.st = struct
+        self.confirma_ate = confirma_ate          # quantos 03 ela da antes de calar
         self.valores = {(156, 126, 0, 962): 1000, (118, 0, 0, 1253): 0xA503C,
                         (118, 0, 0, 1254): 0xA503C}
         self.recebido, self.saida, self.calada, self.fechada = [], b"", calada, False
@@ -407,6 +408,10 @@ class _MaquinaFalsa:
             self.saida += bytes.fromhex("15 08 F0 00 68 D7 82 86 01 00 00 00") + \
                 st.pack("<I", len(corpo)) + corpo
         elif c[0] == tr1000_serial.ESCREVER and not self.calada:
+            if self.confirma_ate is not None:
+                if self.confirma_ate == 0:
+                    return
+                self.confirma_ate -= 1
             self.valores[(bloco, x, y, i)] = st.unpack_from("<I", c, 9)[0]
             corpo = bytes([3]) + c[1:9] + c[7:9]
             self.saida += bytes.fromhex("15 08 F0 00 78 D6 82 86 F4 A0 87 00") + \
@@ -534,12 +539,106 @@ class TesteSessaoC3(unittest.TestCase):
         self.assertEqual(m.valores[(156, 126, 0, 962)], 509)
 
 
-def _relogio_rapido():
-    """Relogio que anda 0,3 s por consulta: a espera de 1 s acaba logo."""
+class TesteRevisaoPR2(unittest.TestCase):
+    """Os achados da revisao do PR #2 (08/10/2026), cada um travado."""
+
+    def test_prova_do_boot_vazio_continua_intacta(self):
+        # o MIDI Monitor ficou aberto e salvou por cima dela tres vezes
+        import plistlib
+        with open(os.path.join(AQUI, "capturas",
+                               "2026-10-08-boot-app-serial-vazio.mmon"), "rb") as f:
+            p = plistlib.load(f)
+        self.assertNotIn("messageData", p)
+        self.assertEqual(sorted(x["name"] for x in p["streamSettings"]["spyingInputStream"]),
+                         ["TR-1000", "TR-1000 CTRL"])
+
+    def test_leitura_fora_do_que_o_app_leu_nao_sai(self):
+        m = _MaquinaFalsa()
+        with conexao_serial.ConexaoTR1000(porta=m) as c:
+            with self.assertRaises(PermissionError):
+                c.ler(999, 0, 0, 0, 5000)
+            with self.assertRaises(PermissionError):
+                c.ler(118, 0, 0, 1249, 200)        # passa do fim do bloco (131)
+        self.assertEqual(m.recebido, [])
+
+    def test_leituras_da_c3_estao_dentro_do_boot_do_app(self):
+        for e in conexao_serial.ESCRITAS_PERMITIDAS:
+            self.assertTrue(conexao_serial.leitura_permitida(*e, 1), e)
+
+    def test_so_aperto_leitura_e_escrita_saem(self):
+        with self.assertRaises(PermissionError):
+            conexao_serial.conferir_pacote(tr1000_serial.POLL)
+        with self.assertRaises(PermissionError):
+            conexao_serial.conferir_pacote(b"\x15" * 30)
+        conexao_serial.conferir_pacote(tr1000_serial.APERTO)       # nao levanta
+
+    def test_escrita_pela_metade_avisa_o_que_ja_mudou(self):
+        import io, contextlib, sessao_c3
+        m = _MaquinaFalsa(confirma_ate=1)
+        orig = conexao_serial.ConexaoTR1000
+
+        class CxFalsa(orig):
+            def __init__(s, nome_captura=None, **k):
+                super().__init__(porta=m, relogio=_relogio_rapido(0.005))
+        conexao_serial.ConexaoTR1000 = CxFalsa
+        try:
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                codigo = sessao_c3.main(["step2", "desligar", "--sim"])
+        finally:
+            conexao_serial.ConexaoTR1000 = orig
+        saida = buf.getvalue()
+        self.assertEqual(codigo, 1)
+        self.assertIn("JA ESCRITO: BD var A step 2, layer A", saida)
+        self.assertIn("estado agora: FF A503C", saida)
+
+    def test_tamanho_absurdo_nao_trava_o_fluxo(self):
+        lixo = b"\x15" + b"\x00" * 11 + b"\xff\xff\xff\x7f"   # n = 2 GB
+        prontos, resto = tr1000_serial.enquadrar(lixo + R95_REAL)
+        self.assertIn(R95_REAL, prontos)
+        self.assertEqual(resto, b"")
+
+    def test_captura_comeca_pelo_S_e_no_tempo_certo(self):
+        m = _MaquinaFalsa()
+        with conexao_serial.ConexaoTR1000(porta=m, relogio=_relogio_rapido(0.005)) as c:
+            c.aperto()
+        tempos = [r[0] for r in c.registros]
+        self.assertEqual(c.registros[0][1], "S")
+        self.assertEqual(tempos, sorted(tempos))
+
+    def test_captura_do_mesmo_dia_nao_sobrescreve(self):
+        import datetime
+        orig = espiao.AQUI
+        with tempfile.TemporaryDirectory() as tmp:
+            espiao.AQUI = tmp
+            try:
+                os.makedirs(os.path.join(tmp, "capturas"))
+                d = datetime.date(2026, 10, 8)
+                a = espiao.caminho_livre("c3-x", d)
+                open(a, "w").close()
+                b = espiao.caminho_livre("c3-x", d)
+            finally:
+                espiao.AQUI = orig
+        self.assertTrue(a.endswith("2026-10-08-c3-x.serlog"))
+        self.assertTrue(b.endswith("2026-10-08-c3-x-2.serlog"))
+
+    def test_usb_puxado_vira_erro_tratado(self):
+        class PortaQueCai(_MaquinaFalsa):
+            def ler(self, limite):
+                raise OSError(6, "Device not configured")
+        with conexao_serial.ConexaoTR1000(porta=PortaQueCai()) as c:
+            with self.assertRaises(conexao_serial.ErroConexao):
+                c.aperto()
+
+
+def _relogio_rapido(passo=0.3):
+    """Relogio que anda `passo` s por consulta: a espera de 1 s acaba logo.
+    Passo grande demais estoura o prazo antes de a maquina falsa terminar de
+    entregar uma resposta (ela entrega 5 bytes por leitura)."""
     t = [0.0]
 
     def agora():
-        t[0] += 0.3
+        t[0] += passo
         return t[0]
     return agora
 

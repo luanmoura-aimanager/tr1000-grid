@@ -9,7 +9,8 @@ sessao_c3.py - a sessao C3: a primeira escrita NOSSA na TR-1000 (o portao da fas
 
     --sim no fim da linha confirma junto (para rodar pelo "!" do Claude Code,
     que nao tem teclado): os bytes sao mostrados do mesmo jeito, e o "sim"
-    digitado e o proprio --sim na linha de comando.
+    digitado e o proprio --sim na linha de comando. E o LUAN quem digita: o
+    agente nunca roda uma escrita na maquina por conta propria (CLAUDE.md).
 
 Roteiro passo a passo: ROTEIRO-C0-C3.md, C3. O TR-1000 App (original e copia)
 tem que estar FECHADO. Cada escrita: le o valor atual, mostra os bytes que vao
@@ -70,9 +71,23 @@ def _escrever(nome, enderecos, valores, ja_confirmado=False):
         if not _confirmar(c, enderecos, valores, ja_confirmado):
             print("nada mandado.")
             return 1
-        for e, v in zip(enderecos, valores):
-            c.escrever(*e, v)
-            print(f"   ok (03) {cs.ESCRITAS_PERMITIDAS[e]}")
+        escritos = []
+        try:
+            for e, v in zip(enderecos, valores):
+                c.escrever(*e, v)
+                escritos.append(e)
+                print(f"   ok (03) {cs.ESCRITAS_PERMITIDAS[e]}")
+        except cs.ErroConexao:
+            # os dois slots do step nao sao atomicos: se o 2o falhar, o 1o JA
+            # mudou a maquina - dizer qual, e reler o que der (revisao do PR #2)
+            print("(!) a escrita parou no meio.")
+            for e in escritos:
+                print(f"    JA ESCRITO: {cs.ESCRITAS_PERMITIDAS[e]}")
+            try:
+                print(f"    estado agora: {_hex([c.ler(*e)[0] for e in enderecos])}")
+            except cs.ErroConexao:
+                print("    (nem a releitura respondeu - o estado da maquina e desconhecido)")
+            raise
         depois = [c.ler(*e)[0] for e in enderecos]
         print(f"depois: {_hex(depois)}  (esperado {_hex(valores)})")
     print(f"\ncaptura: {c.captura}")

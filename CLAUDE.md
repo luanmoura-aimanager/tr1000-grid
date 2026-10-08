@@ -40,6 +40,15 @@ primeira escrita nossa passa **só** por `sessao_c3.py` → `conexao_serial.py`,
 3 endereços `ESCRITAS_PERMITIDAS`, os bytes mostrados e `sim` digitado pelo Luan. Ampliar
 essa lista é decisão dele, não detalhe de código.
 
+- O **`--sim`** existe porque o `!` do Claude Code não tem teclado. Ele é o Luan digitando a
+  confirmação na linha de comando. **O agente nunca roda uma escrita na máquina por conta
+  própria**, com ou sem `--sim`: ele entrega o comando, e quem roda é o Luan.
+- **Toda saída da serial passa por `conexao_serial.conferir_pacote`.**
+  - Escrita só na lista.
+  - Leitura (`82`) só dentro das faixas que o **próprio App** leu no boot da C1-S0 (a
+    armadilha 1, versão serial).
+  - Fora isso, só o aperto de mão.
+
 ## As armadilhas da TR-8S, a remedir aqui
 
 1. **RQ1 em endereço inválido derrubava a porta CTRL** da TR-8S depois de ~60–75 sondas;
@@ -57,7 +66,12 @@ essa lista é decisão dele, não detalhe de código.
    08/10/2026). O "Use CTRL Port" do `settings.xml` não muda isso. Captura do App é com o
    **espião**: `espiao.py rodar <nome>` → `.serlog` → `tr1000_serial.py` /
    `tr1000_sysex.py`.
-6. **O espião roda numa CÓPIA do App** em `~/Library/Caches/tr1000-grid/`, re-assinada sem
+6. **Feche o MIDI Monitor depois de salvar uma captura.** Documento aberto continua se
+   salvando sozinho. Em 08/10/2026 ele gravou três vezes por cima da prova
+   `2026-10-08-boot-app-serial-vazio.mmon`, e o `git add -A` levou as versões erradas para
+   os commits. A original foi restaurada do histórico, e o `TesteRevisaoPR2` agora trava o
+   conteúdo dela.
+7. **O espião roda numa CÓPIA do App** em `~/Library/Caches/tr1000-grid/`, re-assinada sem
    hardened runtime. O App em `/Applications` nunca é escrito (`TesteEspiaoPreparo`), e o
    original fica **fechado** enquanto a cópia roda: dois Apps na mesma serial cruzariam as
    respostas.

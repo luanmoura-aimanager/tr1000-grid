@@ -452,6 +452,23 @@ A fase 1 (o grid escrevendo) só começa quando **todos** estes forem **medidos*
 pattern interno da TR-1000 pela serial, e a máquina obedece de ouvido. Faltam os critérios
 4–6 (três patterns, step atual tocando, WRITE + religar).
 
+**Revisão do PR #2 (08/10/2026) — o que ela mudou:**
+- **A prova do boot vazio tinha sido sobrescrita.** O MIDI Monitor ficou aberto e salvou
+  por cima três vezes, já ouvindo as portas virtuais do Logic. Restaurada do commit
+  original (idêntica byte a byte à de 00:47); o `TesteRevisaoPR2` trava o conteúdo.
+- **As capturas da C3 não se sobrescrevem mais.** Abrem com `"x"`, e uma segunda rodada no
+  mesmo dia ganha `-2`, `-3`… As versionadas foram conferidas: cada uma tem a escrita real.
+- **Toda saída passa por um portão** (`conferir_pacote`):
+  - escrita na lista;
+  - leitura só dentro do que o App leu;
+  - fora isso, só o aperto de mão.
+- **Escrita de dois slots interrompida no meio** diz o que já mudou e relê o estado.
+- **Robustez da conexão:**
+  - a entrada é limpa ao abrir;
+  - o enquadramento descarta "tamanhos" absurdos;
+  - a escrita na porta tem prazo;
+  - porta caindo vira erro tratado.
+
 A escrita da C3 passa só por `sessao_c3.py` → `conexao_serial.py`, com **lista de 3
 endereços** no código (`ESCRITAS_PERMITIDAS`: os dois slots do step 2 do BD na var A e o
 TUNE do sample do BD), os bytes mostrados e `sim` digitado antes de cada uma. Os pacotes

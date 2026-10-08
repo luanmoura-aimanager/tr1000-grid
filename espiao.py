@@ -102,7 +102,7 @@ def cmd_preparar():
     print("\nPronto. Feche o App original e rode: python3 espiao.py rodar <nome>")
 
 
-def _app_aberto():
+def app_aberto():
     r = subprocess.run(["pgrep", "-x", NOME_PROCESSO], capture_output=True, text=True)
     return r.stdout.split()
 
@@ -112,12 +112,24 @@ def caminho_captura(nome, hoje=None):
     return os.path.join(AQUI, "capturas", f"{hoje:%Y-%m-%d}-{nome}.serlog")
 
 
+def caminho_livre(nome, hoje=None):
+    """Como caminho_captura, mas nunca um que ja existe: -2, -3... no fim.
+    Captura e prova; a segunda rodada do dia nao pode apagar a primeira
+    (revisao do PR #2: a C3 gravava por cima a cada tentativa)."""
+    base = caminho_captura(nome, hoje)
+    caminho, n = base, 2
+    while os.path.exists(caminho):
+        caminho = base[:-len(".serlog")] + f"-{n}.serlog"
+        n += 1
+    return caminho
+
+
 def cmd_rodar(nome):
     if not os.path.isdir(COPIA) or not os.path.exists(DYLIB):
         raise SystemExit("(!) rode `python3 espiao.py preparar` antes")
     if versao(COPIA) != versao(ORIGINAL):
         raise SystemExit("(!) o App foi atualizado desde o preparar: limpar + preparar")
-    abertos = _app_aberto()
+    abertos = app_aberto()
     if abertos:
         raise SystemExit(f"(!) o TR-1000 App esta aberto (pid {', '.join(abertos)}). "
                          "Feche com Cmd+Q: dois Apps na mesma serial cruzam as "
