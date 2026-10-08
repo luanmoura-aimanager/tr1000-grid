@@ -267,9 +267,14 @@ python3 sessao_c4.py pattern
 
 ### C4.2 — mais dois patterns
 
-No painel, troque para **outro pattern** (qualquer um com notas), parado. Rode `pattern` de
-novo. Me diga o **nome e o BPM** que o visor mostra e os steps de **um** track na var A.
-Repita com um **terceiro** pattern.
+O pattern entra no endereço (`x` = número − 1, REFERENCIA 2.1c), e a leitura só sai para um
+`x` que o App já leu. Para cada pattern novo:
+1. Selecione-o no painel, parado.
+2. `python3 espiao.py rodar boot-1-NN` → "Connected" + 15 s → Cmd+Q.
+3. Me avise: eu acrescento a captura às de referência, e então `python3 sessao_c4.py pattern`.
+4. Me diga o **nome e o BPM** do visor e os steps de **um** track na var A.
+
+**Feito em 08/10:** 1-02 "Groovy Beach" (`boot-1-02`). Falta um terceiro.
 
 ### C4.3 — o step atual
 

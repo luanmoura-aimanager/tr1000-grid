@@ -37,23 +37,40 @@ def _ler_bloco(c, bloco, x=0, y=0):
     return c.ler(bloco, x, y, indice, n)
 
 
-def ler_pattern(c):
-    """{(bloco, x, y): [u32...]} do cabecalho e dos 12 bancos x 10 tracks."""
-    vals = {(ts.BLOCO_CAB_PATTERN, 0, 0): _ler_bloco(c, ts.BLOCO_CAB_PATTERN)}
+def pattern_atual(c):
+    """(numero, x, tempo) lidos do bloco 3: o pattern SELECIONADO no painel."""
+    b3 = _ler_bloco(c, 3)
+    numero = b3[ts.OFF_PATTERN_ATUAL]
+    return numero, ts.x_do_pattern(numero), b3[ts.OFF_TEMPO_ATUAL] / 100
+
+
+def ler_pattern(c, x):
+    """{(bloco, x, y): [u32...]} do cabecalho e dos 12 bancos x 10 tracks do
+    pattern x. Recusa (PermissionError, pelo portao) se o App nunca leu esse
+    x numa captura de referencia."""
+    vals = {(ts.BLOCO_CAB_PATTERN, x, 0): _ler_bloco(c, ts.BLOCO_CAB_PATTERN, x)}
     for v in range(len(ts.VARIACOES_SERIAL)):
         bloco = ts.BLOCO_VAR0 + 1 + ts.BLOCOS_POR_VAR * v
         for tr in range(len(ts.TRACKS_SERIAL)):
-            vals[(bloco, 0, tr)] = _ler_bloco(c, bloco, 0, tr)
+            vals[(bloco, x, tr)] = _ler_bloco(c, bloco, x, tr)
     return vals
 
 
 def cmd_pattern():
     with cs.ConexaoTR1000(nome_captura="c4-pattern") as c:
         print(f"aperto de mao: versao {c.aperto()!r}")
+        numero, x, tempo = pattern_atual(c)
+        print(f"selecionado no painel (bloco 3): pattern {numero} -> x {x}, "
+              f"tempo {tempo}")
+        if (ts.BLOCO_CAB_PATTERN, x, 0) not in cs.leituras_do_app():
+            print(f"(!) o App ainda nao leu o pattern {numero} (x {x}) em nenhuma captura "
+                  f"de referencia - capture o boot dele com o espiao antes "
+                  f"(REFERENCIA 2.1c). Nada lido.")
+            return
         t = time.time()
-        vals = ler_pattern(c)
-        print(f"({len(vals)} leituras em {time.time() - t:.2f} s)\n")
-    for l in ts.linhas_do_pattern(vals):
+        vals = ler_pattern(c, x)
+        print(f"({len(vals) + 1} leituras em {time.time() - t:.2f} s)\n")
+    for l in ts.linhas_do_pattern(vals, x):
         print(l)
     print(f"\ncaptura: {c.captura}")
 

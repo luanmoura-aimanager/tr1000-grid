@@ -455,11 +455,30 @@ def grade_de_steps(valores):
     return "".join(out)
 
 
-def linhas_do_pattern(vals):
+# Bloco 3 (sistema/performance), medido em 08/10/2026 trocando 1-01 -> 1-02:
+OFF_PATTERN_ATUAL = 21      # numero do pattern, 1 = 1-01 (medido: 1 -> 2)
+OFF_TEMPO_ATUAL = 36        # tempo x 100 (medido: 12800 -> 12200)
+
+
+def x_do_pattern(numero):
+    """O x dos blocos de pattern: o numero do pattern menos 1 (medido 08/10:
+    1-01 -> x 0, 1-02 -> x 1, no boot do App)."""
+    return numero - 1
+
+
+def x_presente(vals):
+    """O x em que ha cabecalho de pattern numa captura (o App le um so)."""
+    xs = sorted({x for (b, x, y) in vals if b == BLOCO_CAB_PATTERN})
+    return xs[0] if xs else 0
+
+
+def linhas_do_pattern(vals, x=None):
     """{(bloco, x, y): [u32...]} -> as linhas de texto da grade. Serve as
-    capturas (cmd_pattern) e a leitura ao vivo (sessao_c4.py)."""
+    capturas (cmd_pattern) e a leitura ao vivo (sessao_c4.py). x = o do
+    pattern (x_do_pattern); sem ele, o que a captura tiver."""
     out = []
-    cab = vals.get((BLOCO_CAB_PATTERN, 0, 0))
+    x = x_presente(vals) if x is None else x
+    cab = vals.get((BLOCO_CAB_PATTERN, x, 0))
     if cab:
         nome, bpm = nome_e_tempo(cab)
         out.append(f"pattern {nome!r}, tempo {bpm}")
@@ -467,7 +486,7 @@ def linhas_do_pattern(vals):
         bloco = BLOCO_VAR0 + 1 + BLOCOS_POR_VAR * v
         linhas = []
         for tr, nome_tr in enumerate(TRACKS_SERIAL):
-            vv = vals.get((bloco, 0, tr))
+            vv = vals.get((bloco, x, tr))
             if vv and len(vv) >= 64:
                 g = grade_de_steps(vv)
                 if g.strip("."):

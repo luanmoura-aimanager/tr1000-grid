@@ -38,9 +38,14 @@ ESCRITAS_PERMITIDAS = {
     (156, 126, 0, 962): "TUNE do sample do BD (slot 126)",
 }
 
-# As leituras que o App fez no boot da C1-S0: 139 blocos, 937 (bloco, x, y).
-# Uma leitura nossa so sai se cair DENTRO de uma delas.
-CAPTURA_DE_REFERENCIA = os.path.join(AQUI, "capturas", "2026-10-08-s0-autoteste.serlog")
+# As leituras que o App fez no boot, com o pattern 1-01 (C1-S0) e com o 1-02
+# selecionado (boot-1-02: os blocos de pattern vieram com x = 1). Uma leitura
+# nossa so sai se cair DENTRO de uma delas. Para liberar o pattern N, a regra
+# e capturar o boot do App com ele selecionado - nao chutar o x.
+CAPTURAS_DE_REFERENCIA = [os.path.join(AQUI, "capturas", n) for n in (
+    "2026-10-08-s0-autoteste.serlog",
+    "2026-10-08-boot-1-02.serlog",
+)]
 _leituras_do_app = None
 
 
@@ -52,11 +57,13 @@ def leituras_do_app():
     """{(bloco, x, y): (indice, n)} do boot do App - carregado uma vez."""
     global _leituras_do_app
     if _leituras_do_app is None:
-        if not os.path.exists(CAPTURA_DE_REFERENCIA):
-            raise ErroConexao(f"sem a captura de referencia {CAPTURA_DE_REFERENCIA}: "
-                              "nenhuma leitura e permitida sem ela")
-        _leituras_do_app = ts.leituras_de_bloco(
-            ts.pacotes(ts.ler_serlog(CAPTURA_DE_REFERENCIA)))
+        todas = {}
+        for cap in CAPTURAS_DE_REFERENCIA:
+            if not os.path.exists(cap):
+                raise ErroConexao(f"sem a captura de referencia {cap}: "
+                                  "nenhuma leitura e permitida sem ela")
+            todas.update(ts.leituras_de_bloco(ts.pacotes(ts.ler_serlog(cap))))
+        _leituras_do_app = todas
     return _leituras_do_app
 
 
