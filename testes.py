@@ -161,6 +161,22 @@ class TesteCapturas(unittest.TestCase):
             os.unlink(f.name)
         self.assertEqual([m["chk_ok"] for m in msgs], [True, True, False])
 
+    def test_mmon_vazio_nao_quebra_e_diz_o_que_monitorava(self):
+        # o MIDI Monitor salva sem "messageData" quando nada chegou - foi o
+        # boot do App com ctrlPort = 0 (medido 08/10/2026)
+        import plistlib
+        vazio = {"version": 1, "streamSettings": {
+            "portInputStream": [{"name": "TR-1000 CTRL", "uniqueID": 1}],
+            "spyingInputStream": [{"name": "TR-1000 CTRL", "uniqueID": 2}]}}
+        with tempfile.NamedTemporaryFile(suffix=".mmon", delete=False) as f:
+            plistlib.dump(vazio, f, fmt=plistlib.FMT_BINARY)
+        try:
+            outros = {}
+            self.assertEqual(tr1000_sysex.load(f.name, outros=outros), [])
+        finally:
+            os.unlink(f.name)
+        self.assertEqual(outros["espionando"], "TR-1000 CTRL")
+
     def test_o_formato_que_o_sniff_grava_e_lido(self):
         # o lp_tr1000 sniff --arquivo escreve "From TR-1000 CTRL" + hex
         linha = "  22:01:02   From TR-1000 CTRL   " + roland.hexs(TR8S_REAL)

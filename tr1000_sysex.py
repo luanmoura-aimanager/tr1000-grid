@@ -100,7 +100,20 @@ def load_mmon(path, keep_alive=False, outros=None):
     SysEx Roland (clock, nota, CC...) por statusByte - util para ver o que mais
     passou pela porta sem poluir a lista."""
     with open(path, "rb") as f:
-        inner = plistlib.loads(plistlib.load(f)["messageData"])
+        externo = plistlib.load(f)
+    if outros is not None:
+        # o que estava sendo monitorado: e o que torna uma captura VAZIA uma
+        # prova ("o App nao mandou nada") em vez de um defeito do observador
+        cfg = externo.get("streamSettings", {})
+        outros["fontes"] = ", ".join(x.get("name", "?") for x in
+                                     cfg.get("portInputStream", [])) or "-"
+        outros["espionando"] = ", ".join(x.get("name", "?") for x in
+                                         cfg.get("spyingInputStream", [])) or "-"
+    if "messageData" not in externo:
+        # o MIDI Monitor salva sem a chave quando nada chegou (medido em
+        # 08/10/2026, boot do App com ctrlPort = 0). Antes: KeyError
+        return []
+    inner = plistlib.loads(externo["messageData"])
     objs = inner["$objects"]
 
     def deref(u):
