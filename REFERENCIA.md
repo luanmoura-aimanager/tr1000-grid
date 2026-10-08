@@ -217,6 +217,12 @@ u32 nos 16 bits de cima" são **dois u16**:
   - SD em 5, 13, 14, 15, 16 — o Luan viu 14 e 15 **fracos**, e os valores são `0x42` (66)
     e `0x4A` (74) contra `0x50` (80) nos normais. **Reforça que o byte do meio é a
     velocity.**
+- **2-01 (`boot-2-01`), outro banco:** o App leu os blocos com **`x = 16`**, o 17º pattern
+  (8 bancos × 16). Painel: "Weoow...", 165 BPM, BD var A em 1 e 7 — ✅. No bloco 3:
+  - `[2]` = `[3]` = `[4]` = **índice global** (0, 1, 16) — é o `x`, e é o que o código usa;
+  - `[21]` = pattern **dentro do banco**, 1..16 (1, 2, 1 — não é o global, como eu tinha
+    deduzido com dois patterns só);
+  - `[36]` = tempo × 100 (12800, 12200, 16500).
 - **A diferença da TR-8S:** lá o pattern entrava no endereço como `pattern*16+var` no 2º
   byte. Aqui é um campo próprio (`x`). A leitura ao vivo (`sessao_c4.py pattern`) lê o
   bloco 3, calcula o `x` e lê o resto — **122 leituras em 0,04 s**.
@@ -412,8 +418,8 @@ da Chart. Se a Roland publicou algum mapa SysEx, é lá. Baixar antes da C1.
 | slots 0/1 do step = layer A/B; vermelho = A, verde = só B | **medido 08/10** | 2.1c |
 | piso de ruído entre dois boots sem gesto: zero (139 blocos iguais) | **medido 08/10** (`ruido-1`/`ruido-2`) | 2.1c |
 | bloco 3 `[128]` = variação selecionada no painel (8 = H, 1 = A) | **(deduzido)** de dois diffs | 2.1c |
-| bloco 3 `[21]` = número do pattern selecionado; `[36]` = tempo × 100 | **medido 08/10** (1-01 → 1-02) | 2.1c |
-| blocos de pattern: `x` = número do pattern − 1 | **medido 08/10** (boot do App em 1-01 e 1-02, conferidos no painel) | 2.1c |
+| bloco 3 `[2]` = índice global do pattern (0..127); `[21]` = pattern no banco (1..16); `[36]` = tempo × 100 | **medido 08/10** (1-01, 1-02, 2-01) | 2.1c |
+| blocos de pattern: `x` = índice global do pattern | **medido 08/10** (boot do App em 1-01, 1-02 e 2-01, conferidos no painel) | 2.1c |
 | velocity no byte do meio da nota; `[64..79]` = probability | **(deduzido)** | 2.1c |
 | comando de escrita: `01 bloco x y índice u32` → `03 …` | **medido 08/10** (App escrevendo; nunca por nós) | 2.1c |
 | o mesmo `01` escreve steps (bloco 118+3v) | **(deduzido)** — é o teste C3 | 2.1c |
@@ -437,7 +443,7 @@ A fase 1 (o grid escrevendo) só começa quando **todos** estes forem **medidos*
 | 1 | Formato da mensagem provado em captura real (enquadramento sem sobra, aperto de mão com versão) | ✅ 08/10 (C1-S0) |
 | 2 | Ler o pattern pela serial e conferir no painel | ✅ 08/10 (Dub Techno, var A/H) |
 | 3 | **Um step desligado e ligado por escrita NOSSA (`01`), ouvido pelo Luan** | ✅ **08/10 — desligar (C3.1) e ligar (C3.2), ouvidos** |
-| 4 | Endereçamento pattern × variação provado em **3 patterns** diferentes | **2 de 3 ✅ 08/10** (1-01 Dub Techno, 1-02 Groovy Beach, conferidos no painel); o 3º ⏳ |
+| 4 | Endereçamento pattern × variação provado em **3 patterns** diferentes | ✅ **08/10** — 1-01 Dub Techno, 1-02 Groovy Beach, **2-01 "Weoow..." 165 BPM (outro banco, x = 16)**, os três conferidos no painel |
 | 5 | Step atual / variação que toca lidos com a máquina tocando, conferidos no visor | ⏳ (candidato: bloco 3) |
 | 6 | WRITE (gravar o pattern) seguido de religar a máquina, e o step sobrevivendo | ⏳ |
 

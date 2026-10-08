@@ -38,13 +38,14 @@ ESCRITAS_PERMITIDAS = {
     (156, 126, 0, 962): "TUNE do sample do BD (slot 126)",
 }
 
-# As leituras que o App fez no boot, com o pattern 1-01 (C1-S0) e com o 1-02
-# selecionado (boot-1-02: os blocos de pattern vieram com x = 1). Uma leitura
+# As leituras que o App fez no boot, com o pattern 1-01 (C1-S0), o 1-02 e o
+# 2-01 selecionados (os blocos de pattern vieram com x = 0, 1 e 16). Uma leitura
 # nossa so sai se cair DENTRO de uma delas. Para liberar o pattern N, a regra
 # e capturar o boot do App com ele selecionado - nao chutar o x.
 CAPTURAS_DE_REFERENCIA = [os.path.join(AQUI, "capturas", n) for n in (
     "2026-10-08-s0-autoteste.serlog",
     "2026-10-08-boot-1-02.serlog",
+    "2026-10-08-boot-2-01.serlog",          # x = 16: banco 2, pattern 1
 )]
 _leituras_do_app = None
 

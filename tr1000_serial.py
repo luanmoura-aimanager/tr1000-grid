@@ -455,15 +455,16 @@ def grade_de_steps(valores):
     return "".join(out)
 
 
-# Bloco 3 (sistema/performance), medido em 08/10/2026 trocando 1-01 -> 1-02:
-OFF_PATTERN_ATUAL = 21      # numero do pattern, 1 = 1-01 (medido: 1 -> 2)
-OFF_TEMPO_ATUAL = 36        # tempo x 100 (medido: 12800 -> 12200)
+# Bloco 3 (sistema/performance), medido em 08/10/2026 em 1-01, 1-02 e 2-01:
+OFF_PATTERN_GLOBAL = 2      # indice global 0..127 = o x dos blocos de pattern
+                            # (medido: 0, 1, 16; [3] e [4] repetem o mesmo valor)
+OFF_PATTERN_NO_BANCO = 21   # 1..16 dentro do banco (medido: 1, 2, 1)
+OFF_TEMPO_ATUAL = 36        # tempo x 100 (medido: 12800, 12200, 16500)
 
 
-def x_do_pattern(numero):
-    """O x dos blocos de pattern: o numero do pattern menos 1 (medido 08/10:
-    1-01 -> x 0, 1-02 -> x 1, no boot do App)."""
-    return numero - 1
+def nome_do_pattern(indice_global):
+    """0 -> '1-01', 1 -> '1-02', 16 -> '2-01' (8 bancos x 16, manual RM p.13)."""
+    return f"{indice_global // 16 + 1}-{indice_global % 16 + 1:02d}"
 
 
 def x_presente(vals):
@@ -474,8 +475,8 @@ def x_presente(vals):
 
 def linhas_do_pattern(vals, x=None):
     """{(bloco, x, y): [u32...]} -> as linhas de texto da grade. Serve as
-    capturas (cmd_pattern) e a leitura ao vivo (sessao_c4.py). x = o do
-    pattern (x_do_pattern); sem ele, o que a captura tiver."""
+    capturas (cmd_pattern) e a leitura ao vivo (sessao_c4.py). x = o indice
+    global do pattern (bloco 3 [2]); sem ele, o que a captura tiver."""
     out = []
     x = x_presente(vals) if x is None else x
     cab = vals.get((BLOCO_CAB_PATTERN, x, 0))

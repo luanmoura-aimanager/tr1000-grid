@@ -274,7 +274,7 @@ O pattern entra no endereço (`x` = número − 1, REFERENCIA 2.1c), e a leitura
 3. Me avise: eu acrescento a captura às de referência, e então `python3 sessao_c4.py pattern`.
 4. Me diga o **nome e o BPM** do visor e os steps de **um** track na var A.
 
-**Feito em 08/10:** 1-02 "Groovy Beach" (`boot-1-02`). Falta um terceiro.
+**Feito em 08/10:** 1-02 "Groovy Beach" (`boot-1-02`) e 2-01 "Weoow..." (`boot-2-01`). Critério 4 ✅.
 
 ### C4.3 — o step atual
 

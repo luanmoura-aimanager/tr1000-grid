@@ -663,10 +663,10 @@ class TesteSessaoC4(unittest.TestCase):
         for passo in (0, 4, 8, 12):
             bd[passo * 4] = bd[passo * 4 + 1] = 0xA503C
         b3 = [0] * 292
-        b3[21], b3[36] = 2, 12200                 # 1-02, 122 BPM (medido 08/10)
+        b3[2], b3[21], b3[36] = 1, 2, 12200       # 1-02, 122 BPM (medido 08/10)
         m.blocos = {(3, 0, 0): b3, (116, 1, 0): nome, (118, 1, 0): bd}
         saida = self._com_maquina(m, sessao_c4.cmd_pattern)
-        self.assertIn("pattern 2 -> x 1, tempo 122.0", saida)
+        self.assertIn("pattern 1-02 -> x 1, tempo 122.0", saida)
         self.assertIn("pattern 'Dub Techno', tempo 128.0", saida)
         self.assertIn("BD  x... x... x... x...", saida)
         escritas = [p for p in m.recebido if tr1000_serial.carga(p)[:1] == b"\x01"]
@@ -678,17 +678,24 @@ class TesteSessaoC4(unittest.TestCase):
         import sessao_c4
         m = _MaquinaFalsa()
         b3 = [0] * 292
-        b3[21] = 50                               # 1-50: nenhum boot capturado
+        b3[2] = 49                                # 4-02: nenhum boot capturado
         m.blocos = {(3, 0, 0): b3}
         saida = self._com_maquina(m, sessao_c4.cmd_pattern)
-        self.assertIn("o App ainda nao leu o pattern 50", saida)
+        self.assertIn("o App ainda nao leu o pattern 4-02", saida)
         self.assertEqual(len(m.recebido), 1 + 1)  # aperto + bloco 3, mais nada
 
     def test_x_do_pattern_medido(self):
-        # boot-1-02 (08/10/2026): o App leu os blocos de pattern com x = 1
-        self.assertEqual(tr1000_serial.x_do_pattern(1), 0)
-        self.assertEqual(tr1000_serial.x_do_pattern(2), 1)
-        self.assertIn((116, 1, 0), conexao_serial.leituras_do_app())
+        # boot-1-02 e boot-2-01 (08/10/2026): o App leu os blocos de pattern
+        # com x = 1 e x = 16, e o bloco 3 [2] trazia o mesmo numero
+        self.assertEqual(tr1000_serial.nome_do_pattern(0), "1-01")
+        self.assertEqual(tr1000_serial.nome_do_pattern(1), "1-02")
+        self.assertEqual(tr1000_serial.nome_do_pattern(16), "2-01")
+        for x in (0, 1, 16):
+            self.assertIn((116, x, 0), conexao_serial.leituras_do_app())
+        for cap, x in (("2026-10-08-boot-1-02.serlog", 1), ("2026-10-08-boot-2-01.serlog", 16)):
+            v = tr1000_serial.ultimos_valores(tr1000_serial.pacotes(
+                tr1000_serial.ler_serlog(os.path.join(AQUI, "capturas", cap))))
+            self.assertEqual(v[(3, 0, 0)][tr1000_serial.OFF_PATTERN_GLOBAL], x)
 
     def test_mudancas_so_o_que_muda(self):
         import sessao_c4

@@ -38,10 +38,11 @@ def _ler_bloco(c, bloco, x=0, y=0):
 
 
 def pattern_atual(c):
-    """(numero, x, tempo) lidos do bloco 3: o pattern SELECIONADO no painel."""
+    """(nome '1-01', x, tempo) lidos do bloco 3: o pattern SELECIONADO no
+    painel. x e o indice global ([2]), que e o x dos blocos de pattern."""
     b3 = _ler_bloco(c, 3)
-    numero = b3[ts.OFF_PATTERN_ATUAL]
-    return numero, ts.x_do_pattern(numero), b3[ts.OFF_TEMPO_ATUAL] / 100
+    x = b3[ts.OFF_PATTERN_GLOBAL]
+    return ts.nome_do_pattern(x), x, b3[ts.OFF_TEMPO_ATUAL] / 100
 
 
 def ler_pattern(c, x):
@@ -59,11 +60,11 @@ def ler_pattern(c, x):
 def cmd_pattern():
     with cs.ConexaoTR1000(nome_captura="c4-pattern") as c:
         print(f"aperto de mao: versao {c.aperto()!r}")
-        numero, x, tempo = pattern_atual(c)
-        print(f"selecionado no painel (bloco 3): pattern {numero} -> x {x}, "
+        nome, x, tempo = pattern_atual(c)
+        print(f"selecionado no painel (bloco 3): pattern {nome} -> x {x}, "
               f"tempo {tempo}")
         if (ts.BLOCO_CAB_PATTERN, x, 0) not in cs.leituras_do_app():
-            print(f"(!) o App ainda nao leu o pattern {numero} (x {x}) em nenhuma captura "
+            print(f"(!) o App ainda nao leu o pattern {nome} (x {x}) em nenhuma captura "
                   f"de referencia - capture o boot dele com o espiao antes "
                   f"(REFERENCIA 2.1c). Nada lido.")
             return
