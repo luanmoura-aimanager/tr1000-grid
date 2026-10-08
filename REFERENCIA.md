@@ -392,7 +392,8 @@ da Chart. Se a Roland publicou algum mapa SysEx, é lá. Baixar antes da C1.
 | velocity no byte do meio da nota; `[64..79]` = probability | **(deduzido)** | 2.1c |
 | comando de escrita: `01 bloco x y índice u32` → `03 …` | **medido 08/10** (App escrevendo; nunca por nós) | 2.1c |
 | o mesmo `01` escreve steps (bloco 118+3v) | **(deduzido)** — é o teste C3 | 2.1c |
-| espião grava `read`/`write` da serial, quadros remontados | **medido de mesa 08/10** (pty), **não** com o App | 2.1b |
+| espião grava `read`/`write` da serial, quadros remontados | **medido 08/10** (pty e com o App) | 2.1b |
+| **escrita nossa de um step (`01`) obedecida: bumbo some, LED apaga** | **medido 08/10, OUVIDO** (C3.1) | 3.1 |
 | model ID | **não se aplica** à serial (não é SysEx); a versão `"1.22"` vem no aperto de mão | 2.1c |
 | ordem dos parâmetros por bloco | **(catálogo)** | 2.2 |
 | endereços de qualquer coisa | **desconhecido** | |
@@ -409,10 +410,23 @@ A fase 1 (o grid escrevendo) só começa quando **todos** estes forem **medidos*
 |---|---|---|
 | 1 | Formato da mensagem provado em captura real (enquadramento sem sobra, aperto de mão com versão) | ✅ 08/10 (C1-S0) |
 | 2 | Ler o pattern pela serial e conferir no painel | ✅ 08/10 (Dub Techno, var A/H) |
-| 3 | **Um step desligado e ligado por escrita NOSSA (`01`), ouvido pelo Luan** | ⏳ C3.1/C3.2 |
+| 3 | **Um step desligado e ligado por escrita NOSSA (`01`), ouvido pelo Luan** | **desligar ✅ 08/10 (C3.1)**; ligar ⏳ C3.2 |
 | 4 | Endereçamento pattern × variação provado em **3 patterns** diferentes (o bloco 118+3v muda de conteúdo ao trocar de pattern) | ⏳ |
 | 5 | Step atual / variação que toca lidos com a máquina tocando, conferidos no visor | ⏳ (candidato: bloco 3) |
 | 6 | WRITE (gravar o pattern) seguido de religar a máquina, e o step sobrevivendo | ⏳ |
+
+**C3.1 — 08/10/2026, a primeira escrita nossa, OUVIDA:**
+- **O que saiu:** `sessao_c3.py step2 desligar`, máquina tocando só a var A do Dub Techno.
+  Dois pacotes `01` byte a byte iguais ao formato do App: bloco 118, x 0, y 0, índices 1253
+  e 1254, valor `FF`.
+- **O que voltou:** `03` para os dois; releitura `FF FF`.
+- **O Luan, na frente da máquina:** o bumbo do step 2 **sumiu**, o LED do step 2 **apagou**,
+  e a máquina **seguiu tocando** sem parar nem engasgar.
+- **Captura:** `capturas/2026-10-08-c3-step2-desligar.serlog`.
+- **Uma lição:** a primeira tentativa não mandou nada, nem pelo Terminal (Enter vazio) nem
+  pelo `!` (sem teclado). A trava do `sim` segurou as duas, e daí veio o `--sim`.
+- **Para ouvir o step é preciso que a máquina toque SÓ a variação editada.** Ela estava
+  encadeando A → B…, e o step 2 só soava em parte do tempo.
 
 A escrita da C3 passa só por `sessao_c3.py` → `conexao_serial.py`, com **lista de 3
 endereços** no código (`ESCRITAS_PERMITIDAS`: os dois slots do step 2 do BD na var A e o
