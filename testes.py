@@ -23,7 +23,10 @@ sys.path.insert(0, AQUI)
 import roland
 import tr1000
 import tr1000_sysex
+import tr1000_serial
 import catalogo_app
+import espiao
+import conexao_serial
 
 # Mensagem real, capturada do site ARIA falando com uma TR-8S (tr8s-grid
 # REFERENCIA 2.9): "pattern atual -> 127". E o unico SysEx Roland medido que
@@ -161,6 +164,22 @@ class TesteCapturas(unittest.TestCase):
             os.unlink(f.name)
         self.assertEqual([m["chk_ok"] for m in msgs], [True, True, False])
 
+    def test_mmon_vazio_nao_quebra_e_diz_o_que_monitorava(self):
+        # o MIDI Monitor salva sem "messageData" quando nada chegou - foi o
+        # boot do App com ctrlPort = 0 (medido 08/10/2026)
+        import plistlib
+        vazio = {"version": 1, "streamSettings": {
+            "portInputStream": [{"name": "TR-1000 CTRL", "uniqueID": 1}],
+            "spyingInputStream": [{"name": "TR-1000 CTRL", "uniqueID": 2}]}}
+        with tempfile.NamedTemporaryFile(suffix=".mmon", delete=False) as f:
+            plistlib.dump(vazio, f, fmt=plistlib.FMT_BINARY)
+        try:
+            outros = {}
+            self.assertEqual(tr1000_sysex.load(f.name, outros=outros), [])
+        finally:
+            os.unlink(f.name)
+        self.assertEqual(outros["espionando"], "TR-1000 CTRL")
+
     def test_o_formato_que_o_sniff_grava_e_lido(self):
         # o lp_tr1000 sniff --arquivo escreve "From TR-1000 CTRL" + hex
         linha = "  22:01:02   From TR-1000 CTRL   " + roland.hexs(TR8S_REAL)
@@ -197,6 +216,464 @@ class TesteCapturas(unittest.TestCase):
         msgs = [_m("TX", roland.RQ1, (0x10, 0, 0, 0),
                    roland.tamanho_7bits(16), t) for t in (0, 0.01)]
         self.assertEqual(tr1000_sysex.resumir(msgs)["keepalive"], [])
+
+
+class TesteSerlog(unittest.TestCase):
+    """O leitor do .serlog contra capturas sinteticas no MESMO formato que o
+    espiao/espiao_serial.c grava (tr1000_serial.serializar). O espiao em si foi
+    conferido de ponta a ponta numa pty em 08/10/2026 (REFERENCIA 2.1b); o
+    teste de verdade dele e a sessao C1-S0, com o App."""
+
+    def _gravar(self, registros):
+        f = tempfile.NamedTemporaryFile(suffix=".serlog", delete=False)
+        f.write(tr1000_serial.serializar(registros)); f.close()
+        self.addCleanup(os.unlink, f.name)
+        return f.name
+
+    def test_le_os_registros(self):
+        c = self._gravar([(1_000_000_000, "S", 42, b"/app"),
+                          (1_500_000_000, "O", 7, b"/dev/tty.usbmodem31101"),
+                          (2_000_000_000, "W", 7, b"\x01\x02")])
+        regs = tr1000_serial.ler_serlog(c)
+        self.assertEqual([r["tipo"] for r in regs], ["S", "O", "W"])
+        self.assertEqual(regs[2]["dados"], b"\x01\x02")
+        self.assertAlmostEqual(regs[1]["t"], 1.5)
+        self.assertEqual(tr1000_serial.autoteste(regs), (True, True))
+
+    def test_sem_o_open_o_autoteste_reprova(self):
+        c = self._gravar([(0, "S", 1, b"/app")])
+        self.assertEqual(tr1000_serial.autoteste(tr1000_serial.ler_serlog(c)),
+                         (True, False))
+
+    def test_magico_errado_recusa(self):
+        f = tempfile.NamedTemporaryFile(suffix=".serlog", delete=False)
+        f.write(b"XXXXXXXX\x01\x00\x00\x00"); f.close()
+        self.addCleanup(os.unlink, f.name)
+        with self.assertRaises(ValueError):
+            tr1000_serial.ler_serlog(f.name)
+
+    def test_quadro_quebrado_em_tres_reads_e_dois_num_read(self):
+        q = bytes(TR8S_REAL)
+        c = self._gravar([(0, "O", 3, b"/dev/tty.usbmodem1"),
+                          (1, "R", 3, q[:4]), (2, "R", 3, q[4:9]),
+                          (3, "R", 3, q[9:]),
+                          (4, "R", 3, q + q)])
+        quadros, sobra = tr1000_serial.quadros_sysex(tr1000_serial.ler_serlog(c))
+        self.assertEqual(len(quadros), 3)
+        self.assertTrue(all(d == "RX" and b == TR8S_REAL[1:-1]
+                            for d, b, _ in quadros))
+        self.assertEqual(sobra, {})
+
+    def test_bytes_fora_de_quadro_contam(self):
+        # muita sobra = a hipotese H1 (serial = SysEx Roland) esta errada
+        c = self._gravar([(0, "W", 3, b"\xAA\x55\x01" + bytes(TR8S_REAL))])
+        quadros, sobra = tr1000_serial.quadros_sysex(tr1000_serial.ler_serlog(c))
+        self.assertEqual(len(quadros), 1)
+        self.assertEqual(sobra, {"TX": 3})
+
+    def test_resumo_pelo_tr1000_sysex(self):
+        # o .serlog passa pelo MESMO caminho do .mmon: lista branca de graca
+        rq = roland.montar_rq1(TR8S_CAB, (0x20, 0, 0, 0), 128)
+        dt = roland.montar_dt1(TR8S_CAB, (0x20, 0, 0, 0), [0] * 128)
+        c = self._gravar([(0, "O", 3, b"/dev/tty.usbmodem1"),
+                          (1_000_000, "W", 3, bytes(rq)),
+                          (2_000_000, "R", 3, bytes(dt))])
+        outros = {}
+        msgs = tr1000_sysex.load(c, outros=outros)
+        r = tr1000_sysex.resumir(msgs)
+        self.assertEqual(r["leituras"], [dict(addr="20 00 00 00", tamanho=128,
+                                              vezes=1, respondeu=True)])
+        self.assertEqual(outros["abriu-serial"], "sim")
+
+
+class TestePacotesSerial(unittest.TestCase):
+    """O enquadramento medido na C1-S0 (REFERENCIA 2.1c), contra pacotes
+    copiados da captura real: o pedido 82 do bloco 3 e a resposta 02 dele."""
+
+    PEDIDO = bytes.fromhex("15 08 41 F2 01 00 00 00 C0 17 92 21 0B 00 00 00"
+                           "82 03 00 00 00 00 00 70 00 24 01")
+    POLL = bytes.fromhex("14 08 40 F0 9B 00 00 00 00 00 00 05")
+
+    def _resposta(self, valores):
+        import struct
+        c = bytes.fromhex("02 03 00 00 00 00 00 70 00") + struct.pack(
+            "<H", len(valores)) + struct.pack(f"<{len(valores)}I", *valores)
+        return bytes.fromhex("15 08 F0 00 38 73 84 86 00 00 00 00") + \
+            struct.pack("<I", len(c)) + c
+
+    def _regs(self, *pares):
+        return [dict(t=i * 0.001, tipo=t, fd=3, dados=d)
+                for i, (t, d) in enumerate(pares)]
+
+    def test_enquadra_pacote_cortado_e_colado(self):
+        resp = self._resposta([1, 2, 3])
+        regs = self._regs(("W", self.PEDIDO[:5]), ("W", self.PEDIDO[5:] + self.POLL),
+                          ("R", resp[:20]), ("R", resp[20:]))
+        pacs = tr1000_serial.pacotes(regs)
+        self.assertEqual([(d, len(p)) for d, _, p in pacs],
+                         [("TX", 27), ("TX", 12), ("RX", len(resp))])
+
+    def test_pedido_e_resposta_de_bloco(self):
+        pacs = tr1000_serial.pacotes(self._regs(("W", self.PEDIDO),
+                                                ("R", self._resposta([7, 8]))))
+        self.assertEqual(tr1000_serial.leituras_de_bloco(pacs),
+                         {(3, 0, 0): (112, 292)})
+        self.assertEqual(tr1000_serial.valores_de_bloco(pacs)[0][1:],
+                         (3, 0, 0, 112, [7, 8]))
+
+    def test_x_e_y_sao_dois_u16(self):
+        # bloco 13 da S0: y = 0..9 (o track); bloco 156: x = 0..499 (o slot)
+        import struct
+        ped = bytearray(self.PEDIDO)
+        struct.pack_into("<HH", ped, 16 + 3, 126, 9)
+        pacs = tr1000_serial.pacotes(self._regs(("W", bytes(ped))))
+        self.assertEqual(list(tr1000_serial.leituras_de_bloco(pacs)), [(3, 126, 9)])
+
+    def test_escrita_real_do_knob(self):
+        # knob-bd-tune (08/10/2026): o TUNE do BD, primeiro valor escrito
+        esc = bytes.fromhex("15 08 41 F2 01 00 00 00 E0 52 AF 2F 0D 00 00 00"
+                            "01 9C 00 7E 00 00 00 C2 03 FD 01 00 00")
+        pacs = tr1000_serial.pacotes(self._regs(("W", esc)))
+        self.assertEqual([w[1:] for w in tr1000_serial.escritas(pacs)],
+                         [(156, 126, 0, 962, 0x1FD)])
+
+    def test_byte_estranho_vira_pacote_de_um(self):
+        pacs = tr1000_serial.pacotes(self._regs(("R", b"\x42" + self.POLL)))
+        self.assertEqual([len(p) for _, _, p in pacs], [1, 12])
+
+
+class TesteGradeDeSteps(unittest.TestCase):
+    """Os slots reais da S0 contra o que o Luan viu no painel (08/10/2026):
+    SD var A e BD var H."""
+
+    def test_sd_var_a_bate_com_os_leds(self):
+        F, n, m = 0xFF, 0xA503C, 0xA5A3C
+        slots = [F, F, F, F,  F, n, 0, 0,  0, 0, 0, 0,  m, m, F, F,
+                 F, F, F, F,  F, F, F, F,  F, n, 0, 0,  0, 0, 0, 0,
+                 F, n, F, F,  F, n, 0, 0,  0, 0, 0, 0,  m, m, F, F,
+                 F, n, F, F,  0, 0, 0, 0,  F, m, 0, 0,  F, n, 0, 0]
+        # vermelho 4 e 12 (layers A+B); verde 2 7 9 10 13 15 16 (so o B)
+        self.assertEqual(tr1000_serial.grade_de_steps(slots),
+                         ".b.x..b.bb.xb.bb")
+
+    def test_step_ligado_no_painel(self):
+        # step-bd2 (08/10/2026): o step 2 do BD ligado no painel virou
+        # A503C nos slots 0 e 1 - os dois layers, como os outros BD
+        v = [0] * 64
+        v[4] = v[5] = 0xA503C
+        self.assertEqual(tr1000_serial.grade_de_steps(v)[:3], ".x.")
+
+    def test_so_pausas_e_apagado(self):
+        self.assertEqual(tr1000_serial.grade_de_steps([0xFF] * 64), "." * 16)
+
+
+# Pacotes REAIS da captura knob-bd-tune (08/10/2026)
+R95_REAL = bytes.fromhex("95 02 f0 00 58 db 7b 86 f4 d1 1e 00 1b 00 00 00 7e 00 00 03 00"
+                         "00 00 03 00 5a 01 00 00 5a 01 e0 f8 f1 00 00 00 00 00 31 2e 32 32")
+R03_REAL = bytes.fromhex("15 08 f0 00 78 d6 82 86 f4 a0 87 00 0b 00 00 00 03 9c 00 7e 00"
+                         "00 00 c2 03 c2 03")
+R02_REAL = bytes.fromhex("15 08 f0 00 68 d7 82 86 01 00 00 00 0f 00 00 00 02 9c 00 7e 00"
+                         "00 00 c2 03 01 00 fd 01 00 00")
+W01_REAL = bytes.fromhex("15 08 41 f2 01 00 00 00 c0 88 06 2d 0d 00 00 00 01 9c 00 7e 00"
+                         "00 00 c2 03 fd 01 00 00")
+R82_REAL = bytes.fromhex("15 08 41 f2 00 00 00 00 40 87 06 2d 0b 00 00 00 82 9c 00 7e 00"
+                         "00 00 c2 03 01 00")
+
+
+class _MaquinaFalsa:
+    """Uma TR-1000 de mentira atras da 'porta': responde ao aperto com o 95
+    real, a leitura com um 02 do valor guardado, a escrita com um 03 - em
+    pedacos de 5 bytes, porque a porta de verdade entrega cortado.
+    calada=True nao confirma escrita nenhuma."""
+
+    def __init__(self, calada=False, confirma_ate=None):
+        import struct
+        self.st = struct
+        self.confirma_ate = confirma_ate          # quantos 03 ela da antes de calar
+        self.valores = {(156, 126, 0, 962): 1000, (118, 0, 0, 1253): 0xA503C,
+                        (118, 0, 0, 1254): 0xA503C}
+        self.recebido, self.saida, self.calada, self.fechada = [], b"", calada, False
+
+    def escrever(self, b):
+        st = self.st
+        self.recebido.append(bytes(b))
+        if b == tr1000_serial.APERTO:
+            self.saida += R95_REAL + tr1000_serial.POLL
+            return
+        c = tr1000_serial.carga(b)
+        bloco, x, y, i = st.unpack_from("<HHHH", c, 1)
+        if c[0] == tr1000_serial.LER_BLOCO:
+            v = self.valores[(bloco, x, y, i)]
+            corpo = bytes([2]) + c[1:9] + st.pack("<HI", 1, v)
+            self.saida += bytes.fromhex("15 08 F0 00 68 D7 82 86 01 00 00 00") + \
+                st.pack("<I", len(corpo)) + corpo
+        elif c[0] == tr1000_serial.ESCREVER and not self.calada:
+            if self.confirma_ate is not None:
+                if self.confirma_ate == 0:
+                    return
+                self.confirma_ate -= 1
+            self.valores[(bloco, x, y, i)] = st.unpack_from("<I", c, 9)[0]
+            corpo = bytes([3]) + c[1:9] + c[7:9]
+            self.saida += bytes.fromhex("15 08 F0 00 78 D6 82 86 F4 A0 87 00") + \
+                st.pack("<I", len(corpo)) + corpo
+
+    def ler(self, limite):
+        pedaco, self.saida = self.saida[:5], self.saida[5:]
+        return pedaco
+
+    def fechar(self):
+        self.fechada = True
+
+
+class TesteEscritaC3(unittest.TestCase):
+    """O cliente da serial da sessao C3 (REFERENCIA 3.1), sem hardware."""
+
+    def test_pacotes_byte_a_byte_iguais_aos_do_app(self):
+        ts = tr1000_serial
+        self.assertEqual(ts.pacote_dados(ts.CAB_ESCRITA,
+                                         ts.carga_escrever(156, 126, 0, 962, 0x1FD)), W01_REAL)
+        self.assertEqual(ts.pacote_dados(ts.CAB_LEITURA,
+                                         ts.carga_ler(156, 126, 0, 962, 1)), R82_REAL)
+
+    def test_respostas_reais(self):
+        ts = tr1000_serial
+        self.assertEqual(ts.versao_95(R95_REAL), "1.22")
+        self.assertEqual(ts.ack_03(R03_REAL), (156, 126, 0, 962))
+        self.assertEqual(ts.resposta_02(R02_REAL), (156, 126, 0, 962, [509]))
+
+    def test_enquadrar_ao_vivo_em_pedacos(self):
+        fluxo = R95_REAL + tr1000_serial.POLL + R03_REAL
+        buf, todos = b"", []
+        for i in range(0, len(fluxo), 7):
+            prontos, buf = tr1000_serial.enquadrar(buf + fluxo[i:i + 7])
+            todos += prontos
+        self.assertEqual(todos, [R95_REAL, tr1000_serial.POLL, R03_REAL])
+        self.assertEqual(buf, b"")
+
+    def test_sessao_completa_com_maquina_falsa(self):
+        m = _MaquinaFalsa()
+        with conexao_serial.ConexaoTR1000(porta=m) as c:
+            self.assertEqual(c.aperto(), "1.22")
+            self.assertEqual(c.ler(156, 126, 0, 962), [1000])
+            self.assertTrue(c.escrever(156, 126, 0, 962, 509))
+            self.assertEqual(c.ler(156, 126, 0, 962), [509])
+        self.assertTrue(m.fechada)
+        self.assertEqual(m.recebido[0], tr1000_serial.APERTO)
+
+    def test_fora_da_lista_nao_manda_nada(self):
+        m = _MaquinaFalsa()
+        with conexao_serial.ConexaoTR1000(porta=m) as c:
+            with self.assertRaises(PermissionError):
+                c.escrever(118, 0, 0, 1257, 0xFF)          # step 3: nao liberado
+            with self.assertRaises(PermissionError):
+                c.pacote_escrita(116, 0, 0, 988, 0)        # cabecalho do pattern
+        self.assertEqual(m.recebido, [])
+
+    def test_sem_confirmacao_para_e_nao_repete(self):
+        m = _MaquinaFalsa(calada=True)
+        with conexao_serial.ConexaoTR1000(porta=m, relogio=_relogio_rapido()) as c:
+            with self.assertRaises(conexao_serial.ErroConexao):
+                c.escrever(118, 0, 0, 1253, 0xFF)
+        escritas = [p for p in m.recebido if tr1000_serial.carga(p)[:1] == b"\x01"]
+        self.assertEqual(len(escritas), 1)
+
+    def test_lista_permitida_e_so_a_da_c3(self):
+        self.assertEqual(set(conexao_serial.ESCRITAS_PERMITIDAS),
+                         {(118, 0, 0, 1253), (118, 0, 0, 1254), (156, 126, 0, 962)})
+
+    def test_a_captura_da_sessao_e_lida_como_as_do_espiao(self):
+        m = _MaquinaFalsa()
+        with tempfile.TemporaryDirectory() as tmp:
+            with conexao_serial.ConexaoTR1000(porta=m) as c:
+                c.captura = os.path.join(tmp, "c3.serlog")
+                c.aperto(); c.ler(156, 126, 0, 962)
+            regs = tr1000_serial.ler_serlog(c.captura)
+            pacs = tr1000_serial.pacotes(regs)
+        self.assertIn(tr1000_serial.APERTO, [p for d, _, p in pacs if d == "TX"])
+        self.assertIn(R95_REAL, [p for d, _, p in pacs if d == "RX"])
+
+
+class TesteSessaoC3(unittest.TestCase):
+    """A confirmacao: sem teclado nao manda nada; --sim manda."""
+
+    def _rodar(self, argv, entrada=None):
+        import io, contextlib, builtins
+        import sessao_c3
+        m = _MaquinaFalsa()
+        orig_cx, orig_input = conexao_serial.ConexaoTR1000, builtins.input
+
+        class CxFalsa(orig_cx):
+            def __init__(s, nome_captura=None, **k):
+                super().__init__(porta=m)
+        conexao_serial.ConexaoTR1000 = CxFalsa
+
+        def falso_input(prompt=""):
+            if entrada is None:
+                raise EOFError
+            return entrada
+        builtins.input = falso_input
+        try:
+            with contextlib.redirect_stdout(io.StringIO()):
+                codigo = sessao_c3.main(argv)
+        finally:
+            conexao_serial.ConexaoTR1000, builtins.input = orig_cx, orig_input
+        escritas = [p for p in m.recebido if tr1000_serial.carga(p)[:1] == b"\x01"]
+        return codigo, escritas, m
+
+    def test_sem_teclado_nao_manda(self):
+        codigo, escritas, _ = self._rodar(["step2", "desligar"])
+        self.assertEqual((codigo, escritas), (1, []))
+
+    def test_enter_vazio_nao_manda(self):
+        codigo, escritas, _ = self._rodar(["step2", "desligar"], entrada="")
+        self.assertEqual((codigo, escritas), (1, []))
+
+    def test_sim_digitado_manda_os_dois_slots(self):
+        codigo, escritas, m = self._rodar(["step2", "desligar"], entrada="sim")
+        self.assertEqual((codigo, len(escritas)), (0, 2))
+        self.assertEqual(m.valores[(118, 0, 0, 1253)], 0xFF)
+
+    def test_flag_sim_manda(self):
+        codigo, escritas, m = self._rodar(["tune", "509", "--sim"])
+        self.assertEqual((codigo, len(escritas)), (0, 1))
+        self.assertEqual(m.valores[(156, 126, 0, 962)], 509)
+
+
+class TesteRevisaoPR2(unittest.TestCase):
+    """Os achados da revisao do PR #2 (08/10/2026), cada um travado."""
+
+    def test_prova_do_boot_vazio_continua_intacta(self):
+        # o MIDI Monitor ficou aberto e salvou por cima dela tres vezes
+        import plistlib
+        with open(os.path.join(AQUI, "capturas",
+                               "2026-10-08-boot-app-serial-vazio.mmon"), "rb") as f:
+            p = plistlib.load(f)
+        self.assertNotIn("messageData", p)
+        self.assertEqual(sorted(x["name"] for x in p["streamSettings"]["spyingInputStream"]),
+                         ["TR-1000", "TR-1000 CTRL"])
+
+    def test_leitura_fora_do_que_o_app_leu_nao_sai(self):
+        m = _MaquinaFalsa()
+        with conexao_serial.ConexaoTR1000(porta=m) as c:
+            with self.assertRaises(PermissionError):
+                c.ler(999, 0, 0, 0, 5000)
+            with self.assertRaises(PermissionError):
+                c.ler(118, 0, 0, 1249, 200)        # passa do fim do bloco (131)
+        self.assertEqual(m.recebido, [])
+
+    def test_leituras_da_c3_estao_dentro_do_boot_do_app(self):
+        for e in conexao_serial.ESCRITAS_PERMITIDAS:
+            self.assertTrue(conexao_serial.leitura_permitida(*e, 1), e)
+
+    def test_so_aperto_leitura_e_escrita_saem(self):
+        with self.assertRaises(PermissionError):
+            conexao_serial.conferir_pacote(tr1000_serial.POLL)
+        with self.assertRaises(PermissionError):
+            conexao_serial.conferir_pacote(b"\x15" * 30)
+        conexao_serial.conferir_pacote(tr1000_serial.APERTO)       # nao levanta
+
+    def test_escrita_pela_metade_avisa_o_que_ja_mudou(self):
+        import io, contextlib, sessao_c3
+        m = _MaquinaFalsa(confirma_ate=1)
+        orig = conexao_serial.ConexaoTR1000
+
+        class CxFalsa(orig):
+            def __init__(s, nome_captura=None, **k):
+                super().__init__(porta=m, relogio=_relogio_rapido(0.005))
+        conexao_serial.ConexaoTR1000 = CxFalsa
+        try:
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                codigo = sessao_c3.main(["step2", "desligar", "--sim"])
+        finally:
+            conexao_serial.ConexaoTR1000 = orig
+        saida = buf.getvalue()
+        self.assertEqual(codigo, 1)
+        self.assertIn("JA ESCRITO: BD var A step 2, layer A", saida)
+        self.assertIn("estado agora: FF A503C", saida)
+
+    def test_tamanho_absurdo_nao_trava_o_fluxo(self):
+        lixo = b"\x15" + b"\x00" * 11 + b"\xff\xff\xff\x7f"   # n = 2 GB
+        prontos, resto = tr1000_serial.enquadrar(lixo + R95_REAL)
+        self.assertIn(R95_REAL, prontos)
+        self.assertEqual(resto, b"")
+
+    def test_captura_comeca_pelo_S_e_no_tempo_certo(self):
+        m = _MaquinaFalsa()
+        with conexao_serial.ConexaoTR1000(porta=m, relogio=_relogio_rapido(0.005)) as c:
+            c.aperto()
+        tempos = [r[0] for r in c.registros]
+        self.assertEqual(c.registros[0][1], "S")
+        self.assertEqual(tempos, sorted(tempos))
+
+    def test_captura_do_mesmo_dia_nao_sobrescreve(self):
+        import datetime
+        orig = espiao.AQUI
+        with tempfile.TemporaryDirectory() as tmp:
+            espiao.AQUI = tmp
+            try:
+                os.makedirs(os.path.join(tmp, "capturas"))
+                d = datetime.date(2026, 10, 8)
+                a = espiao.caminho_livre("c3-x", d)
+                open(a, "w").close()
+                b = espiao.caminho_livre("c3-x", d)
+            finally:
+                espiao.AQUI = orig
+        self.assertTrue(a.endswith("2026-10-08-c3-x.serlog"))
+        self.assertTrue(b.endswith("2026-10-08-c3-x-2.serlog"))
+
+    def test_usb_puxado_vira_erro_tratado(self):
+        class PortaQueCai(_MaquinaFalsa):
+            def ler(self, limite):
+                raise OSError(6, "Device not configured")
+        with conexao_serial.ConexaoTR1000(porta=PortaQueCai()) as c:
+            with self.assertRaises(conexao_serial.ErroConexao):
+                c.aperto()
+
+
+def _relogio_rapido(passo=0.3):
+    """Relogio que anda `passo` s por consulta: a espera de 1 s acaba logo.
+    Passo grande demais estoura o prazo antes de a maquina falsa terminar de
+    entregar uma resposta (ela entrega 5 bytes por leitura)."""
+    t = [0.0]
+
+    def agora():
+        t[0] += passo
+        return t[0]
+    return agora
+
+
+class TesteEspiaoPreparo(unittest.TestCase):
+    """O App em /Applications nunca e escrito: ele so pode aparecer como
+    ORIGEM do ditto. Todo o resto mira o cache (ou espiao/, onde mora o
+    .dylib). Confere a lista de comandos sem rodar nada."""
+
+    def test_nada_escreve_no_original(self):
+        permitido = (espiao.CACHE, os.path.join(AQUI, "espiao"))
+        for cmd in espiao.comandos_preparar():
+            caminhos = [a for a in cmd[1:] if a.startswith("/")]
+            if cmd[0] == "ditto":
+                self.assertEqual(caminhos[0], espiao.ORIGINAL)
+                caminhos = caminhos[1:]
+            if cmd[0] == "clang":
+                caminhos = [cmd[cmd.index("-o") + 1]]      # so a saida
+            for c in caminhos:
+                self.assertTrue(c.startswith(permitido), f"{cmd[0]} mira {c}")
+
+    def test_copia_mora_no_cache(self):
+        self.assertTrue(espiao.COPIA.startswith(espiao.CACHE + os.sep))
+        self.assertFalse(espiao.COPIA.startswith("/Applications"))
+
+    def test_assinatura_nova_nao_herda_o_runtime(self):
+        cs = [c for c in espiao.comandos_preparar() if c[0] == "codesign"][0]
+        self.assertIn("--force", cs)
+        self.assertFalse(any(a.startswith("--preserve-metadata") or
+                             a == "--options" for a in cs))
+
+    def test_nome_da_captura(self):
+        import datetime
+        c = espiao.caminho_captura("boot-app", datetime.date(2026, 10, 8))
+        self.assertTrue(c.endswith("capturas/2026-10-08-boot-app.serlog"))
 
 
 class TesteFx(unittest.TestCase):

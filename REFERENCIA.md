@@ -69,7 +69,240 @@ diz que a TR-1000 não responde a *este* pedido — **não** que ela não tem Sy
 Método). Consequência prática: o autoteste do `sniff` não tem como provar o listener na
 CTRL antes da C1; até lá, silêncio na CTRL é ambíguo.
 
-### 2.2 O catálogo do TR-1000 App — (catálogo, 07/10/2026)
+### 2.1b O App NÃO fala MIDI por padrão — fala serial USB (medido 08/10/2026)
+
+A primeira tentativa da C1 não viu **nada** no MIDI Monitor, e não era o filtro: com o App
+reiniciando sob escuta (`rtmidi` cru nas três entradas `TR-1000*`, clock filtrado, 3 min, o
+PID do App trocando no meio), **zero** mensagens. O `lsof` do processo do App mostrou o
+motivo:
+
+```
+12u CHR /dev/tty.usbmodem31101
+```
+
+A TR-1000 expõe, além do USB MIDI e do áudio, uma **interface serial USB (CDC ACM)**:
+`ioreg` mostra `Roland TR-1000` → `AppleUSBCDCCompositeDevice` → `AppleUSBACMControl`/
+`AppleUSBACMData` → `IOSerialBSDClient` = `/dev/cu.usbmodem31101`. O App 1.10 usa essa porta
+por padrão. O App não abre o USB direto (os únicos IOUserClient dele são de GPU), não usa
+rede e não tem endpoint MIDI privado (a enumeração CoreMIDI com `kMIDIPropertyPrivate` só
+mostra `TR-1000`, `CTRL`, `MIDI OUT 1/2`, `MIDI IN`, todos públicos).
+
+**"Use CTRL Port" não troca o transporte com o App aberto, e a UI não tem a opção**
+(medido 08/10/2026). O `~/TR1000 User/settings.xml` tem `<ctrlPort user="…"/>`, e a string
+"Use CTRL Port" está no binário. A sequência observada:
+
+| hora | o que aconteceu | `ctrlPort` no arquivo |
+|---|---|---|
+| antes de 14:00 | eu troquei 0 → 1 com o App fechado | 1 |
+| 14:00:22 | App aberto (pid 16057); abriu a serial; 120 s de escuta `rtmidi`: zero MIDI | **0** às 14:00:40 (mtime 14:00) |
+| 14:36:22 | o Luan abriu a ⚙ do App (só tem *Scale Factor*) e o App regravou o arquivo | **1** |
+| 15:04 | o mesmo App segue na serial: `lsof` mostra o fd em `0t2394308` (~2,4 MB trafegados desde 14:00) | 1 |
+
+Ou seja: o valor em memória parece ser 1 (foi o que ele gravou às 14:36), e mesmo assim o
+App fala pela serial. O que **não** se sabe: se um App aberto **do zero** com `1` já salvo
+troca de transporte. A C1-S0 responde de graça (a cópia lê o mesmo arquivo): se o
+autoteste disser "abriu a serial = NAO", é isso. A interface não tem a opção — a ⚙ só
+oferece *Scale Factor*, e o ☰ é Import/Export Sample, Transfer Backup/Project, Reload/Write
+Inst, Init Generator, About. É código herdado do app do SP-404MKII (as strings estão no
+mesmo binário).
+
+**O App conversa o tempo todo**, não só no boot: ~2,4 MB em ~65 min, uns 600 B/s. Ou seja,
+ele faz polling — provável fonte do `cur_step`/`cur_vari` (2.2).
+
+**Plano B — espiar a serial (implementado em 08/10/2026):**
+- **`espiao/espiao_serial.c`:** biblioteca que entra no processo do App por
+  `DYLD_INSERT_LIBRARIES` e grava cada byte lido e escrito em `/dev/tty.*`/`/dev/cu.*`,
+  com hora em ns. **Só observa**: chama a função real e devolve o que ela devolveu.
+  - Intercepta: `open`, `openat`, `close`, `read`, `write`, `readv`, `writev`, `ioctl` e
+    `tcsetattr`.
+  - É exatamente o que o App importa para a serial: `nm -u` mostra também `poll`, `fcntl`,
+    `tcgetattr` e `cfsetspeed`. A porta é achada por IOKit (`IOServiceGetMatchingServices`).
+- **A cópia do App:** o App tem hardened runtime (`flags=0x10000(runtime)`), e com ele o
+  dyld ignora `DYLD_INSERT_LIBRARIES`.
+  - `espiao.py preparar` faz uma **cópia** em `~/Library/Caches/tr1000-grid/` e a re-assina
+    ad hoc, sem a flag.
+  - O App não confere a própria assinatura: não importa `SecCode`, não tem entitlements nem
+    segmento `__RESTRICT`.
+  - O original em `/Applications` não é tocado.
+- **Formato `.serlog`:** cabeçalho `TR1KSER1` + versão u32. Cada registro é
+  `t_ns u64 | tipo u8 | fd u32 | n u32 | n bytes`.
+  - Tipos: `S` início (o pid vai no campo fd), `O` open, `C` close, `R` read, `W` write,
+    `I` ioctl, `T` tcsetattr.
+  - Leitor: `tr1000_serial.py` (`bruto`, `estatisticas`). Todos os comandos do
+    `tr1000_sysex.py` aceitam `.serlog`, que passa pelo mesmo caminho do `.mmon`.
+- **Hipótese H1** **(deduzido)**: a serial carrega SysEx Roland (RQ1/DT1).
+  - Por quê: o `ReadAllParametersReq` do App e a TR-8S.
+  - O leitor remonta os quadros `F0..F7` sobre o fluxo, porque `read()` corta onde quiser,
+    e conta os bytes que caem **fora** de quadro: muita sobra = H1 errada.
+- **Conferido de mesa, sem o App** (08/10/2026): um programa de teste numa pty com caminho
+  `.../dev/tty.teste`, rodando com o espião injetado.
+  - Um DT1 escrito em dois `write` voltou como um quadro.
+  - Dois quadros lidos num `readv` só saíram separados.
+  - O `tcsetattr` mostrou 115200.
+  - O `tr1000_sysex.py parse` leu o `.serlog` direto.
+- **Ainda não rodou com o App**: o `preparar` (a re-assinatura da cópia) fica para o Luan
+  rodar. A sessão C1-S0 é o teste de verdade.
+
+Outras coisas na pasta `~/TR1000 User/`: `update.zip` (27 MB, o firmware baixado pelo App) e
+`app_version.xml`. O firmware fica **intocado**.
+
+### 2.1c O protocolo da serial — C1-S0, 08/10/2026 (medido, salvo onde marcado)
+
+Captura: `capturas/2026-10-08-s0-autoteste.serlog` (1,77 MB, 14 886 registros). O App foi aberto
+pela cópia do espião, esperou "Connected", e foi fechado com Cmd+Q. Máquina parada.
+Autoteste: espião carregou, abriu `/dev/tty.usbmodem31101`.
+
+**A porta:** `tcsetattr` a 9600 e logo depois a **230400** baud.
+
+**H1 caiu.** Não é SysEx Roland: só 0,2–0,3% dos bytes caem em quadros `F0..F7`, e por
+acaso. É um protocolo binário próprio, little-endian, em **pacotes**:
+
+| tipo (`& 0x7F`) | tamanho | forma |
+|---|---|---|
+| `0x14` | 12 B fixos | `[tipo][canal][orig][dest][u32][u32]` |
+| `0x15` | 16 + n | `[tipo][canal][orig][dest][u32][u32][u32 n]` + n bytes de carga |
+
+Essa regra enquadra a captura **inteira**, nas duas direções, com **zero** byte sobrando:
+- App → máquina: 86 KB em 5963 pacotes
+- máquina → App: 1,43 MB em 9141 pacotes
+
+`tr1000_serial.py pacotes` mostra a conversa.
+
+O resto da forma dos pacotes:
+- **Bit 7 do tipo** (`0x94`/`0x95`) aparece só no **canal `02`**: o aperto de mão inicial e
+  um tráfego periódico de 160 B. O canal `08` leva todo o resto.
+- **orig/dest** **(deduzido)**:
+  - O App manda `40 F0` (o poll) e `41 F2` (os pedidos).
+  - A máquina responde `F0 00`.
+  - Parecem endereços de origem/destino de dois "serviços" de cada lado.
+
+**O aperto de mão:**
+- O App manda `94 02 40 F0 FE C0 00 00 00 84 03 03`.
+- A máquina responde 43 B terminando em ASCII `"1.22"`, provavelmente a versão do
+  firmware **(deduzido)**.
+
+**O poll:**
+- O App manda `14 08 40 F0 9B 00 00 00 00 00 00 05` a cada ~100 ms: 4680 vezes.
+- A resposta foi **sempre** `14 08 F0 00 1B 00 00 01 00 00 00 07`.
+- Hipótese: "nada mudou"; a C1-S5 (mexer no painel com o App aberto) testa.
+
+**Listas** (pedido `14 08 41 F2 <cmd> … 01` → um `14` de cabeçalho + um `0x15` por item, a carga
+começando por `<id da lista> <índice u16>`):
+
+| cmd | id | itens | conteúdo |
+|---|---|---|---|
+| `87` | `08` | 104 | categorias ("ALL", "BD E", "BD A", "SD E", …) |
+| `85` | `06` | 442 | GENs ("808 Bass Drum", "909 Snare Drum", "8X Conga", …) |
+| — | `06` (282 B) | 2121 | caminhos de sample (`A:/Roland/TR-1000/SAMPLE…`) |
+| `8D` | `0e` | 331 | INST ("TR-808-1000 BD", …) — bate com as 331 da INST List |
+| `8B`? | `0c` | 128 | nomes de kit ("Dub Techno Kit", …) |
+
+**O endereço, corrigido em 08/10/2026 (knob-bd-tune):** toda carga de parâmetro é
+`<cmd u8> <bloco u16> <x u16> <y u16> <índice u16> …`. O que eu tinha lido como "instância
+u32 nos 16 bits de cima" são **dois u16**:
+- **y** = track (0..9 = BD..RC) ou layer (0/1);
+- **x** = slot de sample (0..499), no bloco 156.
+
+**A ESCRITA — medida em 08/10/2026, captura `knob-bd-tune`** (o Luan girou o TUNE do
+GENERATOR do BD no App, ~28 s):
+
+```
+App → máquina   01 <bloco> <x> <y> <índice> <u32 valor>        escrita
+máquina → App   03 <bloco> <x> <y> <índice> <índice>           confirmação (857 das 864)
+```
+
+- 864 escritas, **todas** no mesmo endereço: bloco **156**, x **126**, y 0, índice **962**.
+- O BD do kit usa o GEN de sample "Hybrid Kick 03", então o TUNE do GENERATOR mexe no **slot
+  de sample** 126, e não num parâmetro do track — o mesmo bloco 156 que o boot lê
+  (índices 718..987 por slot).
+- Valores: começou em **509**, foi até **0** e até **1000**, terminou em 1000. Faixa
+  0..1000, centro ~500 **(deduzido)**.
+- Antes de escrever, o App releu só esse parâmetro: `82 9C 00 7E 00 00 00 C2 03 01 00` (n = 1).
+- **A máquina guardou o valor (medido, round-trip):** o Luan abriu o App original de novo
+  depois da captura, e o TUNE do BD apareceu no **máximo** — o App lê os valores da máquina
+  ao abrir, então o 1000 estava nela. Isso prova que a máquina **aceitou**, não que o som
+  mudou (Método, regra 9): o Luan não sabia como soava antes. O kit é o 001 "Dub Techno
+  Kit", BD "DubTechno Kit BD". **Deixado em 1000; o original era 509.**
+- `tr1000_serial.py escritas` lista as escritas de uma captura.
+
+O que isso destrava: o mesmo `01` deve escrever **qualquer** índice, inclusive os steps.
+Ex.: BD var A step 2 layer A = bloco 118, x 0, y 0, índice 1249 + 4·1 + 0 = 1253.
+**Hipótese — nenhum byte nosso foi mandado à máquina** (portão da fase 0, 3.1).
+
+**Os parâmetros — o achado principal:**
+- **Pedido** do App (carga de um `0x15`):
+  `82 <bloco u16> <instância u32> <índice u16> <n u16>`
+- **Resposta** da máquina:
+  `02 <bloco u16> … <índice u16> <n u16>` + **n valores u32**
+- O tamanho fecha sempre. O bloco 3, por exemplo, volta com n = 292 → 1168 B de valores.
+- A instância anda de 65536 em 65536: o número está nos 16 bits de cima.
+- **O índice parece global**: um número único por parâmetro, de 112 a ~2880. Ele é
+  candidato a casar com o catálogo do App, 2.2 **(deduzido)**. Mas o catálogo foi
+  deduplicado pelo linker, então a posição na lista de strings ≠ índice. A ponte certa é
+  a tabela de descritores do binário, ainda não lida.
+
+O App leu **139 blocos, 438 leituras (bloco × instância)** no boot (`tr1000_serial.py
+blocos`). A estrutura que salta aos olhos — **dedução** sobre números medidos, a confirmar
+com gestos (C1-S3/S4, C2):
+
+| blocos | índice / n | instâncias | leitura provável |
+|---|---|---|---|
+| 3 | 112 / 292 | 1 | sistema/projeto |
+| 4–13 | vários, pequenos | 1 (o 13: 10) | kit (o 13 por track?) |
+| 16–24, 26–34, …, 106–114 | os mesmos 9 subblocos (565/27, 2856/30, 2651/15, 2628/11, 2690/11, 2715/27, 602/22, 592/10, 624/40), 10 grupos de 10 em 10 | **2** nos grupos 16, 26, 36, 46; **1** nos outros 6 | **os 10 instrumentos**. Os 4 primeiros têm **layer A/B**, exatamente BD SD LT HT (manual) |
+| 116 | 988 / 248 | 1 | **cabeçalho do pattern** |
+| 117–152 | 12 grupos de 3: 1236/13, 1249/131 (×10), 1380/144 (×10) | | **8 variações + 4 fills**: cabeçalho da variação (13), parâmetros do track na variação (131, ×10 tracks), **steps** (144, ×10 tracks) |
+| 156 | 718 / 270 | 500 | os 500 slots de sample (strings em u32) |
+
+**Correção da primeira leitura:** os steps estão no bloco **118 + 3v** (n = 131), não no
+119. O 119 + 3v (144) estava vazio e casa com `motion0..95` + `motion_valid0..47` = 144 do
+catálogo.
+
+#### A leitura do pattern CONFERIDA NO PAINEL (08/10/2026)
+
+`tr1000_serial.py pattern capturas/2026-10-08-s0-autoteste.serlog` contra o que o Luan viu
+na máquina parada:
+
+| o que se leu na captura | o painel |
+|---|---|
+| bloco 116: nome `"Dub Techno"` (um caractere ASCII por u32), depois `0x3200` = 12800 → **128,00 BPM** | ✅ "Dub Techno", 128 |
+| var A, BD: steps 1, 5, 9, 13 | ✅ LEDs vermelhos em 1 5 9 13 |
+| var A, OH: 3, 7, 11, 15 | ✅ |
+| var A, SD: nota no 1º slot em 4 e 12; nota só em slot posterior em 2 7 9 10 13 15 16; o resto sem nota | ✅ **vermelho** em 4 e 12, **verde** em 2 7 9 10 13 15 16, apagado/cinza no resto |
+| var H, BD: os 16 steps só com `FF` | ✅ todos apagados |
+
+**Layout do bloco de steps** (n = 131, instância = track 0..9 = BD..RC) — **medido** onde o
+painel conferiu, **deduzido** no resto:
+
+- `[0..63]`: 16 steps × **4 slots** (`[step*4 + slot]`). **Os slots são LAYERS, não
+  sub-steps.**
+  - **Medido** em 08/10 nos 12 bancos do Dub Techno: os tracks de layer (BD SD LT HT) só
+    usam os slots 0 e 1; os simples (RS…RC) só o slot 0.
+  - Slot 0 = **layer A** (ou o som normal), slot 1 = **layer B**. Slots 2–3 sem uso visto;
+    o ALT dos tracks simples é o candidato **(deduzido)**.
+  - `0x00` = vazio; `0xFF` = pausa; outro valor = **nota**.
+  - Um step ligado e desligado de novo vira `FF`, não `0`: visto na var H do BD entre a S0
+    e o ruido-1.
+  - **O step toca se algum slot tem nota (medido).**
+  - **Cores no painel (medido no SD da var A):** layer A tocando (com ou sem o B) =
+    **vermelho**; só o layer B (`FF nota`) = **verde**.
+  - **Step ligado no painel (medido, `step-bd2`):** var A, BD, step 2: slots `0 0 0 0` →
+    `A503C A503C 0 0`, os dois layers — igual aos outros BD do pattern. Contra o
+    `ruido-2`, só isso mudou no pattern. Fora dele, o bloco 3 `[128]` foi de 8 para 1.
+- O valor da nota, ex.: `0xA503C` = `A` `50` `3C`.
+  - O byte do meio parece a **velocity**: `0x50` = 80, a "Normal Velocity" do manual;
+    `0x5A` = 90; os CH variam `0x32`…`0x68`, como chimbal humanizado **(deduzido)**.
+  - `0x3C` = 60 e o nibble `A` sem leitura ainda.
+- `[64..79]`: todos `0x64` = 100 — **probability 100%** **(deduzido)**.
+- `[80..130]`: zeros quase sempre; um `3` no step 1 do SD (`[96]`). Candidatos: sub_step,
+  cycle, shift **(deduzido)**.
+
+Parece que **o App lê o pattern inteiro ao abrir** — o obstáculo da TR-8S ("não há editor
+de pattern para sniffar") não existe aqui. A **leitura** do pattern está provada contra o
+painel. **Escrita: nada provado** — o App só leu; o comando de escrita ainda não apareceu
+(C1-S3).
+
+ — (catálogo, 07/10/2026)
 
 O binário do App (`/Applications/Roland/TR-1000 App.app`, versão 1.10, framework JUCE —
 código compartilhado com o app do SP-404MKII, cujas strings aparecem junto) tem uma tabela
@@ -145,7 +378,24 @@ da Chart. Se a Roland publicou algum mapa SysEx, é lá. Baixar antes da C1.
 | sem resposta ao Identity Request | **medido 07/10** | 2.1 |
 | nada chegou na CTRL nem na MIDI IN em 8 s parados | **medido 07/10** (sem autoteste na CTRL — ambíguo) | 7.2 |
 | formato Roland RQ1/DT1 na CTRL | **(deduzido)** da TR-8S e da existência da porta | 2.1 |
-| model ID | **desconhecido** — sai da C1 | |
+| o App fala por **serial USB** (`/dev/tty.usbmodem*`), não MIDI, com `ctrlPort` = 0 | **medido 08/10** | 2.1b |
+| "Use CTRL Port" = 1 com o App já aberto: segue na serial; a UI não tem a opção | **medido 08/10** | 2.1b |
+| "Use CTRL Port" = 1 num App aberto do zero | **desconhecido** — a C1-S0 diz | 2.1b |
+| o App fala com a máquina continuamente (~600 B/s) | **medido 08/10** (`lsof`, offset do fd) | 2.1b |
+| a serial carrega SysEx Roland (H1) | **falso — medido 08/10** (C1-S0: 0,2% em quadros) | 2.1c |
+| transporte: serial USB a 230400, pacotes `0x14` (12 B) / `0x15` (16 + n), enquadramento sem sobra | **medido 08/10** | 2.1c |
+| leitura de parâmetros: `82 bloco inst índice n` → `02 …` + n × u32 | **medido 08/10** | 2.1c |
+| ler o pattern pela serial (nome, tempo, steps 118+3v, slots 0/FF/nota) | **medido 08/10**, conferido no painel | 2.1c |
+| slots 0/1 do step = layer A/B; vermelho = A, verde = só B | **medido 08/10** | 2.1c |
+| piso de ruído entre dois boots sem gesto: zero (139 blocos iguais) | **medido 08/10** (`ruido-1`/`ruido-2`) | 2.1c |
+| bloco 3 `[128]` = variação selecionada no painel (8 = H, 1 = A) | **(deduzido)** de dois diffs | 2.1c |
+| velocity no byte do meio da nota; `[64..79]` = probability | **(deduzido)** | 2.1c |
+| comando de escrita: `01 bloco x y índice u32` → `03 …` | **medido 08/10** (App escrevendo; nunca por nós) | 2.1c |
+| o mesmo `01` escreve steps (bloco 118+3v) | **(deduzido)** — é o teste C3 | 2.1c |
+| espião grava `read`/`write` da serial, quadros remontados | **medido 08/10** (pty e com o App) | 2.1b |
+| **escrita nossa de um step (`01`) obedecida: bumbo some/volta, LED apaga/acende vermelho** | **medido 08/10, OUVIDO** (C3.1, C3.2) | 3.1 |
+| **escrita nossa de parâmetro de kit (TUNE do sample do BD) obedecida** | **medido 08/10, OUVIDO** e conferido no App (C3.3) | 3.1 |
+| model ID | **não se aplica** à serial (não é SysEx); a versão `"1.22"` vem no aperto de mão | 2.1c |
 | ordem dos parâmetros por bloco | **(catálogo)** | 2.2 |
 | endereços de qualquer coisa | **desconhecido** | |
 | RQ1 inválido envenena a CTRL? | **desconhecido** — tratar como sim | CLAUDE.md |
@@ -154,17 +404,75 @@ da Chart. Se a Roland publicou algum mapa SysEx, é lá. Baixar antes da C1.
 
 ### 3.1 Critério de saída da fase 0 (o portão)
 
+Reescrito em 08/10/2026 para a realidade da serial (2.1b/2.1c): não há SysEx nem model ID.
 A fase 1 (o grid escrevendo) só começa quando **todos** estes forem **medidos**:
 
-1. Model ID e formato da mensagem, com checksum fechando em captura real
-2. Endereçamento de pattern × variação provado em **3 patterns** diferentes
-3. Um step ligado/desligado e a velocity dele **escritos por DT1 e ouvidos** pelo Luan
-4. `cur_step` e `cur_vari` lidos corretamente com a máquina tocando, conferidos no visor
-5. WRITE (gravar o pattern) seguido de religar a máquina, e o step sobrevivendo
+| # | critério | estado |
+|---|---|---|
+| 1 | Formato da mensagem provado em captura real (enquadramento sem sobra, aperto de mão com versão) | ✅ 08/10 (C1-S0) |
+| 2 | Ler o pattern pela serial e conferir no painel | ✅ 08/10 (Dub Techno, var A/H) |
+| 3 | **Um step desligado e ligado por escrita NOSSA (`01`), ouvido pelo Luan** | ✅ **08/10 — desligar (C3.1) e ligar (C3.2), ouvidos** |
+| 4 | Endereçamento pattern × variação provado em **3 patterns** diferentes (o bloco 118+3v muda de conteúdo ao trocar de pattern) | ⏳ |
+| 5 | Step atual / variação que toca lidos com a máquina tocando, conferidos no visor | ⏳ (candidato: bloco 3) |
+| 6 | WRITE (gravar o pattern) seguido de religar a máquina, e o step sobrevivendo | ⏳ |
 
-Se o boot e o backup do App **não** cobrirem a região de pattern, a fase 0 **para** e a
-decisão de como seguir é tomada com o Luan antes de qualquer varredura por sondagem.
+**C3.1 — 08/10/2026, a primeira escrita nossa, OUVIDA:**
+- **O que saiu:** `sessao_c3.py step2 desligar`, máquina tocando só a var A do Dub Techno.
+  Dois pacotes `01` byte a byte iguais ao formato do App: bloco 118, x 0, y 0, índices 1253
+  e 1254, valor `FF`.
+- **O que voltou:** `03` para os dois; releitura `FF FF`.
+- **O Luan, na frente da máquina:** o bumbo do step 2 **sumiu**, o LED do step 2 **apagou**,
+  e a máquina **seguiu tocando** sem parar nem engasgar.
+- **Captura:** `capturas/2026-10-08-c3-step2-desligar.serlog`.
+- **Uma lição:** a primeira tentativa não mandou nada, nem pelo Terminal (Enter vazio) nem
+  pelo `!` (sem teclado). A trava do `sim` segurou as duas, e daí veio o `--sim`.
+- **Para ouvir o step é preciso que a máquina toque SÓ a variação editada.** Ela estava
+  encadeando A → B…, e o step 2 só soava em parte do tempo.
 
+**C3.2 — 08/10/2026, ligar de novo, OUVIDO:**
+- **O que saiu:** `sessao_c3.py step2 ligar`, o valor `0xA503C` (o que o painel tinha posto
+  em `step-bd2`) nos dois slots.
+- **O que voltou:** `03` nos dois, releitura `A503C A503C`.
+- **O Luan, na frente da máquina:** o bumbo do step 2 **voltou**, o LED acendeu
+  **vermelho** (layer A tocando, como a 2.1c previa), e a máquina seguiu tocando.
+- **Captura:** `capturas/2026-10-08-c3-step2-ligar.serlog`.
+
+**C3.3 — 08/10/2026, o TUNE do BD de volta ao original, OUVIDO e conferido no App:**
+- **O que saiu:** `sessao_c3.py tune 509`, um `01` no bloco 156, x 126, índice 962,
+  valor 509. O pacote é **idêntico byte a byte** ao primeiro que o App mandou em
+  `knob-bd-tune`.
+- **O que voltou:** `03`; releitura 1000 → 509.
+- **O Luan:** o BD ficou **mais grave**. Abrindo o App original, o TUNE apareceu **bem no
+  centro**.
+- **Captura:** `capturas/2026-10-08-c3-tune-509.serlog`.
+- A máquina voltou ao estado de antes das capturas: step 2 do BD aceso, como o Luan
+  deixou em `step-bd2`, e TUNE 509. Nada foi gravado com WRITE.
+
+**Com C3.1 + C3.2 o critério 3 do portão está cumprido:** lemos e escrevemos steps do
+pattern interno da TR-1000 pela serial, e a máquina obedece de ouvido. Faltam os critérios
+4–6 (três patterns, step atual tocando, WRITE + religar).
+
+**Revisão do PR #2 (08/10/2026) — o que ela mudou:**
+- **A prova do boot vazio tinha sido sobrescrita.** O MIDI Monitor ficou aberto e salvou
+  por cima três vezes, já ouvindo as portas virtuais do Logic. Restaurada do commit
+  original (idêntica byte a byte à de 00:47); o `TesteRevisaoPR2` trava o conteúdo.
+- **As capturas da C3 não se sobrescrevem mais.** Abrem com `"x"`, e uma segunda rodada no
+  mesmo dia ganha `-2`, `-3`… As versionadas foram conferidas: cada uma tem a escrita real.
+- **Toda saída passa por um portão** (`conferir_pacote`):
+  - escrita na lista;
+  - leitura só dentro do que o App leu;
+  - fora isso, só o aperto de mão.
+- **Escrita de dois slots interrompida no meio** diz o que já mudou e relê o estado.
+- **Robustez da conexão:**
+  - a entrada é limpa ao abrir;
+  - o enquadramento descarta "tamanhos" absurdos;
+  - a escrita na porta tem prazo;
+  - porta caindo vira erro tratado.
+
+A escrita da C3 passa só por `sessao_c3.py` → `conexao_serial.py`, com **lista de 3
+endereços** no código (`ESCRITAS_PERMITIDAS`: os dois slots do step 2 do BD na var A e o
+TUNE do sample do BD), os bytes mostrados e `sim` digitado antes de cada uma. Os pacotes
+são **byte a byte** iguais aos que o App mandou e a máquina aceitou (`TesteEscritaC3`).
 
 ### 3.2 Método: como descobrir coisas nesta máquina
 
@@ -254,7 +562,7 @@ Do barato para o caro (regra 8 do Método). O passo a passo para o Luan está no
 | sessão | ferramenta | responde |
 |---|---|---|
 | **C0** escuta passiva | `lp_tr1000.py escutar` | clock parada × tocando; o painel transmite nota/CC/PC?; a máquina empurra SysEx? |
-| **C1** sniff do App | MIDI Monitor (spy) + `tr1000_sysex.py resumo/fx/diff` | **model ID**, formato, **mapa de endereços e tamanhos** (boot), lista branca de RQ1, keep-alive, mute, WRITE, formato de bulk |
+| **C1** sniff do App | ~~MIDI Monitor~~ → **espião da serial** (`espiao.py` + `tr1000_serial.py`, 2.1b) + `tr1000_sysex.py resumo/fx/diff` | **model ID**, formato, **mapa de endereços e tamanhos** (boot), lista branca de RQ1, keep-alive, mute, WRITE, formato de bulk |
 | **C2** decodificar o pattern | `snap`/`snapdiff` (a portar do tr8s-grid), **só em endereços da lista branca** | layout do step, layer A/B, ALT, prob, sub, cycle, last step, máscara de variações, `cur_step`/`cur_vari` |
 | **C3** primeiras escritas | um DT1 por vez, ouvido | o portão (3.1) |
 
