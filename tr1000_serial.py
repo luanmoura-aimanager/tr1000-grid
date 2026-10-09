@@ -259,15 +259,25 @@ def versao_95(pac):
     return texto or None
 
 
-def leituras_de_bloco(pacs):
-    """Os pedidos 82 do App -> {(bloco, x, y): (indice, n)}."""
+def todas_as_leituras(pacs):
+    """Os pedidos 82 do App -> {(bloco, x, y): {(indice, n), ...}}: TODAS as
+    faixas pedidas em cada chave. Depois do boot o App rele parametros soltos
+    (n = 1) em blocos que ja leu inteiros; guardar so a ultima encolheria a
+    lista branca sem aviso (revisao do PR #3)."""
     out = {}
     for direcao, t, p in pacs:
         c = carga(p)
         if direcao == "TX" and c[:1] == bytes([LER_BLOCO]) and len(c) >= 11:
             bloco, x, y, indice = _endereco(c)
-            out[(bloco, x, y)] = (indice, struct.unpack_from("<H", c, 9)[0])
+            out.setdefault((bloco, x, y), set()).add(
+                (indice, struct.unpack_from("<H", c, 9)[0]))
     return out
+
+
+def leituras_de_bloco(pacs):
+    """{(bloco, x, y): (indice, n)} com a MAIOR faixa de cada chave - o bloco
+    inteiro, quando o App leu o bloco inteiro."""
+    return {k: max(fs, key=lambda f: f[1]) for k, fs in todas_as_leituras(pacs).items()}
 
 
 def escritas(pacs):
@@ -406,6 +416,13 @@ TRACKS_SERIAL = ["BD", "SD", "LT", "HT", "RS", "HC", "CH", "OH", "CC", "RC"]
 BLOCO_CAB_PATTERN, BLOCO_VAR0, BLOCOS_POR_VAR = 116, 117, 3
 
 
+def bloco_de_steps(v):
+    """O bloco dos steps da variacao v (0..7 = A..H, 8..11 = Fill 1..4). UM
+    lugar so: o layout dos blocos ainda e em parte deduzido, e tres copias da
+    conta divergiriam no dia da correcao (revisao do PR #3)."""
+    return BLOCO_VAR0 + 1 + BLOCOS_POR_VAR * v
+
+
 def ultimos_valores(pacs):
     """{(bloco, x, y): [u32...]} - a ultima resposta de cada um."""
     return {(b, x, y): v for _, b, x, y, _, v in valores_de_bloco(pacs)}
@@ -484,7 +501,7 @@ def linhas_do_pattern(vals, x=None):
         nome, bpm = nome_e_tempo(cab)
         out.append(f"pattern {nome!r}, tempo {bpm}")
     for v, nome_var in enumerate(VARIACOES_SERIAL):
-        bloco = BLOCO_VAR0 + 1 + BLOCOS_POR_VAR * v
+        bloco = bloco_de_steps(v)
         linhas = []
         for tr, nome_tr in enumerate(TRACKS_SERIAL):
             vv = vals.get((bloco, x, tr))
@@ -521,8 +538,8 @@ def cmd_diffblocos(a, b):
         mudou += 1
         print(f"bloco {k[0]:3d} x {k[1]} y {k[2]}:")
         for i, p, q in difs[:40]:
-            eh_steps = (BLOCO_VAR0 <= k[0] < BLOCO_VAR0 + BLOCOS_POR_VAR * len(VARIACOES_SERIAL)
-                        and (k[0] - BLOCO_VAR0) % BLOCOS_POR_VAR == 1 and i < 64)
+            eh_steps = (k[0] in {bloco_de_steps(v) for v in range(len(VARIACOES_SERIAL))}
+                        and i < 64)
             extra = f"  (step {i // 4 + 1}, slot {i % 4}{' = layer ' + 'AB'[i % 4] if i % 4 < 2 else ''})" \
                 if eh_steps else ""
             print(f"   [{i:3d}] {p:X} -> {q:X}{extra}")

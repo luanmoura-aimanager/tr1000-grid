@@ -13,7 +13,7 @@ qualquer byte sair:
   - escrita (01) fora de ESCRITAS_PERMITIDAS - o portao da fase 0,
     REFERENCIA 3.1. Ampliar essa lista e decisao do Luan, nao de codigo;
   - leitura (82) fora das faixas que o PROPRIO App leu no boot
-    (CAPTURA_DE_REFERENCIA) - a armadilha 1 do CLAUDE.md: na TR-8S, leitura
+    (CAPTURAS_DE_REFERENCIA) - a armadilha 1 do CLAUDE.md: na TR-8S, leitura
     em endereco invalido derrubava a porta;
   - qualquer outro pacote que nao seja o aperto de mao.
 
@@ -55,7 +55,9 @@ class ErroConexao(Exception):
 
 
 def leituras_do_app():
-    """{(bloco, x, y): (indice, n)} do boot do App - carregado uma vez."""
+    """{(bloco, x, y): {(indice, n), ...}} - TODAS as faixas que o App pediu,
+    somadas de todas as capturas de referencia (nenhuma apaga a outra).
+    Carregado uma vez."""
     global _leituras_do_app
     if _leituras_do_app is None:
         todas = {}
@@ -63,14 +65,24 @@ def leituras_do_app():
             if not os.path.exists(cap):
                 raise ErroConexao(f"sem a captura de referencia {cap}: "
                                   "nenhuma leitura e permitida sem ela")
-            todas.update(ts.leituras_de_bloco(ts.pacotes(ts.ler_serlog(cap))))
+            for k, fs in ts.todas_as_leituras(ts.pacotes(ts.ler_serlog(cap))).items():
+                todas.setdefault(k, set()).update(fs)
         _leituras_do_app = todas
     return _leituras_do_app
 
 
+def faixa_do_bloco(bloco, x, y):
+    """(indice, n) da maior faixa que o App leu nessa chave - o bloco inteiro.
+    PermissionError se o App nunca leu a chave: o mesmo erro do portao."""
+    fs = leituras_do_app().get((bloco, x, y))
+    if not fs:
+        raise PermissionError(f"o App nunca leu {(bloco, x, y)} numa captura de referencia")
+    return max(fs, key=lambda f: f[1])
+
+
 def leitura_permitida(bloco, x, y, indice, n):
-    faixa = leituras_do_app().get((bloco, x, y))
-    return faixa is not None and faixa[0] <= indice and indice + n <= faixa[0] + faixa[1]
+    return any(i <= indice and indice + n <= i + m
+               for i, m in leituras_do_app().get((bloco, x, y), ()))
 
 
 def conferir_pacote(pac):

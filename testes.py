@@ -404,11 +404,16 @@ class _MaquinaFalsa:
         bloco, x, y, i = st.unpack_from("<HHHH", c, 1)
         if c[0] == tr1000_serial.LER_BLOCO:
             n = st.unpack_from("<H", c, 9)[0]
+            blocos = getattr(self, "blocos", {})
             if n == 1 and (bloco, x, y, i) in self.valores:
                 vs = [self.valores[(bloco, x, y, i)]]
-            else:
-                vs = list(getattr(self, "blocos", {}).get((bloco, x, y), [0] * n))[:n]
+            elif (bloco, x, y) in blocos or getattr(self, "zeros_ok", False):
+                vs = list(blocos.get((bloco, x, y), [0] * n))[:n]
                 vs += [0] * (n - len(vs))
+            else:
+                # endereco que o teste nao previu: falha alto, nao responde
+                # zero - zero pareceria "step desligado" (revisao do PR #3)
+                raise KeyError((bloco, x, y, i, n))
             corpo = bytes([2]) + c[1:9] + st.pack("<H", n) + st.pack(f"<{n}I", *vs)
             self.saida += bytes.fromhex("15 08 F0 00 68 D7 82 86 01 00 00 00") + \
                 st.pack("<I", len(corpo)) + corpo
@@ -636,6 +641,37 @@ class TesteRevisaoPR2(unittest.TestCase):
                 c.aperto()
 
 
+class TesteRevisaoPR3(unittest.TestCase):
+    def test_faixas_somam_e_nao_encolhem(self):
+        # o App rele parametros soltos (n = 1) em blocos que ja leu inteiros
+        pacs = []
+        for i, n in ((112, 292), (130, 1)):
+            c = tr1000_serial.carga_ler(3, 0, 0, i, n)
+            pacs.append(("TX", 0, tr1000_serial.pacote_dados(tr1000_serial.CAB_LEITURA, c)))
+        todas = tr1000_serial.todas_as_leituras(pacs)
+        self.assertEqual(todas[(3, 0, 0)], {(112, 292), (130, 1)})
+        self.assertEqual(tr1000_serial.leituras_de_bloco(pacs)[(3, 0, 0)], (112, 292))
+
+    def test_bloco_3_inteiro_continua_lido(self):
+        self.assertEqual(conexao_serial.faixa_do_bloco(3, 0, 0), (112, 292))
+        self.assertTrue(conexao_serial.leitura_permitida(3, 0, 0, 112, 292))
+
+    def test_chave_nunca_lida_e_permission_error(self):
+        with self.assertRaises(PermissionError):
+            conexao_serial.faixa_do_bloco(118, 50, 0)
+
+    def test_segundos_invalido_nao_quebra(self):
+        import io, contextlib, sessao_c4
+        with contextlib.redirect_stdout(io.StringIO()) as buf:
+            self.assertEqual(sessao_c4.main(["estado", "--segundos"]), 1)
+            self.assertEqual(sessao_c4.main(["estado", "--segundos", "8s"]), 1)
+        self.assertIn("precisa de um numero", buf.getvalue())
+
+    def test_bloco_de_steps_um_lugar_so(self):
+        self.assertEqual([tr1000_serial.bloco_de_steps(v) for v in (0, 1, 11)],
+                         [118, 121, 151])
+
+
 class TesteSessaoC4(unittest.TestCase):
     """Leituras ao vivo dos criterios 4 e 5: so le, e le o pattern inteiro."""
 
@@ -665,6 +701,7 @@ class TesteSessaoC4(unittest.TestCase):
         b3 = [0] * 292
         b3[2], b3[21], b3[36] = 1, 2, 12200       # 1-02, 122 BPM (medido 08/10)
         m.blocos = {(3, 0, 0): b3, (116, 1, 0): nome, (118, 1, 0): bd}
+        m.zeros_ok = True                 # os outros 119 blocos: vazios
         saida = self._com_maquina(m, sessao_c4.cmd_pattern)
         self.assertIn("pattern 1-02 -> x 1, tempo 122.0", saida)
         self.assertIn("pattern 'Dub Techno', tempo 128.0", saida)

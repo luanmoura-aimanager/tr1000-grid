@@ -5,17 +5,17 @@ sessao_c4.py - leituras ao vivo para os criterios 4 e 5 do portao (REFERENCIA 3.
     python3 sessao_c4.py pattern                 # le o pattern atual inteiro e
                                                  # mostra a grade (12 bancos x 10 tracks)
     python3 sessao_c4.py estado [--segundos 8]   # le os blocos de sistema/performance
-                                                 # ~10x por segundo e mostra o que MUDA
+                                                 # ~17x por segundo e mostra o que MUDA
 
 SO LE. Nada aqui escreve: as leituras passam pelo mesmo portao de saida da
 conexao_serial (so dentro das faixas que o proprio App leu no boot), e escrita
 nao existe neste arquivo. O TR-1000 App (original e copia) tem que estar
 FECHADO.
 
-Criterio 4: o bloco 118+3v e o pattern SELECIONADO? Rode `pattern`, troque de
-pattern no painel, rode de novo - se a grade e o nome acompanharem, o
-enderecamento nao depende do numero do pattern (diferente da TR-8S, em que o
-pattern entrava no endereco).
+Criterio 4 (cumprido em 08/10/2026): o pattern entra no endereco, no x dos
+blocos de pattern, e o x e o indice global do bloco 3 [2] (REFERENCIA 2.1c).
+`pattern` le o bloco 3, calcula o x e le o pattern inteiro - so se o App ja
+leu aquele x numa captura de referencia.
 
 Criterio 5: o step atual. Com a maquina TOCANDO, `estado` mostra quais valores
 mudam entre leituras; o que andar em ciclo 0..15 (ou 1..16) no ritmo do
@@ -33,8 +33,16 @@ BLOCOS_DE_ESTADO = [3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
 
 
 def _ler_bloco(c, bloco, x=0, y=0):
-    indice, n = cs.leituras_do_app()[(bloco, x, y)]
+    indice, n = cs.faixa_do_bloco(bloco, x, y)     # PermissionError se nunca lido
     return c.ler(bloco, x, y, indice, n)
+
+
+def chaves_do_pattern(x):
+    """As 121 chaves (bloco, x, y) que ler_pattern le."""
+    ks = [(ts.BLOCO_CAB_PATTERN, x, 0)]
+    for v in range(len(ts.VARIACOES_SERIAL)):
+        ks += [(ts.bloco_de_steps(v), x, tr) for tr in range(len(ts.TRACKS_SERIAL))]
+    return ks
 
 
 def pattern_atual(c):
@@ -51,7 +59,7 @@ def ler_pattern(c, x):
     x numa captura de referencia."""
     vals = {(ts.BLOCO_CAB_PATTERN, x, 0): _ler_bloco(c, ts.BLOCO_CAB_PATTERN, x)}
     for v in range(len(ts.VARIACOES_SERIAL)):
-        bloco = ts.BLOCO_VAR0 + 1 + ts.BLOCOS_POR_VAR * v
+        bloco = ts.bloco_de_steps(v)
         for tr in range(len(ts.TRACKS_SERIAL)):
             vals[(bloco, x, tr)] = _ler_bloco(c, bloco, x, tr)
     return vals
@@ -63,7 +71,9 @@ def cmd_pattern():
         nome, x, tempo = pattern_atual(c)
         print(f"selecionado no painel (bloco 3): pattern {nome} -> x {x}, "
               f"tempo {tempo}")
-        if (ts.BLOCO_CAB_PATTERN, x, 0) not in cs.leituras_do_app():
+        # TODAS as chaves antes de ler qualquer uma: ou o pattern sai inteiro,
+        # ou nada sai (revisao do PR #3)
+        if any(k not in cs.leituras_do_app() for k in chaves_do_pattern(x)):
             print(f"(!) o App ainda nao leu o pattern {nome} (x {x}) em nenhuma captura "
                   f"de referencia - capture o boot dele com o espiao antes "
                   f"(REFERENCIA 2.1c). Nada lido.")
@@ -110,7 +120,7 @@ def cmd_estado(segundos):
     m = mudancas(amostras)
     print(f"\n{len(amostras)} leituras completas; {len(m)} valores mudaram\n")
     for (b, i), serie in sorted(m.items()):
-        idx = cs.leituras_do_app()[(b, 0, 0)][0] + i
+        idx = cs.faixa_do_bloco(b, 0, 0)[0] + i
         valores = " ".join(f"{v:X}" for _, v in serie[:24])
         print(f"   bloco {b:3d} [{i:3d}] (indice {idx:4d}): {len(serie) - 1:3d} trocas  "
               f"{valores}{' ...' if len(serie) > 24 else ''}")
@@ -122,9 +132,15 @@ def main(a):
         if a[:1] == ["pattern"]:
             cmd_pattern(); return 0
         if a[:1] == ["estado"]:
-            seg = float(a[a.index("--segundos") + 1]) if "--segundos" in a else 8.0
+            seg = 8.0
+            if "--segundos" in a:
+                try:
+                    seg = float(a[a.index("--segundos") + 1])
+                except (IndexError, ValueError):
+                    print("(!) --segundos precisa de um numero, ex.: --segundos 8")
+                    return 1
             cmd_estado(seg); return 0
-    except cs.ErroConexao as e:
+    except (cs.ErroConexao, PermissionError) as e:
         print(f"(!) {e}")
         return 1
     print(__doc__)

@@ -45,8 +45,9 @@ essa lista é decisão dele, não detalhe de código.
   própria**, com ou sem `--sim`: ele entrega o comando, e quem roda é o Luan.
 - **Toda saída da serial passa por `conexao_serial.conferir_pacote`.**
   - Escrita só na lista.
-  - Leitura (`82`) só dentro das faixas que o **próprio App** leu no boot da C1-S0 (a
-    armadilha 1, versão serial).
+  - Leitura (`82`) só dentro das faixas que o **próprio App** leu nas capturas de
+    referência (`CAPTURAS_DE_REFERENCIA`: o boot da C1-S0 e os boots com o 1-02 e o 2-01
+    selecionados) — a armadilha 1, versão serial.
   - Fora isso, só o aperto de mão.
 
 ## As armadilhas da TR-8S, a remedir aqui
