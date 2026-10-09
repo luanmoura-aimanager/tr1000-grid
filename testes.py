@@ -1041,6 +1041,11 @@ class TesteControladorasMapear(unittest.TestCase):
         self.assertIsNone(controladoras.sequencia(knobs, ids))
         self.assertIsNone(controladoras.sequencia(knobs, ids[:3]))
 
+    def test_resumo_do_giro(self):
+        self.assertIn("faixa inteira", controladoras.resumo_do_giro([60, 0, 127, 30]))
+        self.assertNotIn("faixa inteira", controladoras.resumo_do_giro([10, 90]))
+        self.assertEqual(controladoras.resumo_do_giro([]), "nada")
+
     def test_mapa_ida_e_volta(self):
         with tempfile.TemporaryDirectory() as tmp:
             c = os.path.join(tmp, "m", "controladoras.json")

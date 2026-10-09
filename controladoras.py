@@ -14,9 +14,11 @@ Os rotulos vem das fotos das placas que o Luan mandou em 09/10/2026:
           MFX 1-7) = 24
   CM-MC50 10 tracks x GAIN, PAN, RVB SND, DLY SND, LFO DTH = 50
 
-O mapear anda na ordem das placas (MC-24 secao por secao; CM-MC50 linha por
-linha, da esquerda para a direita), aceita retomar de onde parou (Ctrl+C salva
-o que ja foi feito) e recusa um CC que ja esta mapeado em outro knob.
+O mapear anda na ordem das placas (MC-24 secao por secao, coluna da esquerda
+e da direita alternando como na placa; CM-MC50 linha por linha, da esquerda
+para a direita). Para cada knob: girar ate o fim anti-horario, depois todo no
+horario, e apertar Enter. Retoma de onde parou (Ctrl+C salva) e recusa um CC
+que ja esta mapeado em outro knob.
 """
 import json, os, sys, time
 
@@ -44,10 +46,9 @@ ROTULOS_MC50 = [(f"{t}.{k}", f"{t.upper()} {r}")
 ROTULOS = {PORTA_MC24: ROTULOS_MC24, PORTA_MC50: ROTULOS_MC50}
 
 # Movimento "de verdade" de um knob: pelo menos MIN_MSGS mensagens no mesmo CC.
-# O knob so e dado por mapeado quando PARA de mexer por SILENCIO segundos - o
-# Luan gira de ponta a ponta e solta. A primeira versao seguia 0,8 s depois do
-# PRIMEIRO movimento e pedia o proximo knob no meio do giro (09/10/2026).
-MIN_MSGS, SILENCIO, GIRO_MAX = 3, 1.0, 20.0     # s
+# O knob so e dado por mapeado quando o Luan aperta Enter (a 1a versao seguia
+# 0,8 s depois do primeiro movimento, no meio do giro - 09/10/2026).
+MIN_MSGS = 3
 
 
 # ─────────────────────────────────────────────────────────────
@@ -139,33 +140,37 @@ def _eventos(abertas):
     return out
 
 
-def _esperar_knob(abertas, ja_mapeados):
-    """Espera um movimento sustentado num CC ainda livre. -> (chave, valores)"""
+def _linha_digitada():
+    """Uma linha do teclado, se ja houver (sem bloquear), ou None."""
+    import select
+    r, _, _ = select.select([sys.stdin], [], [], 0)
+    return sys.stdin.readline().strip().lower() if r else None
+
+
+def _girar_ate_enter(abertas):
+    """Junta tudo que as controladoras mandarem ate o Luan apertar Enter.
+    -> (eventos, texto digitado). O Luan gira o knob ate o fim anti-horario,
+    depois todo no horario, e so entao aperta Enter (pedido de 09/10/2026: os
+    knobs estavam em posicoes aleatorias, e o fim da faixa e o que prova que o
+    knob certo foi medido inteiro)."""
     for p in abertas.values():
         p.iter_pending()                                  # descarta o velho
+    evs = []
     while True:
-        evs = []
-        while not evs:
-            evs = _eventos(abertas)
-            time.sleep(0.005)
-        livres = [e for e in evs if (e[0], e[1], e[2]) not in ja_mapeados]
-        if not livres:
-            print("   (esse CC ja esta mapeado em outro knob - gire o knob pedido)")
-            time.sleep(0.6)
-            for p in abertas.values():
-                p.iter_pending()
-            continue
-        # junta ate o knob ficar parado SILENCIO s (ou GIRO_MAX no total)
-        inicio = ultimo = time.time()
-        while time.time() - ultimo < SILENCIO and time.time() - inicio < GIRO_MAX:
-            novos = _eventos(abertas)
-            if novos:
-                evs += novos
-                ultimo = time.time()
-            time.sleep(0.005)
-        k = chave_dominante(evs, ja_mapeados)
-        if k:
-            return k, [v for (po, ca, cc, v) in evs if (po, ca, cc) == k]
+        evs += _eventos(abertas)
+        txt = _linha_digitada()
+        if txt is not None:
+            return evs, txt
+        time.sleep(0.005)
+
+
+def resumo_do_giro(valores):
+    """Texto curto da faixa vista: o fim de faixa (0 e 127) e o que confirma."""
+    if not valores:
+        return "nada"
+    lo, hi = min(valores), max(valores)
+    ok = " (faixa inteira)" if (lo, hi) == (0, 127) else ""
+    return f"{len(valores)} mensagens, de {lo} a {hi}{ok}"
 
 
 def cmd_mapear():
@@ -175,42 +180,41 @@ def cmd_mapear():
     mapa = carregar_mapa()
     knobs = mapa["knobs"]
     print(f"mapa: {os.path.relpath(MAPA, AQUI)} ({len(knobs)} knobs ja mapeados)")
-    print("Gire cada knob pedido de uma ponta a outra e SOLTE: quando ele ficar parado")
-    print("1 segundo, passa para o proximo. Ctrl+C salva e sai (depois retoma daqui).\n")
+    print("Para cada knob: gire ate o FIM anti-horario, depois TODO no horario, e")
+    print("aperte Enter.  [Enter] confirma   [r Enter] refaz   [p Enter] pula")
+    print("Ctrl+C salva e sai (depois retoma daqui).\n")
     try:
         for porta, rotulos in ROTULOS.items():
             if porta not in abertas:
                 continue
-            ids = [i for i, _ in rotulos]
-            for n, (i, rotulo) in enumerate(rotulos):
+            for i, rotulo in rotulos:
                 if i in knobs:
                     continue
-                seq = sequencia(knobs, ids[:n])
-                if seq and seq[0] == porta and input(
-                        f"   os ultimos 4 vieram em CC seguidos; preencher o resto do "
-                        f"{porta} por sequencia (cada um fica como PALPITE)? [s/n] "
-                        ).strip().lower().startswith("s"):
-                    _, canal, cc = seq
-                    for j, _r in rotulos[n:]:
-                        if j not in knobs:
-                            knobs[j] = dict(porta=porta, canal=canal, cc=cc,
-                                            tipo=knobs[ids[n - 1]]["tipo"], palpite=True)
-                            cc += 1
-                    salvar_mapa(mapa)
-                    print("   preenchido. Confira com 'escutar' girando alguns.")
-                    break
-                print(f">> gire  {porta}  ·  {rotulo}")
-                ocupados = set(indice_reverso(mapa))
                 while True:
-                    (po, ca, cc), valores = _esperar_knob(abertas, ocupados)
-                    if po == porta:
+                    print(f">> {porta}  ·  {rotulo}   (gire e aperte Enter)")
+                    evs, txt = _girar_ate_enter(abertas)
+                    if txt == "p":
+                        print("   pulado")
                         break
-                    print(f"   (!) veio do {po}, nao do {porta} - gire o knob certo")
-                tipo = detectar_tipo(valores)
-                knobs[i] = dict(porta=po, canal=ca, cc=cc, tipo=tipo, palpite=False)
-                salvar_mapa(mapa)
-                print(f"   {rotulo}: canal {ca + 1}, CC {cc}, {tipo}")
-                time.sleep(0.4)
+                    if txt == "r":
+                        continue
+                    ocupados = set(indice_reverso(mapa))
+                    k = chave_dominante([e for e in evs if e[0] == porta], ocupados)
+                    if k is None:
+                        outros = chave_dominante(evs)
+                        print("   (!) nao vi esse knob mexer" +
+                              (f" (veio movimento do {outros[0]}, CC {outros[2]} - "
+                               f"ja mapeado ou da outra controladora)" if outros else "")
+                              + " - gire de novo")
+                        continue
+                    valores = [v for (po, ca, cc, v) in evs if (po, ca, cc) == k]
+                    tipo = detectar_tipo(valores)
+                    knobs[i] = dict(porta=k[0], canal=k[1], cc=k[2], tipo=tipo,
+                                    palpite=False, faixa=[min(valores), max(valores)])
+                    salvar_mapa(mapa)
+                    print(f"   {rotulo}: canal {k[1] + 1}, CC {k[2]}, {tipo}, "
+                          f"{resumo_do_giro(valores)}")
+                    break
     except KeyboardInterrupt:
         print("\ninterrompido - o que foi mapeado esta salvo.")
     finally:
