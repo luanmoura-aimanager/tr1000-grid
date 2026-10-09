@@ -28,6 +28,7 @@ import catalogo_app
 import espiao
 import conexao_serial
 import motor
+import controladoras
 
 # Mensagem real, capturada do site ARIA falando com uma TR-8S (tr8s-grid
 # REFERENCIA 2.9): "pattern atual -> 127". E o unico SysEx Roland medido que
@@ -1007,6 +1008,48 @@ class TesteMotor(unittest.TestCase):
                              mido.Message("control_change", control=95, value=127)]
         m._ler_pads()
         self.assertEqual((m.variacao, m.vel_idx, m.modo_layer), (1, 7, "B"))
+
+
+class TesteControladorasMapear(unittest.TestCase):
+    def test_rotulos_das_placas(self):
+        # fotos de 09/10/2026: 24 + 50 knobs, sem id repetido
+        self.assertEqual(len(controladoras.ROTULOS_MC24), 24)
+        self.assertEqual(len(controladoras.ROTULOS_MC50), 50)
+        ids = [i for rs in controladoras.ROTULOS.values() for i, _ in rs]
+        self.assertEqual(len(ids), len(set(ids)))
+        self.assertEqual(controladoras.ROTULOS_MC50[0], ("bd.gain", "BD GAIN"))
+        self.assertEqual(controladoras.ROTULOS_MC50[-1], ("rc.lfo", "RC LFO DTH"))
+
+    def test_tipo_do_knob(self):
+        d = controladoras.detectar_tipo
+        self.assertEqual(d(range(30, 90)), "absoluto")
+        self.assertEqual(d([1, 1, 2, 1, 127, 127, 126]), "relativo")
+        self.assertEqual(d([65, 65, 66, 65, 63, 63, 62]), "relativo")
+        self.assertEqual(d([127, 127, 127]), "absoluto")       # potenciometro no fim
+
+    def test_chave_dominante_e_recusa_o_ja_mapeado(self):
+        evs = [("MC-24", 0, 20, v) for v in (10, 11, 12)] + [("MC-24", 0, 21, 5)]
+        self.assertEqual(controladoras.chave_dominante(evs), ("MC-24", 0, 20))
+        self.assertIsNone(controladoras.chave_dominante(evs, {("MC-24", 0, 20)}))
+        self.assertIsNone(controladoras.chave_dominante(evs[:2]))   # pouco: ruido
+
+    def test_sequencia_oferece_o_proximo_cc(self):
+        ids = ["a", "b", "c", "d"]
+        knobs = {i: dict(porta="MC-24", canal=0, cc=20 + n) for n, i in enumerate(ids)}
+        self.assertEqual(controladoras.sequencia(knobs, ids), ("MC-24", 0, 24))
+        knobs["d"]["cc"] = 40
+        self.assertIsNone(controladoras.sequencia(knobs, ids))
+        self.assertIsNone(controladoras.sequencia(knobs, ids[:3]))
+
+    def test_mapa_ida_e_volta(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            c = os.path.join(tmp, "m", "controladoras.json")
+            m = controladoras.carregar_mapa(c)
+            m["knobs"]["bd.gain"] = dict(porta="CM-MC50", canal=0, cc=1,
+                                         tipo="absoluto", palpite=False)
+            controladoras.salvar_mapa(m, c)
+            m2 = controladoras.carregar_mapa(c)
+        self.assertEqual(controladoras.indice_reverso(m2), {("CM-MC50", 0, 1): "bd.gain"})
 
 
 def _relogio_rapido(passo=0.3):
