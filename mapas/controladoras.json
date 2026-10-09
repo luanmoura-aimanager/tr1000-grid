@@ -1,0 +1,819 @@
+{
+ "knobs": {
+  "bd.dly": {
+   "canal": 2,
+   "cc": 20,
+   "faixa": [
+    0,
+    127
+   ],
+   "palpite": false,
+   "porta": "CM-MC50",
+   "tipo": "absoluto"
+  },
+  "bd.gain": {
+   "canal": 2,
+   "cc": 3,
+   "faixa": [
+    0,
+    125
+   ],
+   "palpite": false,
+   "porta": "CM-MC50",
+   "tipo": "absoluto"
+  },
+  "bd.lfo": {
+   "canal": 2,
+   "cc": 21,
+   "faixa": [
+    0,
+    127
+   ],
+   "palpite": false,
+   "porta": "CM-MC50",
+   "tipo": "absoluto"
+  },
+  "bd.pan": {
+   "canal": 2,
+   "cc": 9,
+   "faixa": [
+    0,
+    125
+   ],
+   "palpite": false,
+   "porta": "CM-MC50",
+   "tipo": "absoluto"
+  },
+  "bd.rvb": {
+   "canal": 2,
+   "cc": 14,
+   "faixa": [
+    0,
+    127
+   ],
+   "palpite": false,
+   "porta": "CM-MC50",
+   "tipo": "absoluto"
+  },
+  "cc.dly": {
+   "canal": 2,
+   "cc": 106,
+   "faixa": [
+    0,
+    125
+   ],
+   "palpite": false,
+   "porta": "CM-MC50",
+   "tipo": "absoluto"
+  },
+  "cc.gain": {
+   "canal": 2,
+   "cc": 103,
+   "faixa": [
+    0,
+    127
+   ],
+   "palpite": false,
+   "porta": "CM-MC50",
+   "tipo": "absoluto"
+  },
+  "cc.lfo": {
+   "canal": 2,
+   "cc": 107,
+   "faixa": [
+    0,
+    125
+   ],
+   "palpite": false,
+   "porta": "CM-MC50",
+   "tipo": "absoluto"
+  },
+  "cc.pan": {
+   "canal": 2,
+   "cc": 104,
+   "faixa": [
+    0,
+    127
+   ],
+   "palpite": false,
+   "porta": "CM-MC50",
+   "tipo": "absoluto"
+  },
+  "cc.rvb": {
+   "canal": 2,
+   "cc": 105,
+   "faixa": [
+    0,
+    125
+   ],
+   "palpite": false,
+   "porta": "CM-MC50",
+   "tipo": "absoluto"
+  },
+  "ch.dly": {
+   "canal": 2,
+   "cc": 39,
+   "faixa": [
+    0,
+    127
+   ],
+   "palpite": false,
+   "porta": "CM-MC50",
+   "tipo": "absoluto"
+  },
+  "ch.gain": {
+   "canal": 2,
+   "cc": 36,
+   "faixa": [
+    0,
+    127
+   ],
+   "palpite": false,
+   "porta": "CM-MC50",
+   "tipo": "absoluto"
+  },
+  "ch.lfo": {
+   "canal": 2,
+   "cc": 40,
+   "faixa": [
+    0,
+    127
+   ],
+   "palpite": false,
+   "porta": "CM-MC50",
+   "tipo": "absoluto"
+  },
+  "ch.pan": {
+   "canal": 2,
+   "cc": 37,
+   "faixa": [
+    0,
+    127
+   ],
+   "palpite": false,
+   "porta": "CM-MC50",
+   "tipo": "absoluto"
+  },
+  "ch.rvb": {
+   "canal": 2,
+   "cc": 38,
+   "faixa": [
+    0,
+    125
+   ],
+   "palpite": false,
+   "porta": "CM-MC50",
+   "tipo": "absoluto"
+  },
+  "delay.p1": {
+   "canal": 1,
+   "cc": 26,
+   "faixa": [
+    0,
+    127
+   ],
+   "palpite": false,
+   "porta": "MC-24",
+   "tipo": "absoluto"
+  },
+  "delay.p2": {
+   "canal": 1,
+   "cc": 15,
+   "faixa": [
+    0,
+    125
+   ],
+   "palpite": false,
+   "porta": "MC-24",
+   "tipo": "absoluto"
+  },
+  "delay.p3": {
+   "canal": 1,
+   "cc": 27,
+   "faixa": [
+    0,
+    125
+   ],
+   "palpite": false,
+   "porta": "MC-24",
+   "tipo": "absoluto"
+  },
+  "delay.p4": {
+   "canal": 1,
+   "cc": 50,
+   "faixa": [
+    0,
+    125
+   ],
+   "palpite": false,
+   "porta": "MC-24",
+   "tipo": "absoluto"
+  },
+  "delay.p5": {
+   "canal": 1,
+   "cc": 28,
+   "faixa": [
+    0,
+    127
+   ],
+   "palpite": false,
+   "porta": "MC-24",
+   "tipo": "absoluto"
+  },
+  "delay.p6": {
+   "canal": 1,
+   "cc": 51,
+   "faixa": [
+    0,
+    125
+   ],
+   "palpite": false,
+   "porta": "MC-24",
+   "tipo": "absoluto"
+  },
+  "delay.rvb_send": {
+   "canal": 1,
+   "cc": 29,
+   "faixa": [
+    0,
+    125
+   ],
+   "palpite": false,
+   "porta": "MC-24",
+   "tipo": "absoluto"
+  },
+  "delay.type": {
+   "canal": 1,
+   "cc": 25,
+   "faixa": [
+    0,
+    125
+   ],
+   "palpite": false,
+   "porta": "MC-24",
+   "tipo": "absoluto"
+  },
+  "hc.dly": {
+   "canal": 2,
+   "cc": 34,
+   "faixa": [
+    0,
+    125
+   ],
+   "palpite": false,
+   "porta": "CM-MC50",
+   "tipo": "absoluto"
+  },
+  "hc.gain": {
+   "canal": 2,
+   "cc": 31,
+   "faixa": [
+    0,
+    125
+   ],
+   "palpite": false,
+   "porta": "CM-MC50",
+   "tipo": "absoluto"
+  },
+  "hc.lfo": {
+   "canal": 2,
+   "cc": 35,
+   "faixa": [
+    0,
+    127
+   ],
+   "palpite": false,
+   "porta": "CM-MC50",
+   "tipo": "absoluto"
+  },
+  "hc.pan": {
+   "canal": 2,
+   "cc": 32,
+   "faixa": [
+    0,
+    127
+   ],
+   "palpite": false,
+   "porta": "CM-MC50",
+   "tipo": "absoluto"
+  },
+  "hc.rvb": {
+   "canal": 2,
+   "cc": 33,
+   "faixa": [
+    0,
+    125
+   ],
+   "palpite": false,
+   "porta": "CM-MC50",
+   "tipo": "absoluto"
+  },
+  "ht.dly": {
+   "canal": 2,
+   "cc": 54,
+   "faixa": [
+    0,
+    125
+   ],
+   "palpite": false,
+   "porta": "CM-MC50",
+   "tipo": "absoluto"
+  },
+  "ht.gain": {
+   "canal": 2,
+   "cc": 51,
+   "faixa": [
+    0,
+    127
+   ],
+   "palpite": false,
+   "porta": "CM-MC50",
+   "tipo": "absoluto"
+  },
+  "ht.lfo": {
+   "canal": 2,
+   "cc": 55,
+   "faixa": [
+    0,
+    127
+   ],
+   "palpite": false,
+   "porta": "CM-MC50",
+   "tipo": "absoluto"
+  },
+  "ht.pan": {
+   "canal": 2,
+   "cc": 52,
+   "faixa": [
+    0,
+    125
+   ],
+   "palpite": false,
+   "porta": "CM-MC50",
+   "tipo": "absoluto"
+  },
+  "ht.rvb": {
+   "canal": 2,
+   "cc": 53,
+   "faixa": [
+    0,
+    127
+   ],
+   "palpite": false,
+   "porta": "CM-MC50",
+   "tipo": "absoluto"
+  },
+  "lfo.rate": {
+   "canal": 1,
+   "cc": 20,
+   "faixa": [
+    0,
+    125
+   ],
+   "palpite": false,
+   "porta": "MC-24",
+   "tipo": "absoluto"
+  },
+  "lfo.waveform": {
+   "canal": 1,
+   "cc": 24,
+   "faixa": [
+    0,
+    125
+   ],
+   "palpite": false,
+   "porta": "MC-24",
+   "tipo": "absoluto"
+  },
+  "lt.dly": {
+   "canal": 2,
+   "cc": 25,
+   "faixa": [
+    0,
+    125
+   ],
+   "palpite": false,
+   "porta": "CM-MC50",
+   "tipo": "absoluto"
+  },
+  "lt.gain": {
+   "canal": 2,
+   "cc": 22,
+   "faixa": [
+    0,
+    125
+   ],
+   "palpite": false,
+   "porta": "CM-MC50",
+   "tipo": "absoluto"
+  },
+  "lt.lfo": {
+   "canal": 2,
+   "cc": 26,
+   "faixa": [
+    0,
+    125
+   ],
+   "palpite": false,
+   "porta": "CM-MC50",
+   "tipo": "absoluto"
+  },
+  "lt.pan": {
+   "canal": 2,
+   "cc": 23,
+   "faixa": [
+    0,
+    125
+   ],
+   "palpite": false,
+   "porta": "CM-MC50",
+   "tipo": "absoluto"
+  },
+  "lt.rvb": {
+   "canal": 2,
+   "cc": 24,
+   "faixa": [
+    0,
+    127
+   ],
+   "palpite": false,
+   "porta": "CM-MC50",
+   "tipo": "absoluto"
+  },
+  "mfx.p1": {
+   "canal": 1,
+   "cc": 56,
+   "faixa": [
+    0,
+    125
+   ],
+   "palpite": false,
+   "porta": "MC-24",
+   "tipo": "absoluto"
+  },
+  "mfx.p2": {
+   "canal": 1,
+   "cc": 53,
+   "faixa": [
+    0,
+    125
+   ],
+   "palpite": false,
+   "porta": "MC-24",
+   "tipo": "absoluto"
+  },
+  "mfx.p3": {
+   "canal": 1,
+   "cc": 57,
+   "faixa": [
+    0,
+    125
+   ],
+   "palpite": false,
+   "porta": "MC-24",
+   "tipo": "absoluto"
+  },
+  "mfx.p4": {
+   "canal": 1,
+   "cc": 54,
+   "faixa": [
+    0,
+    125
+   ],
+   "palpite": false,
+   "porta": "MC-24",
+   "tipo": "absoluto"
+  },
+  "mfx.p5": {
+   "canal": 1,
+   "cc": 58,
+   "faixa": [
+    0,
+    125
+   ],
+   "palpite": false,
+   "porta": "MC-24",
+   "tipo": "absoluto"
+  },
+  "mfx.p6": {
+   "canal": 1,
+   "cc": 55,
+   "faixa": [
+    0,
+    125
+   ],
+   "palpite": false,
+   "porta": "MC-24",
+   "tipo": "absoluto"
+  },
+  "mfx.p7": {
+   "canal": 1,
+   "cc": 59,
+   "faixa": [
+    0,
+    125
+   ],
+   "palpite": false,
+   "porta": "MC-24",
+   "tipo": "absoluto"
+  },
+  "mfx.type": {
+   "canal": 1,
+   "cc": 52,
+   "faixa": [
+    0,
+    125
+   ],
+   "palpite": false,
+   "porta": "MC-24",
+   "tipo": "absoluto"
+  },
+  "oh.dly": {
+   "canal": 2,
+   "cc": 101,
+   "faixa": [
+    0,
+    125
+   ],
+   "palpite": false,
+   "porta": "CM-MC50",
+   "tipo": "absoluto"
+  },
+  "oh.gain": {
+   "canal": 2,
+   "cc": 41,
+   "faixa": [
+    0,
+    127
+   ],
+   "palpite": false,
+   "porta": "CM-MC50",
+   "tipo": "absoluto"
+  },
+  "oh.lfo": {
+   "canal": 2,
+   "cc": 102,
+   "faixa": [
+    0,
+    125
+   ],
+   "palpite": false,
+   "porta": "CM-MC50",
+   "tipo": "absoluto"
+  },
+  "oh.pan": {
+   "canal": 2,
+   "cc": 42,
+   "faixa": [
+    0,
+    125
+   ],
+   "palpite": false,
+   "porta": "CM-MC50",
+   "tipo": "absoluto"
+  },
+  "oh.rvb": {
+   "canal": 2,
+   "cc": 43,
+   "faixa": [
+    0,
+    125
+   ],
+   "palpite": false,
+   "porta": "CM-MC50",
+   "tipo": "absoluto"
+  },
+  "rc.dly": {
+   "canal": 2,
+   "cc": 111,
+   "faixa": [
+    0,
+    127
+   ],
+   "palpite": false,
+   "porta": "CM-MC50",
+   "tipo": "absoluto"
+  },
+  "rc.gain": {
+   "canal": 2,
+   "cc": 108,
+   "faixa": [
+    0,
+    125
+   ],
+   "palpite": false,
+   "porta": "CM-MC50",
+   "tipo": "absoluto"
+  },
+  "rc.lfo": {
+   "canal": 2,
+   "cc": 112,
+   "faixa": [
+    0,
+    125
+   ],
+   "palpite": false,
+   "porta": "CM-MC50",
+   "tipo": "absoluto"
+  },
+  "rc.pan": {
+   "canal": 2,
+   "cc": 110,
+   "faixa": [
+    0,
+    125
+   ],
+   "palpite": false,
+   "porta": "CM-MC50",
+   "tipo": "absoluto"
+  },
+  "rc.rvb": {
+   "canal": 2,
+   "cc": 109,
+   "faixa": [
+    0,
+    125
+   ],
+   "palpite": false,
+   "porta": "CM-MC50",
+   "tipo": "absoluto"
+  },
+  "reverb.density": {
+   "canal": 1,
+   "cc": 23,
+   "faixa": [
+    0,
+    125
+   ],
+   "palpite": false,
+   "porta": "MC-24",
+   "tipo": "absoluto"
+  },
+  "reverb.highcut": {
+   "canal": 1,
+   "cc": 14,
+   "faixa": [
+    0,
+    125
+   ],
+   "palpite": false,
+   "porta": "MC-24",
+   "tipo": "absoluto"
+  },
+  "reverb.lowcut": {
+   "canal": 1,
+   "cc": 22,
+   "faixa": [
+    0,
+    125
+   ],
+   "palpite": false,
+   "porta": "MC-24",
+   "tipo": "absoluto"
+  },
+  "reverb.predelay": {
+   "canal": 1,
+   "cc": 9,
+   "faixa": [
+    0,
+    127
+   ],
+   "palpite": false,
+   "porta": "MC-24",
+   "tipo": "absoluto"
+  },
+  "reverb.time": {
+   "canal": 1,
+   "cc": 21,
+   "faixa": [
+    0,
+    125
+   ],
+   "palpite": false,
+   "porta": "MC-24",
+   "tipo": "absoluto"
+  },
+  "reverb.type": {
+   "canal": 1,
+   "cc": 3,
+   "faixa": [
+    0,
+    125
+   ],
+   "palpite": false,
+   "porta": "MC-24",
+   "tipo": "absoluto"
+  },
+  "rs.dly": {
+   "canal": 2,
+   "cc": 59,
+   "faixa": [
+    0,
+    125
+   ],
+   "palpite": false,
+   "porta": "CM-MC50",
+   "tipo": "absoluto"
+  },
+  "rs.gain": {
+   "canal": 2,
+   "cc": 56,
+   "faixa": [
+    0,
+    127
+   ],
+   "palpite": false,
+   "porta": "CM-MC50",
+   "tipo": "absoluto"
+  },
+  "rs.lfo": {
+   "canal": 2,
+   "cc": 30,
+   "faixa": [
+    0,
+    127
+   ],
+   "palpite": false,
+   "porta": "CM-MC50",
+   "tipo": "absoluto"
+  },
+  "rs.pan": {
+   "canal": 2,
+   "cc": 57,
+   "faixa": [
+    0,
+    125
+   ],
+   "palpite": false,
+   "porta": "CM-MC50",
+   "tipo": "absoluto"
+  },
+  "rs.rvb": {
+   "canal": 2,
+   "cc": 58,
+   "faixa": [
+    0,
+    127
+   ],
+   "palpite": false,
+   "porta": "CM-MC50",
+   "tipo": "absoluto"
+  },
+  "sd.dly": {
+   "canal": 2,
+   "cc": 15,
+   "faixa": [
+    0,
+    125
+   ],
+   "palpite": false,
+   "porta": "CM-MC50",
+   "tipo": "absoluto"
+  },
+  "sd.gain": {
+   "canal": 2,
+   "cc": 27,
+   "faixa": [
+    0,
+    127
+   ],
+   "palpite": false,
+   "porta": "CM-MC50",
+   "tipo": "absoluto"
+  },
+  "sd.lfo": {
+   "canal": 2,
+   "cc": 50,
+   "faixa": [
+    0,
+    127
+   ],
+   "palpite": false,
+   "porta": "CM-MC50",
+   "tipo": "absoluto"
+  },
+  "sd.pan": {
+   "canal": 2,
+   "cc": 28,
+   "faixa": [
+    0,
+    125
+   ],
+   "palpite": false,
+   "porta": "CM-MC50",
+   "tipo": "absoluto"
+  },
+  "sd.rvb": {
+   "canal": 2,
+   "cc": 29,
+   "faixa": [
+    0,
+    125
+   ],
+   "palpite": false,
+   "porta": "CM-MC50",
+   "tipo": "absoluto"
+  }
+ },
+ "versao": 1
+}
