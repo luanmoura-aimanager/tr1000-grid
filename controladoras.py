@@ -43,9 +43,11 @@ ROTULOS_MC50 = [(f"{t}.{k}", f"{t.upper()} {r}")
                 for k, r in LINHAS_MC50 for t in TRACKS]
 ROTULOS = {PORTA_MC24: ROTULOS_MC24, PORTA_MC50: ROTULOS_MC50}
 
-# Movimento "de verdade" de um knob: pelo menos tantas mensagens no mesmo CC
-# dentro da janela, a contar da primeira.
-MIN_MSGS, JANELA = 3, 0.8                  # (deduzido: um giro curto manda ~10)
+# Movimento "de verdade" de um knob: pelo menos MIN_MSGS mensagens no mesmo CC.
+# O knob so e dado por mapeado quando PARA de mexer por SILENCIO segundos - o
+# Luan gira de ponta a ponta e solta. A primeira versao seguia 0,8 s depois do
+# PRIMEIRO movimento e pedia o proximo knob no meio do giro (09/10/2026).
+MIN_MSGS, SILENCIO, GIRO_MAX = 3, 1.0, 20.0     # s
 
 
 # ─────────────────────────────────────────────────────────────
@@ -153,9 +155,13 @@ def _esperar_knob(abertas, ja_mapeados):
             for p in abertas.values():
                 p.iter_pending()
             continue
-        fim = time.time() + JANELA
-        while time.time() < fim:
-            evs += _eventos(abertas)
+        # junta ate o knob ficar parado SILENCIO s (ou GIRO_MAX no total)
+        inicio = ultimo = time.time()
+        while time.time() - ultimo < SILENCIO and time.time() - inicio < GIRO_MAX:
+            novos = _eventos(abertas)
+            if novos:
+                evs += novos
+                ultimo = time.time()
             time.sleep(0.005)
         k = chave_dominante(evs, ja_mapeados)
         if k:
@@ -169,7 +175,8 @@ def cmd_mapear():
     mapa = carregar_mapa()
     knobs = mapa["knobs"]
     print(f"mapa: {os.path.relpath(MAPA, AQUI)} ({len(knobs)} knobs ja mapeados)")
-    print("Gire cada knob que for pedido, de uma ponta a outra. Ctrl+C salva e sai.\n")
+    print("Gire cada knob pedido de uma ponta a outra e SOLTE: quando ele ficar parado")
+    print("1 segundo, passa para o proximo. Ctrl+C salva e sai (depois retoma daqui).\n")
     try:
         for porta, rotulos in ROTULOS.items():
             if porta not in abertas:
