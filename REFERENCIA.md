@@ -403,7 +403,7 @@ da Chart. Se a Roland publicou algum mapa SysEx, é lá. Baixar antes da C1.
 | item | estado | onde |
 |---|---|---|
 | nomes e quantidade das portas | **medido 07/10** | 2.1 |
-| clock contínuo na `TR-1000`, ~51 pulsos/s (≈128 bpm) | **medido 07/10** — se parada ou tocando, **desconhecido** | 7.2 |
+| clock contínuo na `TR-1000` **mesmo parada**; `start`/`stop` chegam; notas transmitidas por disparo | **medido 08/10** | 7.3 |
 | sem resposta ao Identity Request | **medido 07/10** | 2.1 |
 | nada chegou na CTRL nem na MIDI IN em 8 s parados | **medido 07/10** (sem autoteste na CTRL — ambíguo) | 7.2 |
 | formato Roland RQ1/DT1 na CTRL | **(deduzido)** da TR-8S e da existência da porta | 2.1 |
@@ -444,7 +444,7 @@ A fase 1 (o grid escrevendo) só começa quando **todos** estes forem **medidos*
 | 2 | Ler o pattern pela serial e conferir no painel | ✅ 08/10 (Dub Techno, var A/H) |
 | 3 | **Um step desligado e ligado por escrita NOSSA (`01`), ouvido pelo Luan** | ✅ **08/10 — desligar (C3.1) e ligar (C3.2), ouvidos** |
 | 4 | Endereçamento pattern × variação provado em **3 patterns** diferentes | ✅ **08/10** — 1-01 Dub Techno, 1-02 Groovy Beach, **2-01 "Weoow..." 165 BPM (outro banco, x = 16)**, os três conferidos no painel |
-| 5 | Step atual / variação que toca lidos com a máquina tocando, conferidos no visor | ⏳ (candidato: bloco 3) |
+| 5 | Step atual / variação que toca lidos com a máquina tocando | ✅ **08/10 — pela porta MIDI comum**: `start`/`stop` + clock 24 ppqn + notas transmitidas (7.3). Pela serial, não existe: o App não acompanha o step |
 | 6 | WRITE (gravar o pattern) seguido de religar a máquina, e o step sobrevivendo | ⏳ |
 
 **C3.1 — 08/10/2026, a primeira escrita nossa, OUVIDA:**
@@ -609,6 +609,41 @@ Regra que atravessa todas: **nunca RQ1 em endereço que o App não pediu**.
   pergunta da C0.
 
 ---
+
+### 7.3 Critério 5 — o step atual vem pela porta MIDI comum (medido 08/10/2026)
+
+**Pela serial não dá.** O que foi medido:
+- `sessao_c4.py estado`, com a máquina parada e depois tocando, leu os blocos 3–12 cerca de
+  17×/s. Só 7 valores mudaram, **os mesmos** parada ou tocando, todos com cara de LFO ou
+  medidor:
+  - `[47]`, `[56]`: senoide/triângulo;
+  - `[53]`, `[59]`: dente de serra 0x37..0x6E;
+  - `[71]`: rampa lenta;
+  - `[168]`, `[169]`: ~0x12 com ruído.
+- O App, com a máquina tocando (`app-tocando-2`, 90 s), só relê **6 parâmetros soltos** a
+  cada ~1,5 s, e nenhum muda. Ele não mostra o playhead, então não o acompanha. O catálogo
+  tem `cur_step0..10`, mas em nenhum endereço que o App leia.
+
+**Pela porta MIDI `TR-1000`:**
+
+| medida | resultado |
+|---|---|
+| **clock com a máquina PARADA** | **sim**, contínuo, 66/s a 165 BPM. A armadilha 2 da TR-8S **vale aqui**: clock não prova que está tocando |
+| **START** | chega `start` (0xFA). As notas do step 1 chegam ~3 ms **antes** dele |
+| **STOP** | chega `stop` (0xFC). As notas param na hora; o clock continua |
+| **notas** | uma `note_on` por disparo, canal 10, com velocity (accent = 92, normal = 80; HT layer B = 50), nas notas padrão da chart (BD 36, HT A 48 / B 112, CH 42, RC 51, HC 39, TRG 84…) |
+| **TRG** | no 2-01 toca em **todo** step (a cada ~91 ms = semicolcheia a 165 BPM). É do pattern, não regra |
+
+**O que o grid faz com isso** (fase 1):
+- Conta clock a partir do `start`: 6 pulsos por semicolcheia na scale 16th.
+- Para no `stop`.
+- Usa as notas transmitidas como **conferência**: o step em que o BD do pattern lido tocou
+  tem que bater com a contagem.
+- **Polimetria**: com o FIRST/LAST STEP por track lido do bloco 116, o playhead de cada
+  linha é calculado; não é lido da máquina.
+
+Capturas: `capturas/2026-10-08-c4-estado*.serlog`, `app-tocando*.serlog`,
+`c4-start.txt`, `c4-stop.txt`.
 
 ## 8. Ideias registradas, não implementadas
 

@@ -54,9 +54,10 @@ essa lista é decisão dele, não detalhe de código.
 1. **RQ1 em endereço inválido derrubava a porta CTRL** da TR-8S depois de ~60–75 sondas;
    só voltava religando. Não descobrir se a TR-1000 faz o mesmo do jeito caro — por isso
    a lista branca.
-2. **A TR-8S mandava MIDI clock mesmo parada.** A TR-1000 manda clock contínuo na porta
-   `TR-1000` (medido 07/10/2026, ~51/s); se é parada ou tocando, a sessão C0 diz. Só
-   `start`/`continue` provam que ela está tocando, até medir o contrário.
+2. **A TR-1000 manda MIDI clock mesmo PARADA**, como a TR-8S. Medido em 08/10/2026:
+   66/s a 165 BPM, parada e tocando. Só `start`/`stop` (que chegam) dizem se está tocando
+   (REFERENCIA 7.3). O step atual **não** existe pela serial; vem de contar clock desde o
+   `start`.
 3. **O mido não enxerga os quatro Launchpad.** Ele deduplica portas por nome. Toda
    enumeração e abertura usa **rtmidi cru por índice** (`portas.py`); não "simplificar"
    isso de volta. Medido aqui também em 07/10/2026.
