@@ -445,7 +445,12 @@ A fase 1 (o grid escrevendo) só começa quando **todos** estes forem **medidos*
 | 3 | **Um step desligado e ligado por escrita NOSSA (`01`), ouvido pelo Luan** | ✅ **08/10 — desligar (C3.1) e ligar (C3.2), ouvidos** |
 | 4 | Endereçamento pattern × variação provado em **3 patterns** diferentes | ✅ **08/10** — 1-01 Dub Techno, 1-02 Groovy Beach, **2-01 "Weoow..." 165 BPM (outro banco, x = 16)**, os três conferidos no painel |
 | 5 | Step atual / variação que toca lidos com a máquina tocando | ✅ **08/10 — pela porta MIDI comum**: `start`/`stop` + clock 24 ppqn + notas transmitidas (7.3). Pela serial, não existe: o App não acompanha o step |
-| 6 | WRITE (gravar o pattern) seguido de religar a máquina, e o step sobrevivendo | ⏳ |
+| 6 | WRITE (gravar o pattern) seguido de religar a máquina, e o step sobrevivendo | ⏸ **adiado por decisão do Luan (08/10/2026)** — não bloqueia o grid: ele grava com o **WRITE do painel**. O comando de WRITE do App (OVERWRITE) nunca foi capturado |
+
+**Decisão de 08/10/2026:** a fase 0 está **suficiente**, com os critérios 1–5 cumpridos e o 6
+adiado. A fase 1 (o grid nos Launchpads) pode começar. Até o critério 6 ser feito, nada
+nosso grava na memória da máquina: tudo o que o grid escrever fica no buffer de edição, e
+**religar descarta** (medido na C4.1).
 
 **C3.1 — 08/10/2026, a primeira escrita nossa, OUVIDA:**
 - **O que saiu:** `sessao_c3.py step2 desligar`, máquina tocando só a var A do Dub Techno.
