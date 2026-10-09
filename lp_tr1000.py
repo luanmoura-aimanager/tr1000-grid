@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """
-lp_tr1000.py - dois Launchpad Mini MK3 como grid da TR-1000 (fase 0: captura)
+lp_tr1000.py - dois Launchpad Mini MK3 como grid da TR-1000
 
 Requisitos:
     mido + python-rtmidi ja instalados em ~/Library/Python/3.9/
     export PYTHONPATH=~/Library/Python/3.9/lib/python/site-packages
 
-FASE 0 - nada aqui ESCREVE no mapa de enderecos da maquina. Os comandos so
-escutam, ou mandam o Identity Request universal (que nao e RQ1 e nao toca em
-endereco nenhum - ver roland.IDENTITY_REQUEST):
+Ferramentas de escuta (fase 0) - nada destas ESCREVE na maquina. So escutam,
+ou mandam o Identity Request universal (que nao toca em endereco nenhum - ver
+roland.IDENTITY_REQUEST):
 
     python3 lp_tr1000.py ports                 # portas MIDI com indice
     python3 lp_tr1000.py escutar [--segundos N] [--arquivo log.txt]
@@ -20,8 +20,15 @@ endereco nenhum - ver roland.IDENTITY_REQUEST):
                                                # SysEx da porta CTRL, com
                                                # autoteste antes
 
-O grid (learn/run/standby) entra na fase 1, depois do portao da fase 0
-(REFERENCIA 3, "criterio de saida").
+Fase 1 - o grid (ROTEIRO-F1.md):
+
+    python3 lp_tr1000.py learn       # uma vez: descobre esquerdo/direito
+    python3 lp_tr1000.py run         # o grid ao vivo
+    python3 lp_tr1000.py probe       # o que os Launchpad mandam
+    python3 lp_tr1000.py colors      # a paleta nos pads
+
+O run ESCREVE na maquina (so steps, so quando um pad e apertado) pela serial,
+pelo portao conexao_serial.conferir_pacote. Os outros comandos so escutam.
 """
 import os, sys, time
 
@@ -308,11 +315,45 @@ def cmd_sniff(argv):
             f.close()
 
 
+# ─────────────────────────────────────────────────────────────
+# Fase 1: o grid (launchpad.py + motor.py)
+# ─────────────────────────────────────────────────────────────
+def cmd_run():
+    """O grid ao vivo. Le a maquina pela serial e escreve SO steps, quando um
+    pad e apertado (conexao_serial.escrita_permitida). ROTEIRO-F1.md."""
+    import launchpad, motor
+    cfg = launchpad.carregar_layout()
+    launchpad.programmer_mode(True)
+    m = motor.Motor(cfg)
+    try:
+        if not m.definir_modo(motor.MODO_ON):
+            return
+        print("\nGrid ligado. Topo esquerdo: variacoes A-H. Borda direita: velocity.")
+        print("Topo direito: rolar (1o e 2o), layer AB / A / B (3o, 4o, 5o).")
+        print("Nada e gravado: para guardar, WRITE no painel. Ctrl+C sai.\n")
+        while True:
+            m.tick()
+            time.sleep(0.003)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        m.fechar()
+
+
+def _lp(nome):
+    import launchpad
+    return getattr(launchpad, nome)
+
+
 COMANDOS = {
     "ports":      lambda a: cmd_ports(),
     "escutar":    cmd_escutar,
     "identidade": lambda a: cmd_identidade(),
     "sniff":      cmd_sniff,
+    "learn":      lambda a: _lp("cmd_learn")(),
+    "probe":      lambda a: _lp("cmd_probe")(),
+    "colors":     lambda a: _lp("cmd_colors")(),
+    "run":        lambda a: cmd_run(),
 }
 
 if __name__ == "__main__":

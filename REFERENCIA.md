@@ -447,6 +447,9 @@ A fase 1 (o grid escrevendo) só começa quando **todos** estes forem **medidos*
 | 5 | Step atual / variação que toca lidos com a máquina tocando | ✅ **08/10 — pela porta MIDI comum**: `start`/`stop` + clock 24 ppqn + notas transmitidas (7.3). Pela serial, não existe: o App não acompanha o step |
 | 6 | WRITE (gravar o pattern) seguido de religar a máquina, e o step sobrevivendo | ⏸ **adiado por decisão do Luan (08/10/2026)** — não bloqueia o grid: ele grava com o **WRITE do painel**. O comando de WRITE do App (OVERWRITE) nunca foi capturado |
 
+**Fase 1 aberta em 09/10/2026** — o grid (`motor.py`, `launchpad.py`, `ROTEIRO-F1.md`).
+Ver 7.4.
+
 **Decisão de 08/10/2026:** a fase 0 está **suficiente**, com os critérios 1–5 cumpridos e o 6
 adiado. A fase 1 (o grid nos Launchpads) pode começar. Até o critério 6 ser feito, nada
 nosso grava na memória da máquina: tudo o que o grid escrever fica no buffer de edição, e
@@ -649,6 +652,28 @@ Regra que atravessa todas: **nunca RQ1 em endereço que o App não pediu**.
 
 Capturas: `capturas/2026-10-08-c4-estado*.serlog`, `app-tocando*.serlog`,
 `c4-start.txt`, `c4-stop.txt`.
+
+### 7.4 Fase 1 — como o grid lê e escreve (09/10/2026, NADA testado em hardware ainda)
+
+- **Ler:** a cada ~0,5 s, o bloco 3 (`[2]` = x do pattern selecionado) e os 10 blocos
+  `bloco_de_steps(v)` da variação mostrada (n = 131 a partir do índice 1249). Se o x mudou,
+  limpa tudo e relê. Pela medida da C4: ~0,04 s para o pattern inteiro.
+- **Escrever um toque:** `01 <bloco_de_steps(v)> <x> <track> <1249 + 4·step + slot> <valor>`.
+  - Um pacote por slot, e o cache só muda depois do `03`.
+  - **Slots:** layer A = 0, layer B = 1. O modo `AB` escreve os dois (o que o painel faz);
+    track simples só o 0.
+  - **Desligar = `FF`**, como o painel.
+  - **Velocity:** `nota(vel) = 0xA0000 | vel << 8 | 0x3C`. **(deduzido)** de cinco valores
+    lidos; escrever outra velocity além de 80 **não foi provado** — é o F1.3.
+- **Playhead:** MIDI clock da porta `TR-1000`.
+  - O `start` zera; 6 pulsos por step (scale 16th **assumida**); dá a volta em 16
+    (**assumido**); o `stop` apaga.
+  - Clock com a máquina parada é ignorado, porque só o `start` liga.
+- **Limites desta fase:**
+  - não sabe qual variação está tocando;
+  - sem ACC/TRG;
+  - sem scale/last step;
+  - não grava.
 
 ## 8. Ideias registradas, não implementadas
 

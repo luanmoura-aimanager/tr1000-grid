@@ -1,41 +1,57 @@
 # TR-1000 Grid
 
 Dois **Launchpad Mini MK3** viram um grid 16×8 que liga e desliga steps **no sequenciador
-interno da Roland TR-1000**, em tempo real, por SysEx — o mesmo gesto do
+interno da Roland TR-1000**, em tempo real — o mesmo gesto do
 [tr8s-grid](https://github.com/luanmoura-aimanager/tr8s-grid), agora para a máquina maior.
 
 Não é um sequenciador externo disparando notas: o que se edita é o pattern dela, e o que
-soa é a TR-1000 tocando sozinha. Desligue o computador e o pattern continua lá.
+soa é a TR-1000 tocando sozinha.
 
 ```
-launchpads (nota/CC via USB) → Mac (Python + rtmidi) → SysEx (porta TR-1000 CTRL) → TR-1000
-Mac (velocity = cor)         → launchpads (LEDs)
+launchpads (nota/CC via USB)  → Mac (Python) → serial USB (/dev/cu.usbmodem*) → TR-1000
+TR-1000 (start/stop + clock)  → Mac          → playhead
+Mac (velocity = cor)          → launchpads (LEDs)
 ```
 
-## Onde o projeto está: fase 0, captura
+## O protocolo não é documentado pela Roland
 
-**Nada aqui escreve na máquina ainda.** A Roland documenta só notas, 66 CCs, program change
-e clock (a *MIDI Implementation Chart* marca SysEx como não suportado — a da TR-8S também
-marcava, e o SysEx dela funciona). O mapa de endereços tem que ser levantado, e a fase 0
-existe para isso, com o método que deu certo na TR-8S (REFERENCIA 3.2).
+A *MIDI Implementation Chart* documenta só notas, CCs, program change e clock. O que este
+projeto decifrou (REFERENCIA 2.1b/2.1c):
 
-A diferença em relação à TR-8S é a que torna isto viável: o **TR-1000 App** carrega dentro
-do binário o catálogo **ordenado** de todos os parâmetros da máquina — inclusive o step
-atual e a **variação que toca por track**, que a TR-8S nunca expôs — e lê tudo da máquina ao
-abrir. Um sniff do App abrindo deve entregar endereços e tamanhos; o catálogo dá nome a eles.
+- **O TR-1000 App não fala MIDI com a máquina.** Ele fala por uma **serial USB**, num
+  protocolo de pacotes próprio. Foi gravado byte a byte com um espião injetado numa cópia
+  do App (`espiao.py`).
+- **Ler e escrever parâmetros:** `82`/`02` e `01`/`03`, endereçados por bloco, dois
+  índices de instância e um índice global de parâmetro.
+- **O pattern inteiro está lá:**
+  - nome e tempo;
+  - 8 variações + 4 fills;
+  - 16 steps × 4 slots por track, com slot 0 = layer A e slot 1 = layer B;
+  - velocity no valor da nota.
+
+  Tudo conferido contra o painel.
+- **A primeira escrita do nosso código foi ouvida** (C3, 08/10/2026).
 
 | Fase | O quê | Estado |
 |---|---|---|
-| 0 | captura: catálogo do App, sniff do boot, decodificar pattern, primeira escrita ouvida | **em andamento** — ferramentas prontas, sessões C0–C3 pendentes |
-| 1 | o grid: 12 linhas (10 tracks + ACC + TRG), layer A/B e ALT, playhead por track | depois do portão da fase 0 |
-| 2 | parâmetros do step: probability, CYCLE, sub steps (tercinas, quiálteras), micro-timing | |
-| 3 | página de performance: mute/cue, fill 1–4, step loop, roll, morph | |
+| 0 | decifrar: serial, pattern, escrita, step atual (via MIDI) | **suficiente** — critérios 1–5 ✅, o 6 (WRITE) adiado |
+| 1 | o grid: 10 tracks (8 por vez), layer A/B, velocity, playhead pelo clock | **em teste** — `ROTEIRO-F1.md` |
+| 2 | parâmetros do step: probability, CYCLE, sub steps, micro-timing | |
+| 3 | performance: mute, fills, step loop, roll, morph; qual variação toca | |
 | 4 | a tela web e o empacotamento (LaunchAgent, `.app`) | |
 
-O roteiro detalhado está em [`REFERENCIA.md`](REFERENCIA.md) (seção 7) e o passo a passo
-das sessões de hardware em [`ROTEIRO-C0-C3.md`](ROTEIRO-C0-C3.md).
+## Uso (fase 1, o grid)
 
-## Uso (fase 0)
+```bash
+export PYTHONPATH=~/Library/Python/3.9/lib/python/site-packages
+python3 lp_tr1000.py learn      # uma vez: descobre esquerdo/direito
+python3 lp_tr1000.py run        # o grid ao vivo (ROTEIRO-F1.md)
+```
+
+O grid **só escreve steps**, só quando um pad é apertado, e **nada grava na memória**:
+para guardar, aperte **WRITE no painel**.
+
+## Ferramentas de engenharia reversa (fase 0)
 
 ```bash
 export PYTHONPATH=~/Library/Python/3.9/lib/python/site-packages
@@ -95,7 +111,7 @@ então os dois Launchpad viram um só. Toda enumeração e abertura usa `rtmidi`
 
 | Arquivo | O que é |
 |---|---|
-| `lp_tr1000.py` | A CLI. Na fase 0: `ports`, `escutar`, `identidade`, `sniff` — nenhuma escreve endereço |
+| `lp_tr1000.py` | A CLI: `learn`, `run` (o grid), `probe`, `colors`; e as de escuta `ports`, `escutar`, `identidade`, `sniff` |
 | `roland.py` | Camada SysEx Roland genérica: checksum, endereço com carry de 7 bits, e um decodificador que **descobre o model ID pelo checksum** |
 | `portas.py` | Portas MIDI por índice (herdado do tr8s-grid) |
 | `tr1000.py` | O modelo da máquina, cada constante com a fonte: manual, catálogo, medido ou deduzido |
@@ -106,6 +122,9 @@ então os dois Launchpad viram um só. Toda enumeração e abertura usa `rtmidi`
 | `conexao_serial.py` | Abre a serial da TR-1000 como o App abre; lê (`82`) e escreve (`01`) — escrita só na lista de 3 endereços da C3 |
 | `sessao_c3.py` | A sessão C3: a primeira escrita nossa, um endereço por vez, com `sim` digitado |
 | `sessao_c4.py` | Só leitura, ao vivo: o pattern inteiro (`pattern`) e o que muda nos blocos de estado (`estado`) |
+| `launchpad.py` | Os dois Launchpad: programmer mode, LEDs, `learn`, layout (portado do tr8s-grid) |
+| `motor.py` | O grid ao vivo: lê o pattern pela serial, escreve steps nos toques, playhead pelo clock MIDI |
+| `ROTEIRO-F1.md` | A sessão de hardware da fase 1, passo a passo |
 | `testes.py` | Testes de mesa (`unittest`) |
 | `REFERENCIA.md` | Fonte da verdade: o que está provado, deduzido e desconhecido |
 | `ROTEIRO-C0-C3.md` | As sessões de hardware da fase 0, passo a passo |

@@ -73,10 +73,9 @@ def cmd_pattern():
               f"tempo {tempo}")
         # TODAS as chaves antes de ler qualquer uma: ou o pattern sai inteiro,
         # ou nada sai (revisao do PR #3)
-        if any(k not in cs.leituras_do_app() for k in chaves_do_pattern(x)):
-            print(f"(!) o App ainda nao leu o pattern {nome} (x {x}) em nenhuma captura "
-                  f"de referencia - capture o boot dele com o espiao antes "
-                  f"(REFERENCIA 2.1c). Nada lido.")
+        if not all(cs.chave_lida(*k) for k in chaves_do_pattern(x)):
+            print(f"(!) o pattern {nome} (x {x}) esta fora do que se pode ler "
+                  f"(x 0..127, REFERENCIA 2.1c). Nada lido.")
             return
         t = time.time()
         vals = ler_pattern(c, x)

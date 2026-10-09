@@ -26,29 +26,29 @@ trabalho é entregue:
   afirmar que está certo
 - "Compila" e "roda sem exceção" **não** são "funciona"
 
-## Fase 0: nada escreve na máquina
+## O que escreve na máquina, e por onde
 
-Até o portão da fase 0 (REFERENCIA 3, "critério de saída"), **nenhum código manda DT1 nem
-RQ1**. O `TestePortaoDaFase0` garante isso no `lp_tr1000.py`. O único SysEx que sai é o
-Identity Request universal, que não toca no mapa de endereços.
+A fase 0 está suficiente (REFERENCIA 3.1, decisão do Luan em 08/10/2026), e a fase 1 — o
+grid — escreve na máquina. **Toda saída da serial passa por um único portão:
+`conexao_serial.conferir_pacote`.**
 
-Quando a fase 0 liberar leituras: **só RQ1 em endereço que o próprio TR-1000 App pediu**
-(a lista branca que o `tr1000_sysex.py resumo` tira do boot do App).
+- **Escrita (`01`) só de STEPS**, pela regra `escrita_permitida`:
+  - os slots 0 e 1 (layer A e B) dos 16 steps dos 10 tracks, nas 12 variações, de
+    qualquer pattern (x 0..127);
+  - valor só nota (`A··3C`, velocity 1..127) ou pausa (`FF`);
+  - nada de cabeçalho, kit, mixer ou probability.
 
-**A exceção da C3 (08/10/2026):** a máquina fala por serial, não SysEx (REFERENCIA 2.1c), e a
-primeira escrita nossa passa **só** por `sessao_c3.py` → `conexao_serial.py`, com a lista de
-3 endereços `ESCRITAS_PERMITIDAS`, os bytes mostrados e `sim` digitado pelo Luan. Ampliar
-essa lista é decisão dele, não detalhe de código.
-
-- O **`--sim`** existe porque o `!` do Claude Code não tem teclado. Ele é o Luan digitando a
-  confirmação na linha de comando. **O agente nunca roda uma escrita na máquina por conta
-  própria**, com ou sem `--sim`: ele entrega o comando, e quem roda é o Luan.
-- **Toda saída da serial passa por `conexao_serial.conferir_pacote`.**
-  - Escrita só na lista.
-  - Leitura (`82`) só dentro das faixas que o **próprio App** leu nas capturas de
-    referência (`CAPTURAS_DE_REFERENCIA`: o boot da C1-S0 e os boots com o 1-02 e o 2-01
-    selecionados) — a armadilha 1, versão serial.
-  - Fora isso, só o aperto de mão.
+  Ampliar a regra é **decisão do Luan**, não detalhe de código. As 3 escritas
+  históricas da C3 continuam na lista `ESCRITAS_PERMITIDAS`.
+- **Leitura (`82`)** só dentro das faixas que o **próprio App** leu nas capturas de
+  referência (`CAPTURAS_DE_REFERENCIA`). Os blocos de pattern valem para qualquer x 0..127
+  (decisão do Luan, depois de três patterns de dois bancos provarem x = índice global).
+- Fora isso, só o aperto de mão.
+- **Quem escreve é o Luan:** o grid só escreve quando ele aperta um pad; o
+  `sessao_c3.py` só com `sim`/`--sim` digitado por ele. **O agente nunca roda uma
+  escrita na máquina por conta própria.**
+- **Nada grava na memória:** o WRITE do painel continua com o Luan (critério 6 adiado).
+  Religar descarta o que não foi gravado.
 
 ## As armadilhas da TR-8S, a remedir aqui
 
