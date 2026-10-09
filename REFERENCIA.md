@@ -203,6 +203,35 @@ u32 nos 16 bits de cima" são **dois u16**:
 - **y** = track (0..9 = BD..RC) ou layer (0/1);
 - **x** = slot de sample (0..499), no bloco 156.
 
+**O pattern entra no endereço, no `x` — medido em 08/10/2026 (C4):**
+- **Ao vivo, selecionando o 1-02 no painel:**
+  - os blocos 116+ com `x = 0` continuaram dizendo "Dub Techno";
+  - o **bloco 3** mudou em `[21]` **1 → 2** (o número do pattern, 1 = 1-01) e em `[36]`
+    `0x3200` → `0x2FA8` (**tempo × 100**: 128 → 122).
+- **No boot do App com o 1-02 selecionado (`capturas/2026-10-08-boot-1-02.serlog`):** o
+  App leu **todos** os blocos de pattern (116–152) com **`x = 1`**; no 1-01 tinha sido
+  `x = 0`. Então **x = número do pattern − 1**.
+- **Conferido no painel:**
+  - "Groovy Beach", 122 BPM;
+  - var A BD em 1, 12, 15;
+  - SD em 5, 13, 14, 15, 16 — o Luan viu 14 e 15 **fracos**, e os valores são `0x42` (66)
+    e `0x4A` (74) contra `0x50` (80) nos normais. **Reforça que o byte do meio é a
+    velocity.**
+- **2-01 (`boot-2-01`), outro banco:** o App leu os blocos com **`x = 16`**, o 17º pattern
+  (8 bancos × 16). Painel: "Weoow...", 165 BPM, BD var A em 1 e 7 — ✅. No bloco 3:
+  - `[2]` = `[3]` = `[4]` = **índice global** (0, 1, 16) — é o `x`, e é o que o código usa;
+  - `[21]` = pattern **dentro do banco**, 1..16 (1, 2, 1 — não é o global, como eu tinha
+    deduzido com dois patterns só);
+  - `[36]` = tempo × 100 (12800, 12200, 16500).
+- **A diferença da TR-8S:** lá o pattern entrava no endereço como `pattern*16+var` no 2º
+  byte. Aqui é um campo próprio (`x`). A leitura ao vivo (`sessao_c4.py pattern`) lê o
+  bloco 3, calcula o `x` e lê o resto — **122 leituras em 0,04 s**.
+- **Religar a máquina descartou a edição não salva** (o step 2 do BD na var A voltou a
+  apagado). Medido na C4.1.
+- **A regra das leituras continua:** só se lê um `x` que o App já leu numa captura de
+  referência (`CAPTURAS_DE_REFERENCIA`). Para liberar outro pattern, captura-se o boot do
+  App com ele selecionado.
+
 **A ESCRITA — medida em 08/10/2026, captura `knob-bd-tune`** (o Luan girou o TUNE do
 GENERATOR do BD no App, ~28 s):
 
@@ -374,7 +403,7 @@ da Chart. Se a Roland publicou algum mapa SysEx, é lá. Baixar antes da C1.
 | item | estado | onde |
 |---|---|---|
 | nomes e quantidade das portas | **medido 07/10** | 2.1 |
-| clock contínuo na `TR-1000`, ~51 pulsos/s (≈128 bpm) | **medido 07/10** — se parada ou tocando, **desconhecido** | 7.2 |
+| clock contínuo na `TR-1000` **mesmo parada**; `start`/`stop` chegam; notas transmitidas por disparo | **medido 08/10** | 7.3 |
 | sem resposta ao Identity Request | **medido 07/10** | 2.1 |
 | nada chegou na CTRL nem na MIDI IN em 8 s parados | **medido 07/10** (sem autoteste na CTRL — ambíguo) | 7.2 |
 | formato Roland RQ1/DT1 na CTRL | **(deduzido)** da TR-8S e da existência da porta | 2.1 |
@@ -389,6 +418,8 @@ da Chart. Se a Roland publicou algum mapa SysEx, é lá. Baixar antes da C1.
 | slots 0/1 do step = layer A/B; vermelho = A, verde = só B | **medido 08/10** | 2.1c |
 | piso de ruído entre dois boots sem gesto: zero (139 blocos iguais) | **medido 08/10** (`ruido-1`/`ruido-2`) | 2.1c |
 | bloco 3 `[128]` = variação selecionada no painel (8 = H, 1 = A) | **(deduzido)** de dois diffs | 2.1c |
+| bloco 3 `[2]` = índice global do pattern (0..127); `[21]` = pattern no banco (1..16); `[36]` = tempo × 100 | **medido 08/10** (1-01, 1-02, 2-01) | 2.1c |
+| blocos de pattern: `x` = índice global do pattern | **medido 08/10** (boot do App em 1-01, 1-02 e 2-01, conferidos no painel) | 2.1c |
 | velocity no byte do meio da nota; `[64..79]` = probability | **(deduzido)** | 2.1c |
 | comando de escrita: `01 bloco x y índice u32` → `03 …` | **medido 08/10** (App escrevendo; nunca por nós) | 2.1c |
 | o mesmo `01` escreve steps (bloco 118+3v) | **(deduzido)** — é o teste C3 | 2.1c |
@@ -412,9 +443,14 @@ A fase 1 (o grid escrevendo) só começa quando **todos** estes forem **medidos*
 | 1 | Formato da mensagem provado em captura real (enquadramento sem sobra, aperto de mão com versão) | ✅ 08/10 (C1-S0) |
 | 2 | Ler o pattern pela serial e conferir no painel | ✅ 08/10 (Dub Techno, var A/H) |
 | 3 | **Um step desligado e ligado por escrita NOSSA (`01`), ouvido pelo Luan** | ✅ **08/10 — desligar (C3.1) e ligar (C3.2), ouvidos** |
-| 4 | Endereçamento pattern × variação provado em **3 patterns** diferentes (o bloco 118+3v muda de conteúdo ao trocar de pattern) | ⏳ |
-| 5 | Step atual / variação que toca lidos com a máquina tocando, conferidos no visor | ⏳ (candidato: bloco 3) |
-| 6 | WRITE (gravar o pattern) seguido de religar a máquina, e o step sobrevivendo | ⏳ |
+| 4 | Endereçamento pattern × variação provado em **3 patterns** diferentes | ✅ **08/10** — 1-01 Dub Techno, 1-02 Groovy Beach, **2-01 "Weoow..." 165 BPM (outro banco, x = 16)**, os três conferidos no painel |
+| 5 | Step atual / variação que toca lidos com a máquina tocando | ✅ **08/10 — pela porta MIDI comum**: `start`/`stop` + clock 24 ppqn + notas transmitidas (7.3). Pela serial, não existe: o App não acompanha o step |
+| 6 | WRITE (gravar o pattern) seguido de religar a máquina, e o step sobrevivendo | ⏸ **adiado por decisão do Luan (08/10/2026)** — não bloqueia o grid: ele grava com o **WRITE do painel**. O comando de WRITE do App (OVERWRITE) nunca foi capturado |
+
+**Decisão de 08/10/2026:** a fase 0 está **suficiente**, com os critérios 1–5 cumpridos e o 6
+adiado. A fase 1 (o grid nos Launchpads) pode começar. Até o critério 6 ser feito, nada
+nosso grava na memória da máquina: tudo o que o grid escrever fica no buffer de edição, e
+**religar descarta** (medido na C4.1).
 
 **C3.1 — 08/10/2026, a primeira escrita nossa, OUVIDA:**
 - **O que saiu:** `sessao_c3.py step2 desligar`, máquina tocando só a var A do Dub Techno.
@@ -578,6 +614,41 @@ Regra que atravessa todas: **nunca RQ1 em endereço que o App não pediu**.
   pergunta da C0.
 
 ---
+
+### 7.3 Critério 5 — o step atual vem pela porta MIDI comum (medido 08/10/2026)
+
+**Pela serial não dá.** O que foi medido:
+- `sessao_c4.py estado`, com a máquina parada e depois tocando, leu os blocos 3–12 cerca de
+  17×/s. Só 7 valores mudaram, **os mesmos** parada ou tocando, todos com cara de LFO ou
+  medidor:
+  - `[47]`, `[56]`: senoide/triângulo;
+  - `[53]`, `[59]`: dente de serra 0x37..0x6E;
+  - `[71]`: rampa lenta;
+  - `[168]`, `[169]`: ~0x12 com ruído.
+- O App, com a máquina tocando (`app-tocando-2`, 90 s), só relê **6 parâmetros soltos** a
+  cada ~1,5 s, e nenhum muda. Ele não mostra o playhead, então não o acompanha. O catálogo
+  tem `cur_step0..10`, mas em nenhum endereço que o App leia.
+
+**Pela porta MIDI `TR-1000`:**
+
+| medida | resultado |
+|---|---|
+| **clock com a máquina PARADA** | **sim**, contínuo, 66/s a 165 BPM. A armadilha 2 da TR-8S **vale aqui**: clock não prova que está tocando |
+| **START** | chega `start` (0xFA). As notas do step 1 chegam ~3 ms **antes** dele |
+| **STOP** | chega `stop` (0xFC). As notas param na hora; o clock continua |
+| **notas** | uma `note_on` por disparo, canal 10, com velocity (accent = 92, normal = 80; HT layer B = 50), nas notas padrão da chart (BD 36, HT A 48 / B 112, CH 42, RC 51, HC 39, TRG 84…) |
+| **TRG** | no 2-01 toca em **todo** step (a cada ~91 ms = semicolcheia a 165 BPM). É do pattern, não regra |
+
+**O que o grid faz com isso** (fase 1):
+- Conta clock a partir do `start`: 6 pulsos por semicolcheia na scale 16th.
+- Para no `stop`.
+- Usa as notas transmitidas como **conferência**: o step em que o BD do pattern lido tocou
+  tem que bater com a contagem.
+- **Polimetria**: com o FIRST/LAST STEP por track lido do bloco 116, o playhead de cada
+  linha é calculado; não é lido da máquina.
+
+Capturas: `capturas/2026-10-08-c4-estado*.serlog`, `app-tocando*.serlog`,
+`c4-start.txt`, `c4-stop.txt`.
 
 ## 8. Ideias registradas, não implementadas
 

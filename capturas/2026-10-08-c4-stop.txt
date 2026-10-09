@@ -1,0 +1,141 @@
+21:20:44.017  [TR-1000]  note_on channel=9 note=112 velocity=50 time=0   <- HT (B)
+21:20:44.032  [TR-1000]  note_on channel=9 note=42 velocity=80 time=0   <- CH
+21:20:44.032  [TR-1000]  note_off channel=9 note=112 velocity=64 time=0   <- HT (B)
+21:20:44.040  [TR-1000]  note_off channel=9 note=42 velocity=64 time=0   <- CH
+21:20:44.053  [TR-1000]  note_on channel=9 note=84 velocity=80 time=0   <- TRG
+21:20:44.056  [TR-1000]  note_off channel=9 note=84 velocity=64 time=0   <- TRG
+21:20:44.141  [TR-1000]  note_on channel=9 note=84 velocity=80 time=0   <- TRG
+21:20:44.149  [TR-1000]  note_off channel=9 note=84 velocity=64 time=0   <- TRG
+21:20:44.203  [TR-1000]  note_on channel=9 note=112 velocity=50 time=0   <- HT (B)
+21:20:44.212  [TR-1000]  note_on channel=9 note=36 velocity=80 time=0   <- BD
+21:20:44.215  [TR-1000]  note_off channel=9 note=112 velocity=64 time=0   <- HT (B)
+21:20:44.223  [TR-1000]  note_off channel=9 note=36 velocity=64 time=0   <- BD
+21:20:44.233  [TR-1000]  note_on channel=9 note=84 velocity=80 time=0   <- TRG
+21:20:44.239  [TR-1000]  note_off channel=9 note=84 velocity=64 time=0   <- TRG
+21:20:44.323  [TR-1000]  note_on channel=9 note=84 velocity=80 time=0   <- TRG
+21:20:44.331  [TR-1000]  note_off channel=9 note=84 velocity=64 time=0   <- TRG
+21:20:44.384  [TR-1000]  note_on channel=9 note=48 velocity=92 time=0   <- HT (A)
+21:20:44.397  [TR-1000]  note_on channel=9 note=42 velocity=92 time=0   <- CH
+21:20:44.398  [TR-1000]  note_off channel=9 note=48 velocity=64 time=0   <- HT (A)
+21:20:44.403  [TR-1000]  note_off channel=9 note=42 velocity=64 time=0   <- CH
+21:20:44.416  [TR-1000]  note_on channel=9 note=84 velocity=92 time=0   <- TRG
+21:20:44.423  [TR-1000]  note_off channel=9 note=84 velocity=64 time=0   <- TRG
+21:20:44.507  [TR-1000]  note_on channel=9 note=84 velocity=80 time=0   <- TRG
+21:20:44.513  [TR-1000]  note_off channel=9 note=84 velocity=64 time=0   <- TRG
+21:20:44.594  [TR-1000]  note_on channel=9 note=84 velocity=80 time=0   <- TRG
+21:20:44.605  [TR-1000]  note_off channel=9 note=84 velocity=64 time=0   <- TRG
+21:20:44.689  [TR-1000]  note_on channel=9 note=84 velocity=80 time=0   <- TRG
+21:20:44.694  [TR-1000]  note_off channel=9 note=84 velocity=64 time=0   <- TRG
+21:20:44.748  [TR-1000]  note_on channel=9 note=112 velocity=50 time=0   <- HT (B)
+21:20:44.761  [TR-1000]  note_on channel=9 note=39 velocity=80 time=0   <- HC
+21:20:44.761  [TR-1000]  note_on channel=9 note=42 velocity=80 time=0   <- CH
+21:20:44.766  [TR-1000]  note_off channel=9 note=112 velocity=64 time=0   <- HT (B)
+21:20:44.771  [TR-1000]  note_off channel=9 note=39 velocity=64 time=0   <- HC
+21:20:44.771  [TR-1000]  note_off channel=9 note=42 velocity=64 time=0   <- CH
+21:20:44.779  [TR-1000]  note_on channel=9 note=84 velocity=80 time=0   <- TRG
+21:20:44.784  [TR-1000]  note_off channel=9 note=84 velocity=64 time=0   <- TRG
+21:20:44.868  [TR-1000]  note_on channel=9 note=84 velocity=80 time=0   <- TRG
+21:20:44.876  [TR-1000]  note_off channel=9 note=84 velocity=64 time=0   <- TRG
+21:20:44.961  [TR-1000]  note_on channel=9 note=84 velocity=80 time=0   <- TRG
+21:20:44.968  [TR-1000]  note_off channel=9 note=84 velocity=64 time=0   <- TRG
+21:20:45.051  [TR-1000]  note_on channel=9 note=84 velocity=80 time=0   <- TRG
+21:20:45.056  [TR-1000]  note_off channel=9 note=84 velocity=64 time=0   <- TRG
+21:20:45.112  [TR-1000]  note_on channel=9 note=48 velocity=92 time=0   <- HT (A)
+21:20:45.128  [TR-1000]  note_on channel=9 note=36 velocity=92 time=0   <- BD
+21:20:45.128  [TR-1000]  note_on channel=9 note=42 velocity=92 time=0   <- CH
+21:20:45.128  [TR-1000]  note_on channel=9 note=51 velocity=92 time=0   <- RC
+21:20:45.128  [TR-1000]  note_off channel=9 note=48 velocity=64 time=0   <- HT (A)
+21:20:45.133  [TR-1000]  note_off channel=9 note=36 velocity=64 time=0   <- BD
+21:20:45.133  [TR-1000]  note_off channel=9 note=42 velocity=64 time=0   <- CH
+21:20:45.133  [TR-1000]  note_off channel=9 note=51 velocity=64 time=0   <- RC
+21:20:45.141  [TR-1000]  note_on channel=9 note=84 velocity=92 time=0   <- TRG
+21:20:45.150  [TR-1000]  note_off channel=9 note=84 velocity=64 time=0   <- TRG
+21:20:45.234  [TR-1000]  note_on channel=9 note=84 velocity=80 time=0   <- TRG
+21:20:45.241  [TR-1000]  note_off channel=9 note=84 velocity=64 time=0   <- TRG
+21:20:45.323  [TR-1000]  note_on channel=9 note=84 velocity=80 time=0   <- TRG
+21:20:45.331  [TR-1000]  note_off channel=9 note=84 velocity=64 time=0   <- TRG
+21:20:45.415  [TR-1000]  note_on channel=9 note=84 velocity=80 time=0   <- TRG
+21:20:45.423  [TR-1000]  note_off channel=9 note=84 velocity=64 time=0   <- TRG
+21:20:45.476  [TR-1000]  note_on channel=9 note=112 velocity=50 time=0   <- HT (B)
+21:20:45.489  [TR-1000]  note_on channel=9 note=42 velocity=80 time=0   <- CH
+21:20:45.490  [TR-1000]  note_off channel=9 note=112 velocity=64 time=0   <- HT (B)
+21:20:45.495  [TR-1000]  note_off channel=9 note=42 velocity=64 time=0   <- CH
+21:20:45.503  [TR-1000]  note_on channel=9 note=84 velocity=80 time=0   <- TRG
+21:20:45.514  [TR-1000]  note_off channel=9 note=84 velocity=64 time=0   <- TRG
+21:20:45.598  [TR-1000]  note_on channel=9 note=84 velocity=80 time=0   <- TRG
+21:20:45.603  [TR-1000]  note_off channel=9 note=84 velocity=64 time=0   <- TRG
+21:20:45.655  [TR-1000]  note_on channel=9 note=112 velocity=50 time=0   <- HT (B)
+21:20:45.670  [TR-1000]  note_on channel=9 note=36 velocity=80 time=0   <- BD
+21:20:45.670  [TR-1000]  note_off channel=9 note=112 velocity=64 time=0   <- HT (B)
+21:20:45.678  [TR-1000]  note_off channel=9 note=36 velocity=64 time=0   <- BD
+21:20:45.688  [TR-1000]  note_on channel=9 note=84 velocity=80 time=0   <- TRG
+21:20:45.693  [TR-1000]  note_off channel=9 note=84 velocity=64 time=0   <- TRG
+21:20:45.777  [TR-1000]  note_on channel=9 note=84 velocity=80 time=0   <- TRG
+21:20:45.785  [TR-1000]  note_off channel=9 note=84 velocity=64 time=0   <- TRG
+21:20:45.839  [TR-1000]  note_on channel=9 note=48 velocity=92 time=0   <- HT (A)
+21:20:45.855  [TR-1000]  note_on channel=9 note=42 velocity=92 time=0   <- CH
+21:20:45.855  [TR-1000]  note_off channel=9 note=48 velocity=64 time=0   <- HT (A)
+21:20:45.861  [TR-1000]  note_off channel=9 note=42 velocity=64 time=0   <- CH
+21:20:45.871  [TR-1000]  note_on channel=9 note=84 velocity=92 time=0   <- TRG
+21:20:45.876  [TR-1000]  note_off channel=9 note=84 velocity=64 time=0   <- TRG
+21:20:45.961  [TR-1000]  note_on channel=9 note=84 velocity=80 time=0   <- TRG
+21:20:45.966  [TR-1000]  note_off channel=9 note=84 velocity=64 time=0   <- TRG
+21:20:46.052  [TR-1000]  note_on channel=9 note=84 velocity=80 time=0   <- TRG
+21:20:46.057  [TR-1000]  note_off channel=9 note=84 velocity=64 time=0   <- TRG
+21:20:46.144  [TR-1000]  note_on channel=9 note=84 velocity=80 time=0   <- TRG
+21:20:46.150  [TR-1000]  note_off channel=9 note=84 velocity=64 time=0   <- TRG
+21:20:46.202  [TR-1000]  note_on channel=9 note=112 velocity=50 time=0   <- HT (B)
+21:20:46.218  [TR-1000]  note_on channel=9 note=39 velocity=80 time=0   <- HC
+21:20:46.218  [TR-1000]  note_on channel=9 note=42 velocity=80 time=0   <- CH
+21:20:46.218  [TR-1000]  note_off channel=9 note=112 velocity=64 time=0   <- HT (B)
+21:20:46.223  [TR-1000]  note_off channel=9 note=39 velocity=64 time=0   <- HC
+21:20:46.224  [TR-1000]  note_off channel=9 note=42 velocity=64 time=0   <- CH
+21:20:46.233  [TR-1000]  note_on channel=9 note=84 velocity=80 time=0   <- TRG
+21:20:46.239  [TR-1000]  note_off channel=9 note=84 velocity=64 time=0   <- TRG
+21:20:46.322  [TR-1000]  note_on channel=9 note=84 velocity=80 time=0   <- TRG
+21:20:46.330  [TR-1000]  note_off channel=9 note=84 velocity=64 time=0   <- TRG
+21:20:46.417  [TR-1000]  note_on channel=9 note=84 velocity=80 time=0   <- TRG
+21:20:46.422  [TR-1000]  note_off channel=9 note=84 velocity=64 time=0   <- TRG
+21:20:46.506  [TR-1000]  note_on channel=9 note=84 velocity=80 time=0   <- TRG
+21:20:46.514  [TR-1000]  note_off channel=9 note=84 velocity=64 time=0   <- TRG
+21:20:46.565  [TR-1000]  note_on channel=9 note=48 velocity=92 time=0   <- HT (A)
+21:20:46.586  [TR-1000]  note_on channel=9 note=36 velocity=92 time=0   <- BD
+21:20:46.586  [TR-1000]  note_on channel=9 note=42 velocity=92 time=0   <- CH
+21:20:46.586  [TR-1000]  note_on channel=9 note=51 velocity=92 time=0   <- RC
+21:20:46.586  [TR-1000]  note_off channel=9 note=48 velocity=64 time=0   <- HT (A)
+21:20:46.591  [TR-1000]  note_off channel=9 note=36 velocity=64 time=0   <- BD
+21:20:46.592  [TR-1000]  note_off channel=9 note=42 velocity=64 time=0   <- CH
+21:20:46.592  [TR-1000]  note_off channel=9 note=51 velocity=64 time=0   <- RC
+21:20:46.597  [TR-1000]  note_on channel=9 note=84 velocity=92 time=0   <- TRG
+21:20:46.604  [TR-1000]  note_off channel=9 note=84 velocity=64 time=0   <- TRG
+21:20:46.689  [TR-1000]  note_on channel=9 note=84 velocity=80 time=0   <- TRG
+21:20:46.695  [TR-1000]  note_off channel=9 note=84 velocity=64 time=0   <- TRG
+21:20:46.781  [TR-1000]  note_on channel=9 note=84 velocity=80 time=0   <- TRG
+21:20:46.787  [TR-1000]  note_off channel=9 note=84 velocity=64 time=0   <- TRG
+21:20:46.871  [TR-1000]  note_on channel=9 note=84 velocity=80 time=0   <- TRG
+21:20:46.876  [TR-1000]  note_off channel=9 note=84 velocity=64 time=0   <- TRG
+21:20:46.930  [TR-1000]  note_on channel=9 note=112 velocity=50 time=0   <- HT (B)
+21:20:46.941  [TR-1000]  note_on channel=9 note=42 velocity=80 time=0   <- CH
+21:20:46.941  [TR-1000]  note_off channel=9 note=112 velocity=64 time=0   <- HT (B)
+21:20:46.951  [TR-1000]  note_off channel=9 note=42 velocity=64 time=0   <- CH
+21:20:46.958  [TR-1000]  note_on channel=9 note=84 velocity=80 time=0   <- TRG
+21:20:46.966  [TR-1000]  note_off channel=9 note=84 velocity=64 time=0   <- TRG
+21:20:47.049  [TR-1000]  note_on channel=9 note=84 velocity=80 time=0   <- TRG
+21:20:47.057  [TR-1000]  note_off channel=9 note=84 velocity=64 time=0   <- TRG
+21:20:47.111  [TR-1000]  note_on channel=9 note=112 velocity=50 time=0   <- HT (B)
+21:20:47.124  [TR-1000]  note_on channel=9 note=36 velocity=80 time=0   <- BD
+21:20:47.125  [TR-1000]  note_off channel=9 note=112 velocity=64 time=0   <- HT (B)
+21:20:47.132  [TR-1000]  note_off channel=9 note=36 velocity=64 time=0   <- BD
+21:20:47.140  [TR-1000]  note_on channel=9 note=84 velocity=80 time=0   <- TRG
+21:20:47.148  [TR-1000]  note_off channel=9 note=84 velocity=64 time=0   <- TRG
+21:20:47.232  [TR-1000]  note_on channel=9 note=84 velocity=80 time=0   <- TRG
+21:20:47.240  [TR-1000]  note_off channel=9 note=84 velocity=64 time=0   <- TRG
+21:20:47.292  [TR-1000]  note_on channel=9 note=48 velocity=92 time=0   <- HT (A)
+21:20:47.305  [TR-1000]  note_on channel=9 note=42 velocity=92 time=0   <- CH
+21:20:47.305  [TR-1000]  note_off channel=9 note=48 velocity=64 time=0   <- HT (A)
+21:20:47.315  [TR-1000]  note_off channel=9 note=42 velocity=64 time=0   <- CH
+21:20:47.323  [TR-1000]  note_on channel=9 note=84 velocity=92 time=0   <- TRG
+21:20:47.331  [TR-1000]  note_off channel=9 note=84 velocity=64 time=0   <- TRG
+21:20:47.417  [TR-1000]  note_on channel=9 note=84 velocity=80 time=0   <- TRG
+21:20:47.423  [TR-1000]  note_off channel=9 note=84 velocity=64 time=0   <- TRG
+21:20:47.489  [TR-1000]  stop time=0

@@ -45,8 +45,9 @@ essa lista é decisão dele, não detalhe de código.
   própria**, com ou sem `--sim`: ele entrega o comando, e quem roda é o Luan.
 - **Toda saída da serial passa por `conexao_serial.conferir_pacote`.**
   - Escrita só na lista.
-  - Leitura (`82`) só dentro das faixas que o **próprio App** leu no boot da C1-S0 (a
-    armadilha 1, versão serial).
+  - Leitura (`82`) só dentro das faixas que o **próprio App** leu nas capturas de
+    referência (`CAPTURAS_DE_REFERENCIA`: o boot da C1-S0 e os boots com o 1-02 e o 2-01
+    selecionados) — a armadilha 1, versão serial.
   - Fora isso, só o aperto de mão.
 
 ## As armadilhas da TR-8S, a remedir aqui
@@ -54,9 +55,10 @@ essa lista é decisão dele, não detalhe de código.
 1. **RQ1 em endereço inválido derrubava a porta CTRL** da TR-8S depois de ~60–75 sondas;
    só voltava religando. Não descobrir se a TR-1000 faz o mesmo do jeito caro — por isso
    a lista branca.
-2. **A TR-8S mandava MIDI clock mesmo parada.** A TR-1000 manda clock contínuo na porta
-   `TR-1000` (medido 07/10/2026, ~51/s); se é parada ou tocando, a sessão C0 diz. Só
-   `start`/`continue` provam que ela está tocando, até medir o contrário.
+2. **A TR-1000 manda MIDI clock mesmo PARADA**, como a TR-8S. Medido em 08/10/2026:
+   66/s a 165 BPM, parada e tocando. Só `start`/`stop` (que chegam) dizem se está tocando
+   (REFERENCIA 7.3). O step atual **não** existe pela serial; vem de contar clock desde o
+   `start`.
 3. **O mido não enxerga os quatro Launchpad.** Ele deduplica portas por nome. Toda
    enumeração e abertura usa **rtmidi cru por índice** (`portas.py`); não "simplificar"
    isso de volta. Medido aqui também em 07/10/2026.

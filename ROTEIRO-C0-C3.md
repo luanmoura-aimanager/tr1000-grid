@@ -249,3 +249,36 @@ Me diga o que **ouviu e viu**.
 - tocando o BD, a afinação **cai** em relação ao máximo de agora
 
 Depois: **STOP**. Não aperte WRITE.
+
+## C4 — leituras ao vivo: três patterns e o step atual (critérios 4 e 5)
+
+**Só leitura**: nada aqui escreve na máquina. TR-1000 App (original e cópia) **fechado**.
+Rode pelo `!` ou no Terminal, na pasta do projeto.
+
+### C4.1 — o pattern atual
+
+```bash
+python3 sessao_c4.py pattern
+```
+
+**O que esperar:**
+- `pattern 'Dub Techno', tempo 128.0`
+- var A com o BD em `x... x... x... x...`: o step 2 voltou a apagado depois de religar
+
+### C4.2 — mais dois patterns
+
+O pattern entra no endereço (`x` = número − 1, REFERENCIA 2.1c), e a leitura só sai para um
+`x` que o App já leu. Para cada pattern novo:
+1. Selecione-o no painel, parado.
+2. `python3 espiao.py rodar boot-1-NN` → "Connected" + 15 s → Cmd+Q.
+3. Me avise: eu acrescento a captura às de referência, e então `python3 sessao_c4.py pattern`.
+4. Me diga o **nome e o BPM** do visor e os steps de **um** track na var A.
+
+**Feito em 08/10:** 1-02 "Groovy Beach" (`boot-1-02`) e 2-01 "Weoow..." (`boot-2-01`). Critério 4 ✅.
+
+### C4.3 — o step atual
+
+1. Máquina **parada**: `python3 sessao_c4.py estado --segundos 5` (o piso de ruído).
+2. Aperte **START** (só a var A, sem VARI CHAIN): `python3 sessao_c4.py estado --segundos 8`.
+
+**O que esperar:** algum valor que muda **só tocando**, em ciclo de 16, no ritmo do tempo.

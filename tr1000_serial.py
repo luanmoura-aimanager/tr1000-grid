@@ -259,15 +259,25 @@ def versao_95(pac):
     return texto or None
 
 
-def leituras_de_bloco(pacs):
-    """Os pedidos 82 do App -> {(bloco, x, y): (indice, n)}."""
+def todas_as_leituras(pacs):
+    """Os pedidos 82 do App -> {(bloco, x, y): {(indice, n), ...}}: TODAS as
+    faixas pedidas em cada chave. Depois do boot o App rele parametros soltos
+    (n = 1) em blocos que ja leu inteiros; guardar so a ultima encolheria a
+    lista branca sem aviso (revisao do PR #3)."""
     out = {}
     for direcao, t, p in pacs:
         c = carga(p)
         if direcao == "TX" and c[:1] == bytes([LER_BLOCO]) and len(c) >= 11:
             bloco, x, y, indice = _endereco(c)
-            out[(bloco, x, y)] = (indice, struct.unpack_from("<H", c, 9)[0])
+            out.setdefault((bloco, x, y), set()).add(
+                (indice, struct.unpack_from("<H", c, 9)[0]))
     return out
+
+
+def leituras_de_bloco(pacs):
+    """{(bloco, x, y): (indice, n)} com a MAIOR faixa de cada chave - o bloco
+    inteiro, quando o App leu o bloco inteiro."""
+    return {k: max(fs, key=lambda f: f[1]) for k, fs in todas_as_leituras(pacs).items()}
 
 
 def escritas(pacs):
@@ -406,6 +416,13 @@ TRACKS_SERIAL = ["BD", "SD", "LT", "HT", "RS", "HC", "CH", "OH", "CC", "RC"]
 BLOCO_CAB_PATTERN, BLOCO_VAR0, BLOCOS_POR_VAR = 116, 117, 3
 
 
+def bloco_de_steps(v):
+    """O bloco dos steps da variacao v (0..7 = A..H, 8..11 = Fill 1..4). UM
+    lugar so: o layout dos blocos ainda e em parte deduzido, e tres copias da
+    conta divergiriam no dia da correcao (revisao do PR #3)."""
+    return BLOCO_VAR0 + 1 + BLOCOS_POR_VAR * v
+
+
 def ultimos_valores(pacs):
     """{(bloco, x, y): [u32...]} - a ultima resposta de cada um."""
     return {(b, x, y): v for _, b, x, y, _, v in valores_de_bloco(pacs)}
@@ -455,24 +472,51 @@ def grade_de_steps(valores):
     return "".join(out)
 
 
-def cmd_pattern(caminho):
-    vals = ultimos_valores(pacotes(ler_serlog(caminho)))
-    cab = vals.get((BLOCO_CAB_PATTERN, 0, 0))
+# Bloco 3 (sistema/performance), medido em 08/10/2026 em 1-01, 1-02 e 2-01:
+OFF_PATTERN_GLOBAL = 2      # indice global 0..127 = o x dos blocos de pattern
+                            # (medido: 0, 1, 16; [3] e [4] repetem o mesmo valor)
+OFF_PATTERN_NO_BANCO = 21   # 1..16 dentro do banco (medido: 1, 2, 1)
+OFF_TEMPO_ATUAL = 36        # tempo x 100 (medido: 12800, 12200, 16500)
+
+
+def nome_do_pattern(indice_global):
+    """0 -> '1-01', 1 -> '1-02', 16 -> '2-01' (8 bancos x 16, manual RM p.13)."""
+    return f"{indice_global // 16 + 1}-{indice_global % 16 + 1:02d}"
+
+
+def x_presente(vals):
+    """O x em que ha cabecalho de pattern numa captura (o App le um so)."""
+    xs = sorted({x for (b, x, y) in vals if b == BLOCO_CAB_PATTERN})
+    return xs[0] if xs else 0
+
+
+def linhas_do_pattern(vals, x=None):
+    """{(bloco, x, y): [u32...]} -> as linhas de texto da grade. Serve as
+    capturas (cmd_pattern) e a leitura ao vivo (sessao_c4.py). x = o indice
+    global do pattern (bloco 3 [2]); sem ele, o que a captura tiver."""
+    out = []
+    x = x_presente(vals) if x is None else x
+    cab = vals.get((BLOCO_CAB_PATTERN, x, 0))
     if cab:
         nome, bpm = nome_e_tempo(cab)
-        print(f"pattern {nome!r}, tempo {bpm} (deduzido do bloco {BLOCO_CAB_PATTERN})")
+        out.append(f"pattern {nome!r}, tempo {bpm}")
     for v, nome_var in enumerate(VARIACOES_SERIAL):
-        bloco = BLOCO_VAR0 + 1 + BLOCOS_POR_VAR * v
+        bloco = bloco_de_steps(v)
         linhas = []
         for tr, nome_tr in enumerate(TRACKS_SERIAL):
-            vv = vals.get((bloco, 0, tr))
+            vv = vals.get((bloco, x, tr))
             if vv and len(vv) >= 64:
                 g = grade_de_steps(vv)
                 if g.strip("."):
                     linhas.append(f"   {nome_tr:3} {g[:4]} {g[4:8]} {g[8:12]} {g[12:]}")
-        print(f"{nome_var:7}" + ("" if linhas else " vazia"))
-        for l in linhas:
-            print(l)
+        out.append(f"{nome_var:7}" + ("" if linhas else " vazia"))
+        out.extend(linhas)
+    return out
+
+
+def cmd_pattern(caminho):
+    for l in linhas_do_pattern(ultimos_valores(pacotes(ler_serlog(caminho)))):
+        print(l)
 
 
 def cmd_diffblocos(a, b):
@@ -494,8 +538,8 @@ def cmd_diffblocos(a, b):
         mudou += 1
         print(f"bloco {k[0]:3d} x {k[1]} y {k[2]}:")
         for i, p, q in difs[:40]:
-            eh_steps = (BLOCO_VAR0 <= k[0] < BLOCO_VAR0 + BLOCOS_POR_VAR * len(VARIACOES_SERIAL)
-                        and (k[0] - BLOCO_VAR0) % BLOCOS_POR_VAR == 1 and i < 64)
+            eh_steps = (k[0] in {bloco_de_steps(v) for v in range(len(VARIACOES_SERIAL))}
+                        and i < 64)
             extra = f"  (step {i // 4 + 1}, slot {i % 4}{' = layer ' + 'AB'[i % 4] if i % 4 < 2 else ''})" \
                 if eh_steps else ""
             print(f"   [{i:3d}] {p:X} -> {q:X}{extra}")

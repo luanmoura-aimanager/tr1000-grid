@@ -105,6 +105,7 @@ então os dois Launchpad viram um só. Toda enumeração e abertura usa `rtmidi`
 | `tr1000_serial.py` | O protocolo da serial: lê os `.serlog` (`bruto`, `pacotes`, `blocos`, `pattern`, `escritas`, `diffblocos`) e monta pacotes byte a byte iguais aos do App |
 | `conexao_serial.py` | Abre a serial da TR-1000 como o App abre; lê (`82`) e escreve (`01`) — escrita só na lista de 3 endereços da C3 |
 | `sessao_c3.py` | A sessão C3: a primeira escrita nossa, um endereço por vez, com `sim` digitado |
+| `sessao_c4.py` | Só leitura, ao vivo: o pattern inteiro (`pattern`) e o que muda nos blocos de estado (`estado`) |
 | `testes.py` | Testes de mesa (`unittest`) |
 | `REFERENCIA.md` | Fonte da verdade: o que está provado, deduzido e desconhecido |
 | `ROTEIRO-C0-C3.md` | As sessões de hardware da fase 0, passo a passo |
