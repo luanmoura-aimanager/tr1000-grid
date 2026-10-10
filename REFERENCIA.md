@@ -778,6 +778,24 @@ qualquer um destes é ampliar a regra: **decisão do Luan, por grupo**.
 | step segurado no loop | `[151 + s]` | segurar o STEP 5 acendeu o `[155]` (também mudaram `[172]` = 84 e `[177]` = 1) |
 | tela/modo do painel | `[131]` | 0, 4, 7 conforme a tela; não é dado |
 
+**Side chain e routing** (App escrevendo; `sidechain` e `routing-2`, 10/10/2026). O App foi
+visto escrevendo neles, então cabem na regra de hoje; mas nenhum knob nem página os usa
+ainda (PR D).
+
+| o quê | bloco | índice | faixa |
+|---|---|---|---|
+| SIDE CHAIN SOURCE | 12 | 546 | 0..18 (OFF, BD A&B, BD A, BD B, SD A&B … HT B, RS, HC, CH, OH, CC, RC) |
+| RELEASE | 12 | 548 | 1..1000 |
+| CURVE | 12 | 549 | 0..1000 |
+| POLARITY | 12 | 550 | 0 = DUCK, 1 = GATE |
+| HLD STEP | 12 | 552 | 0..32 |
+| HLD MODE | 12 | 553 | 0 = TIME, 1 = STEP |
+| SC DEPTH do REVERB / DELAY / EXT IN | 5 / 6 / 9 | 2372 / 2414 / 516 | 0..1000 |
+| **FX ROUTE** (a Routing Matrix) de BD..RC | 13, y = track | 559 | 0 = THROUGH, 1 = MASTER FX, 2 = ANALOG FX |
+| FX ROUTE do RVB / DLY / EXT | 5 / 6 / 9 | 2369 / 2411 / 517 | idem |
+
+**Sem endereço:** o **MSTR DEP** e o **HLD TIME** foram girados e o App não escreveu nada.
+
 **Surpresa:** na `c5b`, o Flam foi parar na **Fill 1** (bloco 142), não na var A. O gesto
 `fill` da 1ª rodada deve ter deixado a Fill 1 como alvo de edição.
 
