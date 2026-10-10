@@ -1071,8 +1071,20 @@ class TesteParametros(unittest.TestCase):
 
     def test_todo_knob_das_placas_esta_na_tabela_ou_pendente(self):
         ids = {i for rs in controladoras.ROTULOS.values() for i, _ in rs}
-        self.assertEqual(ids, set(parametros.TABELA) | set(parametros.PENDENTES))
-        self.assertFalse(set(parametros.TABELA) & set(parametros.PENDENTES))
+        tem = set(parametros.TABELA) | set(parametros.POR_TIPO)
+        self.assertEqual(ids, tem | set(parametros.PENDENTES))
+        self.assertFalse(tem & set(parametros.PENDENTES))
+
+    def test_delay_por_type(self):
+        e = parametros.entrada_para
+        self.assertEqual(e("delay.p1").indice, 2409)              # LEVEL, sempre
+        self.assertEqual(e("delay.p3", 1).indice, 2438)           # FEEDBACK no PAN
+        self.assertIsNone(e("delay.p3", 2))                       # ECHO: nao capturado
+        ok = conexao_serial.escrita_permitida
+        self.assertTrue(ok(6, 0, 0, 2438, 999))
+        self.assertFalse(ok(6, 0, 0, 2438, 1000))
+        self.assertTrue(ok(6, 0, 0, 2407, 3))                     # PITCH
+        self.assertFalse(ok(6, 0, 0, 2444, 50))                   # TAP: fora das placas
 
     def test_portao_aceita_so_dentro_da_faixa(self):
         ok = conexao_serial.escrita_permitida
