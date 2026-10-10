@@ -1361,10 +1361,18 @@ class TesteFoto(unittest.TestCase):
 
     def test_gestos_tem_ida_e_volta(self):
         import sessao_c4
-        for lista in (sessao_c4.GESTOS, sessao_c4.GESTOS_C5B):
+        for lista in (sessao_c4.GESTOS, sessao_c4.GESTOS_C5B, sessao_c4.GESTOS_C5C):
             ids = [g[0] for g in lista]
             self.assertEqual(len(ids), len(set(ids)))
-            self.assertTrue(all(len(g) == 3 and g[1] and g[2] for g in lista))
+            self.assertTrue(all(len(g) in (3, 4) and g[1] and g[2] for g in lista))
+            self.assertTrue(all(g[3] == "serie" for g in lista if len(g) == 4))
+
+    def test_mudancas_de(self):
+        import sessao_c4
+        a = {(118, 0, 1): [0] * 120}
+        b = {(118, 0, 1): [0] * 82 + [7] + [0] * 37}
+        self.assertEqual(sessao_c4.mudancas_de(a, b), [(118, 0, 1, 82, 0, 7)])
+        self.assertEqual(sessao_c4.mudancas_de(a, b, {(118, 0, 1, 82)}), [])
 
     def test_nome_da_chave(self):
         n = tr1000_serial.nome_da_chave

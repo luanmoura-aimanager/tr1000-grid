@@ -12,6 +12,8 @@ sessao_c4.py - leituras ao vivo para os criterios 4 e 5 do portao (REFERENCIA 3.
     python3 sessao_c4.py c5                      # a sessao guiada do ROTEIRO-C5: um gesto,
                                                  # uma foto, o diff na hora
     python3 sessao_c4.py c5b                     # a 2a rodada: tocando (STEP LOOP) e o Flam
+    python3 sessao_c4.py c5c                     # a 3a: mapas de SUB/CYCLE/START (serie), FIRST
+                                                 # STEP, 8th(T), modo MUTE, side chain pelo painel
 
 SO LE. Nada aqui escreve: as leituras passam pelo mesmo portao de saida da
 conexao_serial (so dentro das faixas que o proprio App leu no boot), e escrita
@@ -210,6 +212,49 @@ GESTOS_C5B = [
 ]
 
 
+# A 3a rodada (c5c): os mapas inteiros (uma SERIE: um clique por foto, e o
+# Luan digita o que o visor mostra) e o que faltou. Uma serie e um gesto com
+# 4 campos: (id, o clique, a volta, "serie").
+INICIO_C5C = ("ANTES: [SHIFT]+[MENU] (RELOAD) do PATTERN e do KIT - a maquina volta ao "
+              "salvo. Depois: 1-01, var A, PARADA, [TR-REC] aceso, [SD] selecionado.")
+GESTOS_C5C = [
+    ("sub", "Segure STEP 4 e gire o C3 (SUBSTEP) UM clique para a direita. Ainda segurando, "
+            "leia o visor; solte e DIGITE o que ele mostrou (ex.: 1/3, flam, trip1). "
+            "Repita ate a ultima opcao; f = fim.",
+            "Segure STEP 4 e volte o C3 todo para a esquerda (sem sub step). Solte.", "serie"),
+    ("cycle", "Segure STEP 4 e gire o C5 (CYCLE) UM clique para a direita; digite o que o "
+              "visor mostrou. Repita ate a ultima opcao; f = fim.",
+              "Segure STEP 4 e volte o C5 para '1/1'. Solte.", "serie"),
+    ("start", "Segure STEP 4 e gire o C2 (START) UM clique para a ESQUERDA; digite o que o "
+              "visor mostrou. Faca uns 4 assim; depois gire ate o FIM a esquerda (digite), e "
+              "ate o FIM a direita (digite). f = fim.",
+              "Segure STEP 4 e volte o C2 para 0. Solte.", "serie"),
+    ("first-var", "[LAST], [A], segure [SHIFT] e aperte STEP 3 (FIRST STEP da var A = 3). [EXIT].",
+                  "[LAST], [A], segure [SHIFT] e aperte STEP 1. [EXIT]."),
+    ("first-trk", "[LAST], [SD], segure [SHIFT] e aperte STEP 3 (FIRST do SD = 3). [EXIT].",
+                  "[LAST]; segure [CLEAR] e aperte [SD] (limpa). [EXIT]."),
+    ("scale-8t", "[SHIFT]+[PTN SELECT]; [C3] ate 'Scale'; [C6] ate '8th(T)'. [EXIT].",
+                 "[SHIFT]+[PTN SELECT]; 'Scale' de volta para '16th'. [EXIT]."),
+    ("mute-modo", "Aperte [MUTE] (acende) e NAO aperte track nenhum.",
+                  "Aperte [MUTE] de novo (apaga)."),
+    ("sc-mstr", "[SHIFT]+[KIT]; [<] [>] ate a pagina SIDE CHAIN; gire o knob do MSTR DEP "
+                "(ou MASTER DEPTH) ate o FIM a direita. Anote qual C ele e.",
+                "Volte o MSTR DEP ao valor de antes. [EXIT]."),
+    ("sc-hld", "[SHIFT]+[KIT], pagina SIDE CHAIN: HLD MODE em TIME e gire o HLD TIME ate o "
+               "FIM a direita.",
+               "HLD TIME de volta ao que era; HLD MODE em STEP. [EXIT]."),
+]
+
+
+def mudancas_de(va, vb, ignorar=()):
+    """[(bloco, x, y, i, antes, depois)] do que mudou fora do ruido."""
+    out = []
+    for k in sorted(set(va) & set(vb)):
+        out += [k + (i, p, q) for i, (p, q) in enumerate(zip(va[k], vb[k]))
+                if p != q and k + (i,) not in ignorar]
+    return out
+
+
 def piso_de_ruido(fotos):
     """{(bloco, x, y, i)} que mudou entre fotos SEM gesto no meio."""
     ruido = set()
@@ -219,13 +264,29 @@ def piso_de_ruido(fotos):
     return ruido
 
 
-def _enter(c, texto):
+def _enter(c, texto, rotulo="[Enter] feito   [p] pula   [q] encerra: "):
     """Mostra o gesto e espera Enter (com a sessao viva: c.perguntar).
-    -> '' (feito), 'p' (pular) ou 'q'."""
+    -> o que foi digitado, sem espacos nas pontas ('' = feito, 'p', 'q')."""
     try:
-        return c.perguntar(f"\n>> {texto}\n   [Enter] feito   [p] pula   [q] encerra: ").strip().lower()
+        return c.perguntar(f"\n>> {texto}\n   {rotulo}").strip()
     except EOFError:
         return "q"
+
+
+def _serie(c, id, instrucao, base, ruido, diga):
+    """Um clique por foto: o Luan digita o rotulo do visor, e cada foto e
+    comparada com a anterior. -> False se ele encerrou a sessao (q)."""
+    diga(f"\n[{id}] serie (rotulo do visor -> o que mudou)")
+    anterior = base
+    while True:
+        r = _enter(c, f"[{id}] {instrucao}", "digite o que o visor mostrou (f = fim, q = encerra): ")
+        if r.lower() in ("f", "q"):
+            return r.lower() != "q"
+        depois = tirar_foto(c)[2]
+        ms = mudancas_de(anterior, depois, ruido)
+        diga(f"   {r!r:>14}: " + (", ".join(f"{ts.nome_da_chave(b, y)} [{i}] {p:X}->{q:X}"
+                                             for b, x, y, i, p, q in ms) or "nada mudou"))
+        anterior = depois
 
 
 def cmd_c5(gestos=GESTOS, inicio=None, nome="c5"):
@@ -243,14 +304,24 @@ def cmd_c5(gestos=GESTOS, inicio=None, nome="c5"):
             return _enter(c, texto)
         diga(inicio or "C5 - de onde partir: pattern 1-01, var A, PARADA, [TR-REC] ligado, "
                         "[SD] selecionado.")
-        if espera("Confira o painel assim e aperte Enter (vou tirar 3 fotos sem gesto: o piso).") == "q":
+        if espera("Confira o painel assim e aperte Enter (vou tirar 3 fotos sem gesto: o piso).").lower() == "q":
             return
         fotos = [tirar_foto(c)[2] for _ in range(3)]
         ruido = piso_de_ruido(fotos)
         diga(f"piso de ruido: {len(ruido)} valores mudam sozinhos (ignorados daqui em diante)")
         base = fotos[-1]
-        for id, ida, volta in gestos:
-            r = espera(f"[{id}] {ida}")
+        for g in gestos:
+            id, ida, volta = g[:3]
+            if len(g) == 4:                                  # uma serie
+                if not _serie(c, id, ida, base, ruido, diga):
+                    break
+                _enter(c, f"[{id}] VOLTA: {volta}")
+                voltou = tirar_foto(c)[2]
+                n = len(mudancas_de(base, voltou, ruido))
+                diga(f"[{id}] volta: {'tudo como antes' if not n else f'{n} valores AINDA diferentes do inicio'}")
+                base = voltou
+                continue
+            r = espera(f"[{id}] {ida}").lower()
             if r == "q":
                 break
             if r == "p":
@@ -260,7 +331,7 @@ def cmd_c5(gestos=GESTOS, inicio=None, nome="c5"):
             diga(f"\n[{id}] ida: {n} valores mudaram")
             for l in ls:
                 diga(l)
-            espera(f"[{id}] VOLTA: {volta}")
+            _enter(c, f"[{id}] VOLTA: {volta}")
             voltou = tirar_foto(c)[2]
             ls, n = ts.linhas_do_diff(base, voltou, ruido)
             diga(f"[{id}] volta: {'tudo como antes' if not n else f'{n} valores AINDA diferentes do inicio'}")
@@ -325,6 +396,8 @@ def main(a):
             cmd_c5(); return 0
         if a[:1] == ["c5b"]:
             cmd_c5(GESTOS_C5B, INICIO_C5B, "c5b"); return 0
+        if a[:1] == ["c5c"]:
+            cmd_c5(GESTOS_C5C, INICIO_C5C, "c5c"); return 0
         if a[:1] == ["foto"] and len(a) == 2:
             cmd_foto(a[1]); return 0
         if a[:1] == ["diff"] and len(a) == 3:
