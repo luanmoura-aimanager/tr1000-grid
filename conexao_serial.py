@@ -44,8 +44,15 @@ BLOCOS_DE_STEPS = frozenset(ts.bloco_de_steps(v) for v in range(N_VARIACOES))
 
 
 def escrita_permitida(bloco, x, y, indice, valor):
-    """A regra da escrita do grid. Tudo que nao casa e recusado no portao."""
+    """A regra da escrita. Tudo que nao casa e recusado no portao:
+      - as 3 historicas da C3;
+      - os parametros de kit/mixer decifrados (parametros.py), com valor
+        dentro da faixa que o App escreveu (decisao do Luan, 09/10/2026);
+      - os steps (o resto desta funcao)."""
     if (bloco, x, y, indice) in ESCRITAS_PERMITIDAS:          # as 3 da C3
+        return True
+    import parametros
+    if parametros.escrita_permitida(bloco, x, y, indice, valor):
         return True
     if bloco not in BLOCOS_DE_STEPS or not 0 <= x < N_PATTERNS or not 0 <= y < N_TRACKS:
         return False
@@ -112,10 +119,24 @@ BLOCOS_DE_PATTERN = range(ts.BLOCO_CAB_PATTERN,
                           ts.BLOCO_VAR0 + ts.BLOCOS_POR_VAR * N_VARIACOES)
 
 
+_blocos_com_x = None
+
+
+def blocos_com_x():
+    """Os blocos que o App leu com x > 0 nas capturas de referencia: os de
+    pattern e os de kit (no 1-02 e no 2-01 vieram com x = 1 e 16, a mesma
+    estrutura do x = 0). Para eles, o x vale 0..127."""
+    global _blocos_com_x
+    if _blocos_com_x is None:
+        _blocos_com_x = frozenset(b for (b, x, y) in leituras_do_app() if x > 0)
+    return _blocos_com_x
+
+
 def _faixas(bloco, x, y):
     fs = leituras_do_app().get((bloco, x, y))
-    if not fs and bloco in BLOCOS_DE_PATTERN and 0 <= x < N_PATTERNS:
-        fs = leituras_do_app().get((bloco, 0, y))      # a do pattern 1-01
+    if (not fs and 0 <= x < N_PATTERNS
+            and (bloco in BLOCOS_DE_PATTERN or bloco in blocos_com_x())):
+        fs = leituras_do_app().get((bloco, 0, y))      # a do x = 0
     return fs or ()
 
 

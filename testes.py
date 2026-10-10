@@ -29,6 +29,7 @@ import espiao
 import conexao_serial
 import motor
 import controladoras
+import parametros
 
 # Mensagem real, capturada do site ARIA falando com uma TR-8S (tr8s-grid
 # REFERENCIA 2.9): "pattern atual -> 127". E o unico SysEx Roland medido que
@@ -1055,6 +1056,48 @@ class TesteControladorasMapear(unittest.TestCase):
             controladoras.salvar_mapa(m, c)
             m2 = controladoras.carregar_mapa(c)
         self.assertEqual(controladoras.indice_reverso(m2), {("CM-MC50", 0, 1): "bd.gain"})
+
+
+class TesteParametros(unittest.TestCase):
+    """A tabela decifrada em 09/10/2026 (mixer-bd/rc, kit-reverb)."""
+
+    def test_enderecos_medidos(self):
+        T = parametros.TABELA
+        self.assertEqual(parametros.endereco(T["bd.gain"], 0), (116, 0, 0, 1014))
+        self.assertEqual(parametros.endereco(T["rc.gain"], 0, 9), (116, 0, 0, 1023))
+        self.assertEqual(parametros.endereco(T["rc.pan"], 0, 9), (13, 0, 9, 556))
+        self.assertEqual(parametros.endereco(T["bd.dly"], 16, 0), (13, 16, 0, 558))
+        self.assertEqual(parametros.endereco(T["reverb.type"], 1), (5, 1, 0, 2368))
+
+    def test_todo_knob_das_placas_esta_na_tabela_ou_pendente(self):
+        ids = {i for rs in controladoras.ROTULOS.values() for i, _ in rs}
+        self.assertEqual(ids, set(parametros.TABELA) | set(parametros.PENDENTES))
+        self.assertFalse(set(parametros.TABELA) & set(parametros.PENDENTES))
+
+    def test_portao_aceita_so_dentro_da_faixa(self):
+        ok = conexao_serial.escrita_permitida
+        self.assertTrue(ok(116, 0, 0, 1023, 661))             # RC gain, max
+        self.assertFalse(ok(116, 0, 0, 1023, 662))            # acima da faixa
+        self.assertFalse(ok(116, 0, 0, 1024, 100))            # track 11
+        self.assertTrue(ok(13, 5, 9, 556, 500))               # RC pan, kit 6
+        self.assertFalse(ok(13, 0, 10, 556, 500))             # y fora
+        self.assertFalse(ok(13, 0, 0, 559, 10))               # indice nao decifrado
+        self.assertTrue(ok(5, 0, 0, 2368, 5))                 # reverb PLATE..MOD
+        self.assertFalse(ok(5, 0, 0, 2368, 6))                # tipo que nao existe
+        self.assertFalse(ok(5, 0, 1, 2368, 1))                # reverb nao e por track
+
+    def test_conversao_do_knob(self):
+        T = parametros.TABELA
+        self.assertEqual(parametros.converter(T["bd.pan"], 0, 0, 125), 0)
+        self.assertEqual(parametros.converter(T["bd.pan"], 125, 0, 125), 1000)  # para em 125
+        self.assertEqual(parametros.converter(T["reverb.type"], 127), 5)
+        self.assertEqual(parametros.converter(T["reverb.lowcut"], 64), 9)
+
+    def test_leitura_dos_blocos_de_kit_para_qualquer_kit(self):
+        ok = conexao_serial.leitura_permitida
+        self.assertTrue(ok(13, 77, 9, 556, 9))
+        self.assertTrue(ok(5, 100, 0, 2368, 14))
+        self.assertFalse(ok(13, 128, 0, 556, 9))
 
 
 def _relogio_rapido(passo=0.3):
