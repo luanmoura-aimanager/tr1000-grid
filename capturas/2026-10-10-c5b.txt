@@ -1,0 +1,31 @@
+Painel: 1-01, var A, [TR-REC] aceso, [SD] selecionado. Aperte [START] (deixe TOCANDO a sessao toda) e de Enter: 3 fotos do piso tocando.
+piso de ruido: 16 valores mudam sozinhos (ignorados daqui em diante)
+
+[loop] ida: 2 valores mudaram
+bloco   3 x 0 y 0  - estado (pattern/kit selecionados, tempo):
+   [131] 4 -> 7
+   [150] 0 -> 1
+[loop] volta: tudo como antes
+
+[loop-step] ida: 5 valores mudaram
+bloco   3 x 0 y 0  - estado (pattern/kit selecionados, tempo):
+   [131] 4 -> 7
+   [150] 0 -> 1
+   [155] 0 -> 1
+   [172] 0 -> 84
+   [177] 0 -> 1
+[loop-step] volta: tudo como antes
+
+[flam] ida: 3 valores mudaram
+bloco   3 x 0 y 0  - estado (pattern/kit selecionados, tempo):
+   [ 81] FF -> 8C
+   [ 82] C7 -> FF
+bloco 142 x 0 y 1  - steps var Fill 1, SD:
+   [ 83] 0 -> 4
+[flam] volta: 4 valores AINDA diferentes do inicio
+bloco   3 x 0 y 0  - estado (pattern/kit selecionados, tempo):
+   [ 81] FF -> 8C
+   [ 82] C7 -> FF
+bloco 142 x 0 y 1  - steps var Fill 1, SD:
+   [ 12] A503C -> FF  (step 4, slot 0 = layer A)
+   [ 13] A503C -> FF  (step 4, slot 1 = layer B)

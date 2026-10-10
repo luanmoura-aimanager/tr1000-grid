@@ -324,7 +324,8 @@ painel conferiu, **deduzido** no resto:
   - `0x3C` = 60 e o nibble `A` sem leitura ainda.
 - `[64..79]`: todos `0x64` = 100 — **probability 100%** **(deduzido)**.
 - `[80..130]`: zeros quase sempre; um `3` no step 1 do SD (`[96]`). Candidatos: sub_step,
-  cycle, shift **(deduzido)**.
+  cycle, shift **(deduzido)**. **Resolvido pela C5 (10/10/2026), ver 7.6:** PROB `[64+s]`,
+  SUB `[80+s]`, CYCLE `[98+s]`, START `[114+s]`.
 
 Parece que **o App lê o pattern inteiro ao abrir** — o obstáculo da TR-8S ("não há editor
 de pattern para sniffar") não existe aqui. A **leitura** do pattern está provada contra o
@@ -417,10 +418,11 @@ da Chart. Se a Roland publicou algum mapa SysEx, é lá. Baixar antes da C1.
 | ler o pattern pela serial (nome, tempo, steps 118+3v, slots 0/FF/nota) | **medido 08/10**, conferido no painel | 2.1c |
 | slots 0/1 do step = layer A/B; vermelho = A, verde = só B | **medido 08/10** | 2.1c |
 | piso de ruído entre dois boots sem gesto: zero (139 blocos iguais) | **medido 08/10** (`ruido-1`/`ruido-2`) | 2.1c |
-| bloco 3 `[128]` = variação selecionada no painel (8 = H, 1 = A) | **(deduzido)** de dois diffs | 2.1c |
+| bloco 3 `[128]` = variação selecionada no painel (8 = H, 1 = A) | **(deduzido)** de dois diffs; a C5 achou a seleção no **cabeçalho `[18]`** (máscara) | 2.1c, 7.6 |
+| **PROB, SUB, CYCLE, START do step; ACCENT; ALT; LAST STEP; Scale; variação/chain; MUTE; FILL; STEP LOOP**: onde moram | **medido 10/10, painel** (C5/C5b, gesto + foto + diff); **nenhum escrito por nós** | 7.6 |
 | bloco 3 `[2]` = índice global do pattern (0..127); `[21]` = pattern no banco (1..16); `[36]` = tempo × 100 | **medido 08/10** (1-01, 1-02, 2-01) | 2.1c |
 | blocos de pattern: `x` = índice global do pattern | **medido 08/10** (boot do App em 1-01, 1-02 e 2-01, conferidos no painel) | 2.1c |
-| velocity no byte do meio da nota; `[64..79]` = probability | **(deduzido)** | 2.1c |
+| velocity no byte do meio da nota; `[64..79]` = probability | **medido 10/10** (C5: velocity 90 → 40 no byte do meio; PROB 100 → 50 em `[64+s]`) | 7.6 |
 | comando de escrita: `01 bloco x y índice u32` → `03 …` | **medido 08/10** (App escrevendo; nunca por nós) | 2.1c |
 | o mesmo `01` escreve steps (bloco 118+3v) | **(deduzido)** — é o teste C3 | 2.1c |
 | espião grava `read`/`write` da serial, quadros remontados | **medido 08/10** (pty e com o App) | 2.1b |
@@ -722,6 +724,62 @@ depois** (o tempo até o Enter), não. Medido em seguida, só com leituras:
 - **A correção:** `ConexaoTR1000.perguntar` substitui o `input()`, lendo 1 valor do bloco 3
   a cada `MANTER_VIVA_A_CADA` = 1 s enquanto espera. A `sessao_c3` e a `sessao_c4 c5` a
   usam.
+
+### 7.6 C5 — onde moram o step, a performance e o cabeçalho (medido 10/10/2026, painel)
+
+`sessao_c4.py c5` e `c5b`:
+- uma foto de tudo que o App lê no boot (439 leituras, 0,1 s);
+- **um** gesto no painel, outra foto, o diff;
+- o gesto inverso, e a conferência.
+
+O piso de ruído parado foi 0. Tocando, foram 16 valores do bloco 3, todos medidores.
+Capturas `capturas/2026-10-10-c5-3.*` e `c5b.*`.
+
+**Nada disso foi escrito por nós.** É o painel escrevendo e a serial lendo. Escrever em
+qualquer um destes é ampliar a regra: **decisão do Luan, por grupo**.
+
+**No bloco de steps** (118 + 3v, y = track; `s` = step 0..15):
+
+| campo | índice | valores vistos |
+|---|---|---|
+| nota (slot 0/1) | `[4s + slot]` | velocity no byte do meio: 90 → 40 (`A5A3C` → `A283C`) |
+| **ALT** (tracks simples) | o slot 0 ganha o bit 23 | `0` → `8A503C`; o 2º toque com LAYER [B] deixou `8A323C`, ALT com velocity fraca (o roxo fraco) |
+| PROB | `[64 + s]` | 100 → 50 (`64` → `32`) |
+| SUB STEP | `[80 + s]` | 0 = nenhum, 1 = 1/2, 4 = Flam (na ordem do manual: 1/2, 1/3, 1/4, Flam, …) |
+| CYCLE | `[98 + s]` | 0 = 1/1, 3 = "1/3" (mapa completo a medir) |
+| START (micro-timing) | `[114 + s]` | 0 → 15 com uns cliques para a direita |
+| `[96]`, `[97]`, `[130]` | — | sem leitura ainda |
+
+**O comportamento do painel** (explica os efeitos colaterais):
+- Pôr SUB num step **regrava a nota com a velocity padrão** (90 → 80).
+- Com o [SUB] aceso, apertar um step que **já tem nota o apaga**.
+
+**ACCENT:** fica no **1º dos 3 blocos da variação** (117 + 3v), y = 0, `[0]`.
+- É uma **máscara de 16 bits em nibbles**, como na TR-8S: o nibble k são os steps 4k+1..4k+4,
+  e o bit j é o step 4k+j+1.
+- O 1-01 tem `1111` (steps 1, 5, 9 e 13); o accent no step 6 deu `1131`.
+
+**No cabeçalho do pattern** (116):
+
+| campo | índice | valores |
+|---|---|---|
+| Scale | `[36]` | 1 = 16th(T), 2 = 16th, 3 = 32nd (0 = 8th(T), deduzido pela ordem) |
+| variação escolhida / chain | `[18]` | máscara: A = 1, B = 2, A+B = 3 |
+| LAST STEP da variação | `[72 + v]` | 0-based: 15 → 11 = step 12 |
+| LAST STEP do track | `[95 + track]` | 15 → 7, com a chave "track com LAST próprio" em `[106 + track]` 0 → 1 |
+| FILL (PLAY) | `[119]` | 0 = FILL1, 1 = FILL2 |
+
+**No bloco 3** (estado; não é do pattern):
+
+| campo | índice | valores |
+|---|---|---|
+| **MUTE** | `[12]` | máscara por track: o SD mutado deu 2. `[11]` = 1 com o modo MUTE aceso |
+| **STEP LOOP** | `[150]` | 1 com o modo ligado |
+| step segurado no loop | `[151 + s]` | segurar o STEP 5 acendeu o `[155]` (também mudaram `[172]` = 84 e `[177]` = 1) |
+| tela/modo do painel | `[131]` | 0, 4, 7 conforme a tela; não é dado |
+
+**Surpresa:** na `c5b`, o Flam foi parar na **Fill 1** (bloco 142), não na var A. O gesto
+`fill` da 1ª rodada deve ter deixado a Fill 1 como alvo de edição.
 
 ### 7.5 Fase 1b — as controladoras de knobs (09–10/10/2026; F2 PASSOU no hardware em 10/10)
 
