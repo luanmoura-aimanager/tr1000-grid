@@ -1088,7 +1088,9 @@ class TesteParametros(unittest.TestCase):
         e = parametros.entrada_para
         self.assertEqual(e("lfo.waveform").indice, 519)
         self.assertEqual(e("lfo.rate", 0).maximo, 180)         # SYNC = TIME
-        self.assertIsNone(e("lfo.rate", 2))                      # NOTE: a capturar
+        self.assertEqual(e("lfo.rate", 1).indice, 530)          # STEP
+        self.assertEqual(e("lfo.rate", 2).maximo, 24)           # NOTE: 4/1 .. 1/64
+        self.assertIsNone(e("lfo.rate", 3))
         self.assertFalse(conexao_serial.escrita_permitida(10, 0, 0, 532, 1))  # SYNC nao e knob
 
     def test_mfx_por_type(self):

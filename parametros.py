@@ -123,9 +123,16 @@ TABELA["lfo.waveform"] = _p("lfo.waveform", 10, "kit", False, 519, 0, 0, 4,
                             "SINE TRI SAW SQR RANDOM", "2026-10-09-kit-lfo")
 LFO_MODOS = ["PATTERN", "TRIGGER", "TRIG 1X", "TRIG 1/2X", "FREE"]   # indice 520
 LFO_SYNCS = ["TIME", "STEP", "NOTE"]                                 # indice 532
-# O TIME (o RATE do MC-24) muda de faixa com o SYNC: medido so com SYNC = TIME.
-POR_TIPO["lfo.rate"] = {0: _p("lfo.rate", 10, "kit", False, 529, 0, 0, 180,
-                              "TIME (SYNC = TIME)", "2026-10-09-kit-lfo", ("lfo.sync", 0))}
+# O TIME (o RATE do MC-24) muda de INDICE com o SYNC (lfo-sync, 10/10/2026;
+# as pontas lidas no visor do App pelo Luan):
+POR_TIPO["lfo.rate"] = {
+    0: _p("lfo.rate", 10, "kit", False, 529, 0, 0, 180, "TIME 10.0s .. 100ms",
+          "2026-10-09-kit-lfo", ("lfo.sync", 0)),
+    1: _p("lfo.rate", 10, "kit", False, 530, 0, 0, 255, "STEP 64.00stp .. 0.25stp",
+          "2026-10-10-lfo-sync", ("lfo.sync", 1)),
+    2: _p("lfo.rate", 10, "kit", False, 531, 0, 0, 24, "NOTE 4/1 .. 1/64",
+          "2026-10-10-lfo-sync", ("lfo.sync", 2)),
+}
 
 # inst-lfo (10/10/2026): LFO DTH = o AMOUNT 1 do MODULATOR LFO de cada
 # instrumento (decisao do Luan). Bloco 22 + 10*track (BD 22, RC 112: o grupo de
