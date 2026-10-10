@@ -731,7 +731,7 @@ depois** (o tempo até o Enter), não. Medido em seguida, só com leituras:
 que o visor mostra). Os `[n]` abaixo são **posições na leitura**. O índice absoluto é a
 posição mais o início da faixa: steps 1249 + n, cabeçalho 988 + n, bloco 3 112 + n.
 
-Os gestos usados:
+O método:
 - uma foto de tudo que o App lê no boot (439 leituras, 0,1 s);
 - **um** gesto no painel, outra foto, o diff;
 - o gesto inverso, e a conferência.
