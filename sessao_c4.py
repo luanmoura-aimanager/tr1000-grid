@@ -11,6 +11,7 @@ sessao_c4.py - leituras ao vivo para os criterios 4 e 5 do portao (REFERENCIA 3.
     python3 sessao_c4.py diff <nome-a> <nome-b>  # o que mudou entre duas fotos
     python3 sessao_c4.py c5                      # a sessao guiada do ROTEIRO-C5: um gesto,
                                                  # uma foto, o diff na hora
+    python3 sessao_c4.py c5b                     # a 2a rodada: tocando (STEP LOOP) e o Flam
 
 SO LE. Nada aqui escreve: as leituras passam pelo mesmo portao de saida da
 conexao_serial (so dentro das faixas que o proprio App leu no boot), e escrita
@@ -192,6 +193,23 @@ GESTOS = [
 ]
 
 
+# A 2a rodada (c5b): o piso com a maquina TOCANDO (o loop da 1a rodada veio
+# misturado com medidores do bloco 3), o STEP LOOP de novo e o Flam (que nao
+# apareceu: o gesto da 1a rodada ligou e desligou o modo SUB).
+INICIO_C5B = ("Painel: 1-01, var A, [TR-REC] aceso, [SD] selecionado. Aperte [START] "
+              "(deixe TOCANDO a sessao toda) e de Enter: 3 fotos do piso tocando.")
+GESTOS_C5B = [
+    ("loop",      "Aperte [STEP LOOP] (fica piscando). So isso.",
+                  "Aperte [STEP LOOP] de novo (apaga)."),
+    ("loop-step", "Aperte [STEP LOOP] (pisca). SEGURE a tecla STEP 5 e, segurando, de Enter.",
+                  "Solte o STEP 5. Aperte [STEP LOOP] (apaga)."),
+    ("flam",      "1) Aperte [SUB] (acende). 2) Segure [SUB], gire o C6 ate o 4o desenho "
+                  "(Flam), solte. 3) Com o [SUB] aceso, aperte STEP 4. 4) Aperte [SUB] (apaga).",
+                  "1) Aperte [SUB]. 2) Aperte STEP 4 (tira). 3) Segure [SUB], C6 de volta ao "
+                  "1o desenho (1/2), solte. 4) Aperte [SUB] (apaga)."),
+]
+
+
 def piso_de_ruido(fotos):
     """{(bloco, x, y, i)} que mudou entre fotos SEM gesto no meio."""
     ruido = set()
@@ -210,7 +228,7 @@ def _enter(c, texto):
         return "q"
 
 
-def cmd_c5():
+def cmd_c5(gestos=GESTOS, inicio=None, nome="c5"):
     import os
     linhas_log = []
 
@@ -218,19 +236,20 @@ def cmd_c5():
         print(t)
         linhas_log.append(t)
 
-    with cs.ConexaoTR1000(nome_captura="c5") as c:
+    with cs.ConexaoTR1000(nome_captura=nome) as c:
         c.aperto()
 
         def espera(texto):
             return _enter(c, texto)
-        diga("C5 - de onde partir: pattern 1-01, var A, PARADA, [TR-REC] ligado, [SD] selecionado.")
+        diga(inicio or "C5 - de onde partir: pattern 1-01, var A, PARADA, [TR-REC] ligado, "
+                        "[SD] selecionado.")
         if espera("Confira o painel assim e aperte Enter (vou tirar 3 fotos sem gesto: o piso).") == "q":
             return
         fotos = [tirar_foto(c)[2] for _ in range(3)]
         ruido = piso_de_ruido(fotos)
         diga(f"piso de ruido: {len(ruido)} valores mudam sozinhos (ignorados daqui em diante)")
         base = fotos[-1]
-        for id, ida, volta in GESTOS:
+        for id, ida, volta in gestos:
             r = espera(f"[{id}] {ida}")
             if r == "q":
                 break
@@ -304,6 +323,8 @@ def main(a):
             cmd_estado(seg); return 0
         if a[:1] == ["c5"]:
             cmd_c5(); return 0
+        if a[:1] == ["c5b"]:
+            cmd_c5(GESTOS_C5B, INICIO_C5B, "c5b"); return 0
         if a[:1] == ["foto"] and len(a) == 2:
             cmd_foto(a[1]); return 0
         if a[:1] == ["diff"] and len(a) == 3:
