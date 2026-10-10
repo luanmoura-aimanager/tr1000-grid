@@ -761,6 +761,19 @@ Tudo vai para a `parametros.py`, com a captura de origem.
 
 ## 8. Ideias registradas, não implementadas
 
+- **Side chain e routing matrix no Launchpad** (pedido do Luan, 10/10/2026, a planejar):
+  - testar o **SIDE CHAIN** (o botão "Side Chain" no rodapé do App, e os SC DEPTH do
+    reverb, do delay e do external input);
+  - testar a **Routing Matrix** do KIT: cada track e o RVB, DLY e EXT vão para THROUGH,
+    MASTER FX ou ANALOG FX;
+  - talvez virar funções no Launchpad, por exemplo uma página com a matriz de
+    roteamento e o liga/desliga do MASTER FX (2513) e do ANALOG FX.
+
+  Cada endereço precisa de uma captura antes, e escrever neles é ampliar a regra:
+  decisão do Luan.
+- **Mostrar o knob "esperando" o pickup:** no F2, o FILTER do CRUSHER só respondeu
+  depois de uma volta inteira, porque o knob ainda não tinha passado pelo valor da
+  máquina. Um aviso no terminal ou um LED evitaria a dúvida.
 - **Leitura por CC como plano B:** se `Tx Edit Data` funcionar de verdade (a TR-8S não
   transmitia), os knobs do painel chegam de graça para a página de mixer
 - **Polimetria visível:** com FIRST/LAST STEP por track, pintar fora da janela de cada
