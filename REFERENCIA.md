@@ -727,7 +727,11 @@ depois** (o tempo até o Enter), não. Medido em seguida, só com leituras:
 
 ### 7.6 C5 — onde moram o step, a performance e o cabeçalho (medido 10/10/2026, painel)
 
-`sessao_c4.py c5` e `c5b`:
+`sessao_c4.py c5`, `c5b` e `c5c` (esta com **séries**: um clique por foto, e o Luan digita o
+que o visor mostra). Os `[n]` abaixo são **posições na leitura**. O índice absoluto é a
+posição mais o início da faixa: steps 1249 + n, cabeçalho 988 + n, bloco 3 112 + n.
+
+Os gestos usados:
 - uma foto de tudo que o App lê no boot (439 leituras, 0,1 s);
 - **um** gesto no painel, outra foto, o diff;
 - o gesto inverso, e a conferência.
@@ -745,9 +749,9 @@ qualquer um destes é ampliar a regra: **decisão do Luan, por grupo**.
 | nota (slot 0/1) | `[4s + slot]` | velocity no byte do meio: 90 → 40 (`A5A3C` → `A283C`) |
 | **ALT** (tracks simples) | o slot 0 ganha o bit 23 | `0` → `8A503C`; o 2º toque com LAYER [B] deixou `8A323C`, ALT com velocity fraca (o roxo fraco) |
 | PROB | `[64 + s]` | 100 → 50 (`64` → `32`) |
-| SUB STEP | `[80 + s]` | 0 = nenhum, 1 = 1/2, 4 = Flam (na ordem do manual: 1/2, 1/3, 1/4, Flam, …) |
-| CYCLE | `[98 + s]` | 0 = 1/1, 3 = "1/3" (mapa completo a medir) |
-| START (micro-timing) | `[114 + s]` | 0 → 15 com uns cliques para a direita |
+| SUB STEP | `[80 + s]` | **mapa inteiro (c5c):** 0 = OFF, 1 = 1/2, 2 = 1/3, 3 = 1/4, 4 = Flam, 5–8 = Triplet 1–4, 9–13 = Quad 1–5 |
+| CYCLE | `[98 + s]` | **mapa inteiro (c5c):** 0..35 = 1/1, 1/2, 2/2, 1/3, 2/3, 3/3 … 8/8 (o "a/b" vale b·(b−1)/2 + a − 1), 36 = 1st Only, 37 = Except 1st |
+| START (micro-timing) | `[114 + s]` | **−100..+100**, com sinal em 32 bits (−100 = `FFFFFF9C`; c5c) |
 | `[96]`, `[97]`, `[130]` | — | sem leitura ainda |
 
 **O comportamento do painel** (explica os efeitos colaterais):
@@ -763,17 +767,19 @@ qualquer um destes é ampliar a regra: **decisão do Luan, por grupo**.
 
 | campo | índice | valores |
 |---|---|---|
-| Scale | `[36]` | 1 = 16th(T), 2 = 16th, 3 = 32nd (0 = 8th(T), deduzido pela ordem) |
+| Scale | `[36]` | 0 = 8th(T), 1 = 16th(T), 2 = 16th, 3 = 32nd (os quatro medidos) |
 | variação escolhida / chain | `[18]` | máscara: A = 1, B = 2, A+B = 3 |
+| FIRST STEP da variação | `[60 + v]` | 0-based: 0 → 2 = step 3 (c5c) |
 | LAST STEP da variação | `[72 + v]` | 0-based: 15 → 11 = step 12 |
-| LAST STEP do track | `[95 + track]` | 15 → 7, com a chave "track com LAST próprio" em `[106 + track]` 0 → 1 |
+| FIRST STEP do track | `[84 + track]` | 0 → 2 (c5c), com a mesma chave `[106 + track]` |
+| LAST STEP do track | `[95 + track]` | 15 → 7, com a chave "track com FIRST/LAST próprio" em `[106 + track]` 0 → 1 |
 | FILL (PLAY) | `[119]` | 0 = FILL1, 1 = FILL2 |
 
 **No bloco 3** (estado; não é do pattern):
 
 | campo | índice | valores |
 |---|---|---|
-| **MUTE** | `[12]` | máscara por track: o SD mutado deu 2. `[11]` = 1 com o modo MUTE aceso |
+| **MUTE** | `[12]` | máscara por track: o SD mutado deu 2. `[11]` = 1 com o modo MUTE aceso (confirmado sozinho na c5c) |
 | **STEP LOOP** | `[150]` | 1 com o modo ligado |
 | step segurado no loop | `[151 + s]` | segurar o STEP 5 acendeu o `[155]` (também mudaram `[172]` = 84 e `[177]` = 1) |
 | tela/modo do painel | `[131]` | 0, 4, 7 conforme a tela; não é dado |
@@ -794,7 +800,15 @@ ainda (PR D).
 | **FX ROUTE** (a Routing Matrix) de BD..RC | 13, y = track | 559 | 0 = THROUGH, 1 = MASTER FX, 2 = ANALOG FX |
 | FX ROUTE do RVB / DLY / EXT | 5 / 6 / 9 | 2369 / 2411 / 517 | idem |
 
-**Sem endereço:** o **MSTR DEP** e o **HLD TIME** foram girados e o App não escreveu nada.
+O **MSTR DEP** e o **HLD TIME** foram girados no App e ele não escreveu nada. Pelo **painel**
+([SHIFT]+[KIT], página SIDE CHAIN) a c5c achou os dois:
+- **MSTR DEP** = bloco 12, **551** (o kit estava em 1000; é o C1 da 2ª página);
+- **HLD TIME** = bloco 12, **547** (o kit estava em 20; o fim à direita deu 500).
+
+Esses dois são **medidos pelo painel**, não pelo App.
+
+**Efeito colateral do painel (c5c):** o [SHIFT]+STEP do FIRST STEP também gravou `FF` nos 4
+slots daquele step do track selecionado.
 
 **Surpresa:** na `c5b`, o Flam foi parar na **Fill 1** (bloco 142), não na var A. O gesto
 `fill` da 1ª rodada deve ter deixado a Fill 1 como alvo de edição.
