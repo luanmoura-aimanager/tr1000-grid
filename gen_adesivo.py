@@ -145,24 +145,25 @@ def etiqueta(x, y, rotulo, cor, glifo=None, nota=None):
     if glifo or nota:
         tam, dy = (8.2 if len(rotulo) <= 3 else 7.2), 2.6
     elif len(rotulo) <= 3:
-        tam, dy = 10.0, 4.4
+        tam, dy = 10.0, 3.6
     elif len(rotulo) <= 5:
-        tam, dy = 8.0, 3.9
+        tam, dy = 8.0, 4.3
     else:
-        tam, dy = 6.8, 4.1
+        tam, dy = 6.8, 4.5
     _por(x, y + dy, LADO, LADO, rotulo, tam, tinta, True, fitz.TEXT_ALIGN_CENTER)
     if nota:
         _por(x, y + 8.2, LADO, 5.2, nota, 5.6, tinta, True, fitz.TEXT_ALIGN_CENTER)
     elif glifo:
-        triangulo(x + LADO / 2, y + 10.0, 4.0, glifo, tinta)
+        # relativo a LADO: com 13,3 fixos a ponta saia da etiqueta de 12,3
+        triangulo(x + LADO / 2, y + LADO - 3.0, 3.6, glifo, tinta)
 
 
 def etiqueta_titulo(x, y, texto, direcao):
     """O canto do logo nao e botao: etiqueta BRANCA de cabecalho da borda."""
     pg.draw_rect(fitz.Rect(mm(x), mm(y), mm(x + LADO), mm(y + LADO)),
                  color=CORTE, fill=BRANCO, width=0.5)
-    _por(x, y + 3.0, LADO, 7.0, texto, 9.5, TINTA, True, fitz.TEXT_ALIGN_CENTER)
-    triangulo(x + LADO / 2, y + 10.2, 4.6, direcao, TINTA)
+    _por(x, y + 2.2, LADO, 7.0, texto, 9.0, TINTA, True, fitz.TEXT_ALIGN_CENTER)
+    triangulo(x + LADO / 2, y + LADO - 3.2, 3.8, direcao, TINTA)
 
 
 def etiqueta_step(x, y, n):
