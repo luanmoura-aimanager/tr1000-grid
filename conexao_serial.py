@@ -10,11 +10,13 @@ copiando os bytes das capturas, sem inventar campo nenhum.
 
 TODO PACOTE QUE SAI PASSA POR UM PONTO SO (_mandar), que recusa antes de
 qualquer byte sair:
-  - escrita (01) fora de ESCRITAS_PERMITIDAS - o portao da fase 0,
-    REFERENCIA 3.1. Ampliar essa lista e decisao do Luan, nao de codigo;
-  - leitura (82) fora das faixas que o PROPRIO App leu no boot
-    (CAPTURAS_DE_REFERENCIA) - a armadilha 1 do CLAUDE.md: na TR-8S, leitura
-    em endereco invalido derrubava a porta;
+  - escrita (01) que nao passa em escrita_permitida: so STEPS (layers A/B,
+    valor nota ou pausa, qualquer pattern) e as 3 historicas da C3 -
+    REFERENCIA 3.1. Ampliar a regra e decisao do Luan, nao de codigo;
+  - leitura (82) fora das faixas que o PROPRIO App leu nas capturas de
+    referencia (CAPTURAS_DE_REFERENCIA), com os blocos de pattern valendo
+    para qualquer x 0..127 - a armadilha 1 do CLAUDE.md: na TR-8S, leitura em
+    endereco invalido derrubava a porta;
   - qualquer outro pacote que nao seja o aperto de mao.
 
 Uso direto: ver sessao_c3.py. Aqui so a conexao.
@@ -35,15 +37,17 @@ ESPERA = 1.0                             # s: a maquina respondeu em ~2-30 ms
 # os slots 0 e 1 (layer A e B) dos 16 steps dos 10 tracks, nas 12 variacoes,
 # de qualquer pattern; valor so nota (A··3C, velocity 1..127) ou pausa (FF).
 # Nada de cabecalho, kit, mixer, probability. Ver escrita_permitida.
-N_VARIACOES, N_TRACKS, N_PATTERNS = 12, 10, 128
+N_VARIACOES = len(ts.VARIACOES_SERIAL)             # 12: A..H + Fill 1..4
+N_TRACKS = len(ts.TRACKS_SERIAL)                   # 10: BD..RC
+N_PATTERNS = 128                                   # 8 bancos x 16 (manual RM p.13)
+BLOCOS_DE_STEPS = frozenset(ts.bloco_de_steps(v) for v in range(N_VARIACOES))
 
 
 def escrita_permitida(bloco, x, y, indice, valor):
     """A regra da escrita do grid. Tudo que nao casa e recusado no portao."""
     if (bloco, x, y, indice) in ESCRITAS_PERMITIDAS:          # as 3 da C3
         return True
-    blocos = {ts.bloco_de_steps(v) for v in range(N_VARIACOES)}
-    if bloco not in blocos or not 0 <= x < N_PATTERNS or not 0 <= y < N_TRACKS:
+    if bloco not in BLOCOS_DE_STEPS or not 0 <= x < N_PATTERNS or not 0 <= y < N_TRACKS:
         return False
     rel = indice - ts.INDICE_STEPS
     if not 0 <= rel < 64 or rel % 4 not in (0, 1):            # slots 0 e 1
@@ -104,7 +108,8 @@ def faixa_do_bloco(bloco, x, y):
 # Os blocos de pattern (cabecalho e as 12 variacoes): o App os leu com x = 0,
 # 1 e 16 (tres patterns de dois bancos), e o x e o indice global do pattern.
 # Decisao do Luan (08/10/2026): a MESMA faixa vale para qualquer x de 0..127.
-BLOCOS_DE_PATTERN = range(ts.BLOCO_CAB_PATTERN, ts.BLOCO_VAR0 + ts.BLOCOS_POR_VAR * 12)
+BLOCOS_DE_PATTERN = range(ts.BLOCO_CAB_PATTERN,
+                          ts.BLOCO_VAR0 + ts.BLOCOS_POR_VAR * N_VARIACOES)
 
 
 def _faixas(bloco, x, y):
@@ -215,7 +220,8 @@ class ConexaoTR1000:
     e RECUSA se o TR-1000 App estiver aberto - dois programas na mesma serial
     cruzariam as respostas."""
 
-    def __init__(self, nome_captura=None, porta=None, relogio=time.time):
+    def __init__(self, nome_captura=None, porta=None, relogio=time.time,
+                 registrar=None):
         self._porta_injetada = porta
         self.porta = None
         self.relogio = relogio
@@ -223,6 +229,10 @@ class ConexaoTR1000:
         self.registros = []
         # nunca por cima de uma captura que ja existe (espiao.caminho_livre)
         self.captura = espiao.caminho_livre(nome_captura) if nome_captura else None
+        # o log em memoria so existe quando vai virar arquivo: o grid fica
+        # horas com UMA conexao aberta, relendo 2x por segundo, e guardar tudo
+        # crescia sem limite (revisao do PR #4)
+        self.registrando = bool(nome_captura) if registrar is None else registrar
 
     # ── abrir / fechar ──────────────────────────────────────
     def __enter__(self):
@@ -256,6 +266,8 @@ class ConexaoTR1000:
 
     # ── log no formato do espiao (.serlog) ──────────────────
     def _registrar(self, tipo, dados, fd=0):
+        if not self.registrando:
+            return
         self.registros.append((int(self.relogio() * 1e9), tipo, fd, bytes(dados)))
 
     def _gravar_captura(self):

@@ -495,7 +495,7 @@ class TesteEscritaC3(unittest.TestCase):
     def test_a_captura_da_sessao_e_lida_como_as_do_espiao(self):
         m = _MaquinaFalsa()
         with tempfile.TemporaryDirectory() as tmp:
-            with conexao_serial.ConexaoTR1000(porta=m) as c:
+            with conexao_serial.ConexaoTR1000(porta=m, registrar=True) as c:
                 c.captura = os.path.join(tmp, "c3.serlog")
                 c.aperto(); c.ler(156, 126, 0, 962)
             regs = tr1000_serial.ler_serlog(c.captura)
@@ -611,7 +611,8 @@ class TesteRevisaoPR2(unittest.TestCase):
 
     def test_captura_comeca_pelo_S_e_no_tempo_certo(self):
         m = _MaquinaFalsa()
-        with conexao_serial.ConexaoTR1000(porta=m, relogio=_relogio_rapido(0.005)) as c:
+        with conexao_serial.ConexaoTR1000(porta=m, relogio=_relogio_rapido(0.005),
+                                          registrar=True) as c:
             c.aperto()
         tempos = [r[0] for r in c.registros]
         self.assertEqual(c.registros[0][1], "S")
@@ -808,6 +809,53 @@ def _escritas(maq):
     return out
 
 
+class TesteRevisaoPR4(unittest.TestCase):
+    def test_conexao_sem_captura_nao_guarda_nada(self):
+        m = _MaquinaFalsa()
+        with conexao_serial.ConexaoTR1000(porta=m) as c:
+            c.aperto()
+        self.assertEqual(c.registros, [])
+
+    def test_leitura_recusada_nao_derruba_o_tick(self):
+        maq = _MaquinaFalsa()
+        b3 = [0] * 292
+        b3[2] = 130                                    # fora de 0..127
+        maq.blocos = {(3, 0, 0): b3}
+        m = motor_cru(maq)
+        m.proxima_releitura = 0
+        m.tick()                                       # nao pode levantar
+        self.assertEqual(m.x_pattern, 0)
+
+    def test_variacao_que_nao_le_nao_troca(self):
+        m = motor_cru()
+        def falha(*a):
+            raise conexao_serial.ErroConexao("sem resposta")
+        m._ler = falha
+        m.executar("variacao", 2)
+        self.assertEqual(m.variacao, 0)
+
+    def test_start_sem_stop_limpa_a_coluna_velha(self):
+        import mido
+        m = motor_cru()
+        m.tocando, m.passo = True, 9
+        pintadas = []
+        m.pintar_coluna = pintadas.append
+        m.clk = _PortaLP([mido.Message("start")])
+        m._ler_clock()
+        self.assertIn(9, pintadas)
+        self.assertEqual(m.passo, 0)
+
+    def test_o_sexto_pulso_ainda_e_do_step_0(self):
+        import mido
+        m = motor_cru()
+        m.clk = _PortaLP([mido.Message("start")] + [mido.Message("clock")] * 6)
+        m._ler_clock()
+        self.assertEqual(m.passo, 0)
+        m.clk.fila = [mido.Message("clock")]
+        m._ler_clock()
+        self.assertEqual(m.passo, 1)
+
+
 class TesteNota(unittest.TestCase):
     def test_reproduz_os_valores_lidos(self):
         # lidos na S0 e no boot-1-02 (08/10/2026)
@@ -930,7 +978,7 @@ class TesteMotor(unittest.TestCase):
         m._ler_clock()
         self.assertEqual((m.tocando, m.passo), (False, -1))
 
-    def test_troca_de_pattern_no_painel_relê_com_o_novo_x(self):
+    def test_troca_de_pattern_no_painel_rele_com_o_novo_x(self):
         maq = _MaquinaFalsa()
         b3 = [0] * 292
         b3[2] = 16                                            # 2-01

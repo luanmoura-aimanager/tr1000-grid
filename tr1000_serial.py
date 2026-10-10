@@ -422,9 +422,9 @@ INDICE_STEPS = 1249                                  # (medido 08/10)
 N_STEPS_BLOCO = 131                                  # (medido 08/10)
 
 # O valor de uma nota: 0xA503C = A 50 3C, com o byte do meio = velocity.
-# DEDUZIDO de cinco valores lidos (80 -> A503C, 90 -> A5A3C, 66 -> A423C,
-# 74 -> A4A3C, 88 -> A583C; os fracos 66/74 o painel mostrou fracos). ESCREVER
-# outra velocity ainda nao foi provado - e o F1.3 do ROTEIRO-F1.
+# Deduzido de cinco valores lidos (80 -> A503C, 90 -> A5A3C, 66 -> A423C,
+# 74 -> A4A3C, 88 -> A583C) e PROVADO escrevendo no F1.3 (09/10/2026): 66
+# apareceu e soou fraco no painel, 127 forte.
 NOTA_BASE, NOTA_FIM = 0xA0000, 0x3C
 
 

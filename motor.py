@@ -38,6 +38,8 @@ BASE_MAX = N_TRACKS - LINHAS                        # rolagem: 0..2
 PULSOS_P_STEP = 6                                   # 24 ppqn, scale 16th (assumido)
 PASSOS = 16                                         # last step (assumido)
 RELER_A_CADA = 0.5                                  # s
+N_SLOTS = 64                                        # note0..63: so o que o grid usa
+ERROS_DE_LEITURA = (cs.ErroConexao, PermissionError)
 
 # Velocity: 80 e o "normal" do painel (Normal Velocity, e o A503C que o
 # painel escreve); 66 o painel mostrou FRACO (SD do 1-02, 08/10/2026).
@@ -168,26 +170,36 @@ class Motor:
         self._ler_clock()                        # antes do pedido, nunca no meio
         return self.conexao.ler(bloco, x, y, indice, n)
 
-    def ler_variacao(self, variacao):
+    def _ler_variacao(self, x, variacao):
+        """Os 10 tracks de uma variacao, SEM tocar no estado: ou volta tudo, ou
+        a excecao sobe e o cache continua o de antes (revisao do PR #4: uma
+        falha no meio deixava metade do cache novo e metade velho)."""
         b = bloco_de_steps(variacao)
-        for tr in range(N_TRACKS):
-            self.cache[(variacao, tr)] = self._ler(b, self.x_pattern, tr,
-                                                   ts.INDICE_STEPS, ts.N_STEPS_BLOCO)
+        return {(variacao, tr): self._ler(b, x, tr, ts.INDICE_STEPS, N_SLOTS)
+                for tr in range(N_TRACKS)}
+
+    def ler_variacao(self, variacao):
+        self.cache.update(self._ler_variacao(self.x_pattern, variacao))
 
     def reler(self, forcar=False):
         """O pattern selecionado no painel (bloco 3 [2]) e a variacao mostrada.
-        Devolve True se algo mudou (e entao ja repintou)."""
+        Devolve True se algo mudou (e entao ja repintou). Le tudo antes de
+        trocar qualquer coisa: o x e o cache so mudam juntos, e so se as 11
+        leituras deram certo."""
         b3 = self._ler(3, 0, 0, *cs.faixa_do_bloco(3, 0, 0))
         x = b3[ts.OFF_PATTERN_GLOBAL]
-        mudou = forcar or x != self.x_pattern
-        if x != self.x_pattern:
+        if not 0 <= x < cs.N_PATTERNS:
+            self.log(f"(!) bloco 3 trouxe pattern {x}, fora de 0..127 - ignorado")
+            return False
+        novo = self._ler_variacao(x, self.variacao)
+        trocou = x != self.x_pattern
+        if trocou:
             self.log(f"pattern {ts.nome_do_pattern(x)} (x {x})")
             self.x_pattern = x
             self.cache.clear()
-        antes = [self.cache.get((self.variacao, tr)) for tr in range(N_TRACKS)]
-        self.ler_variacao(self.variacao)
-        depois = [self.cache.get((self.variacao, tr)) for tr in range(N_TRACKS)]
-        if mudou or antes != depois:
+        antes = [self.cache.get(k) for k in novo]
+        self.cache.update(novo)
+        if forcar or trocou or antes != list(novo.values()):
             self.pintar()
             self.pintar_botoes()
             return True
@@ -225,7 +237,7 @@ class Motor:
         """O toque: se os slots-alvo ja tem a nota na velocity atual, desliga
         (FF, como o painel); senao escreve a nota. Uma escrita por slot, cada
         uma com o 03 de volta; o cache so muda depois da confirmacao. Erro:
-        relê o track e segue - nunca repete sozinho."""
+        rele o track e segue - nunca repete sozinho."""
         tr = self.base_inst + linha
         if tr >= N_TRACKS or self.conexao is None or self.x_pattern is None:
             return
@@ -241,24 +253,28 @@ class Motor:
                 self.conexao.escrever(bloco, self.x_pattern, tr, i, novo)
                 if cache is not None:
                     cache[i - ts.INDICE_STEPS] = novo
-        except (cs.ErroConexao, PermissionError) as e:
+        except ERROS_DE_LEITURA as e:
             self.log(f"(!) escrita recusada/sem resposta: {e} - relendo o track")
             try:
                 self.cache[(self.variacao, tr)] = self._ler(
-                    bloco, self.x_pattern, tr, ts.INDICE_STEPS, ts.N_STEPS_BLOCO)
-            except cs.ErroConexao:
+                    bloco, self.x_pattern, tr, ts.INDICE_STEPS, N_SLOTS)
+            except ERROS_DE_LEITURA:
                 pass
 
     # ── botoes ──────────────────────────────────────────────
     def executar(self, tipo, arg):
         if tipo == "variacao":
             if arg != self.variacao:
-                self.variacao = arg
+                # le primeiro, troca depois: com a leitura falhando, o grid
+                # fica na variacao de antes em vez de mostrar uma vazia que o
+                # toque trataria como vazia (revisao do PR #4)
                 if self.conexao is not None and self.x_pattern is not None:
                     try:
-                        self.ler_variacao(arg)
-                    except cs.ErroConexao as e:
-                        self.log(f"(!) {e}")
+                        self.cache.update(self._ler_variacao(self.x_pattern, arg))
+                    except ERROS_DE_LEITURA as e:
+                        self.log(f"(!) nao li a variacao {ts.VARIACOES_SERIAL[arg]}: {e}")
+                        return
+                self.variacao = arg
         elif tipo == "velocidade":
             self.vel_idx = arg
         elif tipo == "rolar":
@@ -336,9 +352,13 @@ class Motor:
                 continue
             lote = self._aplicar_pulsos(lote)  # transporte fecha o lote
             if t == "start":
+                # start sem stop antes (recomeco): a coluna velha precisa ser
+                # repintada, senao o branco fica preso nela (revisao do PR #4)
+                antigo = self.passo
                 self.pulsos, self.tocando = 0, True
                 self.passo = -1
                 self.mover_playhead(0)
+                self.pintar_coluna(antigo)
             elif t == "continue":
                 self.tocando = True
             elif t == "stop":
@@ -350,7 +370,10 @@ class Motor:
     def _aplicar_pulsos(self, lote):
         if lote and self.tocando:
             self.pulsos += lote
-            self.mover_playhead((self.pulsos // PULSOS_P_STEP) % PASSOS)
+            # os pulsos 1..6 depois do start sao o step 0: o 6o ainda e dele,
+            # o 7o abre o step 1 (pulsos // 6 adiantava um pulso a cada step -
+            # revisao do PR #4)
+            self.mover_playhead(((self.pulsos - 1) // PULSOS_P_STEP) % PASSOS)
         return 0
 
     # ── pads e o laco ───────────────────────────────────────
@@ -371,7 +394,7 @@ class Motor:
                     continue
                 linha, col = pos
                 self.alternar(linha, off + col)
-                self.pintar()
+                self.pintar_coluna(off + col)           # so a coluna mudou
 
     def tick(self):
         with self.lock:
@@ -383,7 +406,7 @@ class Motor:
                 self.proxima_releitura = agora + RELER_A_CADA
                 try:
                     self.reler()
-                except cs.ErroConexao as e:
+                except ERROS_DE_LEITURA as e:
                     self.log(f"(!) releitura falhou: {e}")
 
     def fechar(self):
