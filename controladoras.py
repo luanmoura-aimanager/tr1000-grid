@@ -5,8 +5,10 @@ controladoras.py - as duas controladoras de knobs: MC-24 (efeitos) e CM-MC50 (mi
     python3 controladoras.py mapear      # knob a knob: gire o que ele pedir
     python3 controladoras.py escutar     # tudo que as duas mandam, com o rotulo
 
-Nada aqui escreve na TR-1000: so escuta as controladoras (portas MIDI). O mapa
-vai para mapas/controladoras.json - a configuracao do hardware do Luan.
+mapear e escutar nao escrevem na TR-1000: so escutam as controladoras (portas
+MIDI). O mapa vai para mapas/controladoras.json - a configuracao do hardware
+do Luan. Quem escreve e o motor (lp_tr1000.py run), com Controladoras e
+Pickup daqui e a tabela da parametros.py - pelo mesmo portao da serial.
 
 Os rotulos vem das fotos das placas que o Luan mandou em 09/10/2026:
   MC-24   REVERB (TYPE TIME PREDELAY LOWCUT HIGHCUT DENSITY) · LFO (RATE
@@ -21,6 +23,8 @@ horario, e apertar Enter. Retoma de onde parou (Ctrl+C salva) e recusa um CC
 que ja esta mapeado em outro knob.
 """
 import json, os, sys, time
+
+import parametros as P
 
 AQUI = os.path.dirname(os.path.abspath(__file__))
 MAPA = os.path.join(AQUI, "mapas", "controladoras.json")
@@ -246,6 +250,191 @@ def cmd_escutar():
         for p in abertas.values():
             p.close()
     return 0
+
+
+# ─────────────────────────────────────────────────────────────
+# runtime: as controladoras dentro do motor (B5)
+# ─────────────────────────────────────────────────────────────
+class Controladoras:
+    """As duas portas, abertas se estiverem na USB (sem elas o grid roda
+    igual). ler() -> {id do knob: ultimo CC} do que chegou desde a ultima vez:
+    so o ultimo de cada knob interessa (o pickup compara com o anterior)."""
+
+    def __init__(self, mapa=None, log=print):
+        self.mapa = mapa or carregar_mapa()
+        self.rev = indice_reverso(self.mapa)
+        self.portas = {}
+        from portas import EntradaMIDI, porta_exata
+        for nome in (PORTA_MC24, PORTA_MC50):
+            p = porta_exata(nome)
+            if p:
+                self.portas[nome] = EntradaMIDI(*p)
+            else:
+                log(f"(controladora {nome} nao achada - seus knobs ficam parados)")
+
+    def ler(self):
+        ultimo = {}
+        for nome, p in self.portas.items():
+            for m in p.iter_pending():
+                if m.type == "control_change":
+                    i = self.rev.get((nome, m.channel, m.control))
+                    if i is not None:
+                        ultimo[i] = m.value
+        return ultimo
+
+    def fechar(self):
+        for p in self.portas.values():
+            try:
+                p.close()
+            except Exception:
+                pass
+        self.portas = {}
+
+
+class Pickup:
+    """O que cada knob faz na maquina, com "pegar no caminho" (decisao do
+    Luan, 09/10/2026): o knob so escreve depois de PASSAR pelo valor que a
+    maquina tem (ou chegar a um passo dele) - sem pulo no som.
+
+    ler(bloco, x, y, indice) -> valor e escrever(bloco, x, y, indice, valor)
+    sao do motor (a mesma ConexaoTR1000, o mesmo portao). O valor atual da
+    maquina e lido UMA vez, no primeiro movimento do knob; depois dele, e o
+    que o proprio knob escreveu.
+
+    Solta tudo (soltar) quando o pattern ou o kit trocam. Os seletores de
+    type sao relidos depois de esquecer_seletores (o motor chama a cada
+    releitura: o painel pode ter trocado o type). Um knob cujo endereco
+    mudou (o type mudou) e solto e lido de novo.
+
+    As escritas saem juntas no maximo a cada INTERVALO: so o ultimo valor de
+    cada knob (o App escreveu ~30/s)."""
+
+    INTERVALO = 0.03
+
+    def __init__(self, mapa, ler, escrever, erros=(Exception,), log=print):
+        self.faixa = {i: tuple(k["faixa"]) for i, k in mapa["knobs"].items()
+                      if k.get("tipo") == "absoluto"}
+        self.ler, self.escrever, self.erros, self.log = ler, escrever, erros, log
+        self.estado = {}             # id -> {endereco, p, maquina, anterior, pego}
+        self.pendentes = {}          # id -> valor (o ultimo)
+        self.seletores = {}          # id do seletor -> valor lido
+        self.avisados = set()
+        self.proxima = 0.0
+
+    def soltar(self):
+        self.estado.clear()
+        self.pendentes.clear()
+        self.seletores.clear()
+
+    def esquecer_seletores(self):
+        self.seletores.clear()
+
+    def _aviso(self, chave, texto):
+        if chave not in self.avisados:
+            self.avisados.add(chave)
+            self.log(texto)
+
+    def _seletor(self, sid, x_kit):
+        if sid not in self.seletores:
+            self.seletores[sid] = self.ler(*P.endereco(P.SELETORES[sid], x_kit))
+        return self.seletores[sid]
+
+    def entrada(self, id, x_pattern, x_kit):
+        """(Parametro, endereco) do knob agora, ou None (inativo: type sem
+        entrada, kit incerto, nada decifrado)."""
+        if id in P.TABELA:
+            p = P.TABELA[id]
+        elif id in P.POR_TIPO:
+            if x_kit is None:
+                return None
+            alternativas = list(P.POR_TIPO[id].values())
+            if not alternativas:
+                return None
+            primeira = alternativas[0]
+            if not isinstance(primeira, P.Parametro):
+                primeira = primeira[0]
+            tipo = self._seletor(primeira.tipo[0], x_kit)
+            e = P.POR_TIPO[id].get(tipo)
+            conds = {}
+            if e is not None and not isinstance(e, P.Parametro):
+                for a in e:                               # o STEP com SYNC
+                    conds[a.condicao[0]] = self._seletor(a.condicao[0], x_kit)
+            p = P.entrada_para(id, tipo, conds)
+            if p is None:
+                self._aviso((id, tipo), f"(knob {id}: inativo no type {tipo})")
+                return None
+        else:
+            return None
+        x = x_pattern if p.escopo == "pattern" else x_kit
+        if x is None:
+            return None
+        return p, P.endereco(p, x, P.track_do_id(id))
+
+    def mover(self, knobs, x_pattern, x_kit):
+        """{id: cc} de um tick -> o que escrever fica em pendentes."""
+        for id, cc in knobs.items():
+            if id not in self.faixa:
+                continue
+            try:
+                e = self.entrada(id, x_pattern, x_kit)
+            except self.erros as exc:
+                self._aviso(("ler", id), f"(!) knob {id}: nao li a maquina ({exc})")
+                continue
+            if e is None:
+                self.estado.pop(id, None)
+                continue
+            p, end = e
+            st = self.estado.get(id)
+            if st is None or st["endereco"] != end:
+                try:
+                    maquina = self.ler(*end)
+                except self.erros as exc:
+                    self._aviso(("ler", id), f"(!) knob {id}: nao li a maquina ({exc})")
+                    continue
+                st = dict(endereco=end, p=p, maquina=maquina, anterior=None, pego=False)
+                self.estado[id] = st
+                self.pendentes.pop(id, None)
+            v = P.converter(p, cc, *self.faixa[id])
+            if not st["pego"]:
+                m = min(max(st["maquina"], p.minimo), p.maximo)
+                passo = _passo_do_knob(p, self.faixa[id])
+                a, st["anterior"] = st["anterior"], v
+                if not (abs(v - m) <= passo or (a is not None and (a - m) * (v - m) <= 0)):
+                    continue
+                st["pego"] = True
+            if v != st["maquina"]:
+                self.pendentes[id] = v
+            else:
+                self.pendentes.pop(id, None)
+
+    def escrever_pendentes(self, agora):
+        if not self.pendentes or agora < self.proxima:
+            return 0
+        self.proxima = agora + self.INTERVALO
+        n = 0
+        for id, v in list(self.pendentes.items()):
+            del self.pendentes[id]
+            st = self.estado.get(id)
+            if st is None:
+                continue
+            try:
+                self.escrever(*st["endereco"], v)
+            except self.erros as exc:
+                self.log(f"(!) knob {id}: escrita recusada/sem resposta ({exc}) - solto")
+                self.estado.pop(id, None)
+                continue
+            st["maquina"] = v
+            n += 1
+            if id in P.SELETORES:                      # TYPE do delay/MFX
+                self.seletores[id] = v
+        return n
+
+
+def _passo_do_knob(p, faixa):
+    """Quanto o parametro anda num CC do knob (pelo menos 1): a tolerancia do
+    'chegou perto' do pickup - num knob de 0..1000, um CC pula ~8."""
+    cc = max(faixa[1] - faixa[0], 1)
+    return max(1, -(-(p.maximo - p.minimo) // cc))
 
 
 if __name__ == "__main__":

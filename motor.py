@@ -10,6 +10,11 @@ de comandos, pintura em lote, pads, clock -, mas a maquina e outra:
   - o step atual vem da porta MIDI comum: start/stop + clock (REFERENCIA 7.3).
     A maquina manda clock MESMO PARADA - so o start liga o playhead
 
+As duas controladoras de knobs (MC-24 e CM-MC50, controladoras.py), se
+estiverem na USB: cada knob escreve o parametro decifrado dele
+(parametros.py), com pickup e as escritas juntadas a cada ~30 ms. Sem elas, o
+grid roda igual.
+
 O que o grid mostra (fase 1): os 10 tracks BD..RC (8 por vez, com rolagem) x 16
 steps de UMA variacao do pattern selecionado no painel. Le de novo a cada
 ~0,5 s, entao edicao no painel e troca de pattern aparecem sozinhas.
@@ -24,6 +29,7 @@ O que NAO faz ainda (documentado na REFERENCIA):
 import queue, threading, time
 
 import conexao_serial as cs
+import controladoras
 import launchpad as lp
 import tr1000
 import tr1000_serial as ts
@@ -38,6 +44,11 @@ BASE_MAX = N_TRACKS - LINHAS                        # rolagem: 0..2
 PULSOS_P_STEP = 6                                   # 24 ppqn, scale 16th (assumido)
 PASSOS = 16                                         # last step (assumido)
 RELER_A_CADA = 0.5                                  # s
+# O x do KIT: nas capturas do App, bloco 3 [2] (pattern), [3] e [4] vieram
+# sempre iguais - e o x dos blocos de kit foi o mesmo. Qual deles e o kit e
+# DEDUCAO ([3]); com eles diferentes, os knobs de kit ficam parados em vez de
+# escrever num kit que talvez nao seja o que toca.
+OFFS_DO_KIT = (2, 3, 4)
 N_SLOTS = 64                                        # note0..63: so o que o grid usa
 ERROS_DE_LEITURA = (cs.ErroConexao, PermissionError)
 
@@ -86,6 +97,9 @@ class Motor:
     pulsos = 0
     tocando = False
     proxima_releitura = 0.0
+    x_kit = None
+    ctl = None                                  # controladoras.Controladoras
+    pickup = None                               # controladoras.Pickup
 
     def __init__(self, cfg, log=print):
         self.log = log
@@ -98,6 +112,17 @@ class Motor:
             c = cfg[lado]
             self.lp_in[dev] = EntradaMIDI(c["in_idx"], c.get("in_nome"))
             self.lp_out[dev] = SaidaMIDI(c["out_idx"], c.get("out_nome"))
+        self.ctl = controladoras.Controladoras(log=log)
+        if self.ctl.portas:
+            self.pickup = self.novo_pickup(self.ctl.mapa)
+            self.log(f"controladoras: {', '.join(self.ctl.portas)}")
+
+    def novo_pickup(self, mapa):
+        return controladoras.Pickup(
+            mapa,
+            ler=lambda b, x, y, i: self._ler(b, x, y, i, 1)[0],
+            escrever=lambda b, x, y, i, v: self.conexao.escrever(b, x, y, i, v),
+            erros=ERROS_DE_LEITURA, log=self.log)
 
     # ── geometria (do tr8s-grid, sem mudanca) ───────────────
     def nota_de(self, dev, linha, col):
@@ -192,6 +217,17 @@ class Motor:
             self.log(f"(!) bloco 3 trouxe pattern {x}, fora de 0..127 - ignorado")
             return False
         novo = self._ler_variacao(x, self.variacao)
+        kits = {b3[o] for o in OFFS_DO_KIT}
+        x_kit = kits.pop() if len(kits) == 1 else None
+        if self.pickup is not None:
+            if x != self.x_pattern or x_kit != self.x_kit:
+                self.pickup.soltar()                 # outro pattern/kit: pickup de novo
+            else:
+                self.pickup.esquecer_seletores()     # o painel pode ter trocado o type
+        if x_kit != self.x_kit and x_kit is None:
+            self.log(f"(!) bloco 3 [2..4] = {[b3[o] for o in OFFS_DO_KIT]}: kit incerto, "
+                     "knobs de kit parados")
+        self.x_kit = x_kit
         trocou = x != self.x_pattern
         if trocou:
             self.log(f"pattern {ts.nome_do_pattern(x)} (x {x})")
@@ -376,6 +412,17 @@ class Motor:
             self.mover_playhead(((self.pulsos - 1) // PULSOS_P_STEP) % PASSOS)
         return 0
 
+    # ── as controladoras de knobs ───────────────────────────
+    def _ler_controladoras(self, agora):
+        if self.ctl is None:
+            return
+        knobs = self.ctl.ler()
+        if self.pickup is None or self.modo_geral != MODO_ON or self.conexao is None:
+            return
+        if knobs and self.x_pattern is not None:
+            self.pickup.mover(knobs, self.x_pattern, self.x_kit)
+        self.pickup.escrever_pendentes(agora)
+
     # ── pads e o laco ───────────────────────────────────────
     def _ler_pads(self):
         for dev, off in (("E", 0), ("D", 8)):
@@ -402,6 +449,7 @@ class Motor:
             self._ler_clock()
             self._ler_pads()
             agora = time.time()
+            self._ler_controladoras(agora)
             if self.modo_geral == MODO_ON and agora >= self.proxima_releitura:
                 self.proxima_releitura = agora + RELER_A_CADA
                 try:
@@ -423,6 +471,9 @@ class Motor:
             if self.clk is not None:
                 self.clk.close()
                 self.clk = None
+            if self.ctl is not None:
+                self.ctl.fechar()
+                self.ctl = None
             for p in list(self.lp_in.values()) + list(self.lp_out.values()):
                 try:
                     p.close()

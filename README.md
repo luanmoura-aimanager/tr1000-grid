@@ -35,7 +35,8 @@ projeto decifrou (REFERENCIA 2.1b/2.1c):
 | Fase | O quê | Estado |
 |---|---|---|
 | 0 | decifrar: serial, pattern, escrita, step atual (via MIDI) | **suficiente** — critérios 1–5 ✅, o 6 (WRITE) adiado |
-| 1 | o grid: 10 tracks (8 por vez), layer A/B, velocity, playhead pelo clock | ✅ **funcionando** (ROTEIRO-F1 passou em 09/10/2026); as controladoras de knobs em andamento |
+| 1 | o grid: 10 tracks (8 por vez), layer A/B, velocity, playhead pelo clock | ✅ **funcionando** (ROTEIRO-F1 passou em 09/10/2026) |
+| 1b | as controladoras de knobs (MC-24, CM-MC50): mixer, reverb, delay, LFO, MASTER FX | os 74 decifrados; **não testado em hardware** (ROTEIRO-F2) |
 | 2 | parâmetros do step: probability, CYCLE, sub steps, micro-timing | |
 | 3 | performance: mute, fills, step loop, roll, morph; qual variação toca | |
 | 4 | a tela web e o empacotamento (LaunchAgent, `.app`) | |
@@ -48,8 +49,12 @@ python3 lp_tr1000.py learn      # uma vez: descobre esquerdo/direito
 python3 lp_tr1000.py run        # o grid ao vivo (ROTEIRO-F1.md)
 ```
 
-O grid **só escreve steps**, só quando um pad é apertado, e **nada grava na memória**:
-para guardar, aperte **WRITE no painel**.
+O grid escreve **steps** quando um pad é apertado, e **parâmetros** quando um knob das
+controladoras gira, só os da tabela da `parametros.py`. **Nada grava na memória**: para
+guardar, aperte **WRITE no painel**.
+
+As controladoras são opcionais. Sem elas na USB, o grid roda igual. O mapa dos knobs sai
+de `python3 controladoras.py mapear`, uma vez.
 
 ## Ferramentas de engenharia reversa (fase 0)
 

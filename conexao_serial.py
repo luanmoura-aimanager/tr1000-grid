@@ -11,8 +11,9 @@ copiando os bytes das capturas, sem inventar campo nenhum.
 TODO PACOTE QUE SAI PASSA POR UM PONTO SO (_mandar), que recusa antes de
 qualquer byte sair:
   - escrita (01) que nao passa em escrita_permitida: so STEPS (layers A/B,
-    valor nota ou pausa, qualquer pattern) e as 3 historicas da C3 -
-    REFERENCIA 3.1. Ampliar a regra e decisao do Luan, nao de codigo;
+    valor nota ou pausa, qualquer pattern), os PARAMETROS da tabela da
+    parametros.py (endereco e faixa medidos no App) e as 3 historicas da C3 -
+    REFERENCIA 3.1 e 7.5. Ampliar a regra e decisao do Luan, nao de codigo;
   - leitura (82) fora das faixas que o PROPRIO App leu nas capturas de
     referencia (CAPTURAS_DE_REFERENCIA), com os blocos de pattern valendo
     para qualquer x 0..127 - a armadilha 1 do CLAUDE.md: na TR-8S, leitura em
@@ -78,6 +79,21 @@ CAPTURAS_DE_REFERENCIA = [os.path.join(AQUI, "capturas", n) for n in (
     "2026-10-08-s0-autoteste.serlog",
     "2026-10-08-boot-1-02.serlog",
     "2026-10-08-boot-2-01.serlog",          # x = 16: banco 2, pattern 1
+    # B2 (09-10/10/2026): o App lendo de volta, um a um, cada parametro que
+    # escreveu - e o que libera a leitura do valor atual de um knob (pickup)
+    # e dos seletores de type. Tudo com x = 0 (kit 001).
+    "2026-10-09-mixer-bd.serlog",
+    "2026-10-09-mixer-rc.serlog",
+    "2026-10-09-kit-reverb.serlog",
+    "2026-10-09-kit-delay.serlog",
+    "2026-10-09-kit-lfo.serlog",
+    "2026-10-09-kit-lfo-2.serlog",
+    "2026-10-10-delay-tipos.serlog",
+    "2026-10-10-inst-lfo.serlog",
+    "2026-10-10-mfx-1.serlog",
+    "2026-10-10-mfx-2.serlog",
+    "2026-10-10-mfx-3.serlog",
+    "2026-10-10-lfo-sync.serlog",
 )]
 _leituras_do_app = None
 
@@ -133,11 +149,14 @@ def blocos_com_x():
 
 
 def _faixas(bloco, x, y):
-    fs = leituras_do_app().get((bloco, x, y))
-    if (not fs and 0 <= x < N_PATTERNS
+    """As faixas lidas nessa chave. Nos blocos de pattern e de kit, as do x = 0
+    valem para todo x 0..127 (somadas as do proprio x): as capturas B2 leram
+    um parametro de cada vez so com x = 0."""
+    fs = set(leituras_do_app().get((bloco, x, y), ()))
+    if (x and 0 <= x < N_PATTERNS
             and (bloco in BLOCOS_DE_PATTERN or bloco in blocos_com_x())):
-        fs = leituras_do_app().get((bloco, 0, y))      # a do x = 0
-    return fs or ()
+        fs |= leituras_do_app().get((bloco, 0, y), set())
+    return fs
 
 
 def chave_lida(bloco, x, y):

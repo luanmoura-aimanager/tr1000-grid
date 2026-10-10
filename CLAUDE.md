@@ -32,19 +32,23 @@ A fase 0 está suficiente (REFERENCIA 3.1, decisão do Luan em 08/10/2026), e a 
 grid — escreve na máquina. **Toda saída da serial passa por um único portão:
 `conexao_serial.conferir_pacote`.**
 
-- **Escrita (`01`) só de STEPS**, pela regra `escrita_permitida`:
-  - os slots 0 e 1 (layer A e B) dos 16 steps dos 10 tracks, nas 12 variações, de
-    qualquer pattern (x 0..127);
-  - valor só nota (`A··3C`, velocity 1..127) ou pausa (`FF`);
-  - nada de cabeçalho, kit, mixer ou probability.
+- **Escrita (`01`)**, pela regra `escrita_permitida`, só de duas coisas:
+  - **STEPS:** os slots 0 e 1 (layer A e B) dos 16 steps dos 10 tracks, nas 12
+    variações, de qualquer pattern (x 0..127), com valor só nota (`A··3C`, velocity
+    1..127) ou pausa (`FF`). Nada de probability nem do resto do step.
+  - **PARÂMETROS da tabela da `parametros.py`** (fase 1b, as controladoras de knobs):
+    - só endereço que o App foi **visto escrevendo** numa captura (B2);
+    - com valor **dentro da faixa medida**;
+    - os SYNCs e o OFF/FX ROUTE do MASTER FX ficam fora: são lidos, não escritos.
 
   Ampliar a regra é **decisão do Luan**, não detalhe de código. As 3 escritas
   históricas da C3 continuam na lista `ESCRITAS_PERMITIDAS`.
 - **Leitura (`82`)** só dentro das faixas que o **próprio App** leu nas capturas de
-  referência (`CAPTURAS_DE_REFERENCIA`). Os blocos de pattern valem para qualquer x 0..127
-  (decisão do Luan, depois de três patterns de dois bancos provarem x = índice global).
+  referência (`CAPTURAS_DE_REFERENCIA`, que inclui as capturas B2 das controladoras).
+  Os blocos de pattern e de kit valem para qualquer x 0..127 (decisão do Luan, depois de
+  três patterns de dois bancos provarem x = índice global).
 - Fora isso, só o aperto de mão.
-- **Quem escreve é o Luan:** o grid só escreve quando ele aperta um pad; o
+- **Quem escreve é o Luan:** o grid só escreve quando ele aperta um pad ou gira um knob; o
   `sessao_c3.py` só com `sim`/`--sim` digitado por ele. **O agente nunca roda uma
   escrita na máquina por conta própria.**
 - **Nada grava na memória:** o WRITE do painel continua com o Luan (critério 6 adiado).
