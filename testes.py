@@ -1100,7 +1100,11 @@ class TesteParametros(unittest.TestCase):
         self.assertEqual(e("mfx.p7", 9).maximo, 80)               # COMPRESSOR: GAIN
         self.assertEqual(e("mfx.p4", 11).indice, 2594)            # SDD-320: LEVEL
         self.assertIsNone(e("mfx.p4", 1))                         # CRUSHER so tem 3
-        self.assertIsNone(e("mfx.p1", 13))                        # TRANSIENT2: a capturar
+        self.assertEqual(e("mfx.p7", 13).indice, 2605)            # TRANSIENT2: BYPASS
+        self.assertEqual(e("mfx.p3", 14).maximo, 1)               # NOISE: DIRECTION
+        self.assertEqual(e("mfx.p2", 18).indice, 2622)            # DJFX DELAY: TIME
+        self.assertIsNone(e("mfx.p6", 18))                        # DJFX DELAY tem 5
+        self.assertEqual(len(parametros.MFX_TIPOS), 19)
 
     def test_step_do_flanger_e_do_phaser_depende_do_sync(self):
         e, ok = parametros.entrada_para, conexao_serial.escrita_permitida
@@ -1118,7 +1122,9 @@ class TesteParametros(unittest.TestCase):
         self.assertFalse(ok(7, 0, 0, 2546, 201))                  # SPEED vai a 200
         self.assertFalse(ok(7, 0, 0, 2514, 1))                    # FX ROUTE nao e knob
         self.assertFalse(ok(7, 0, 0, 2561, 1))                    # SYNC do FLANGER
-        self.assertFalse(ok(7, 0, 0, 2512, 0))                    # BYPASS nao medido
+        self.assertTrue(ok(7, 0, 0, 2512, 0))                     # BYPASS (mfx-3)
+        self.assertFalse(ok(7, 0, 0, 2512, 19))
+        self.assertFalse(ok(7, 0, 0, 2601, 3))                    # Q do TRANSIENT2: fora
 
     def test_delay_por_type(self):
         e = parametros.entrada_para

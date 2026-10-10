@@ -145,16 +145,16 @@ SELETORES = {
                      "2026-10-09-kit-lfo-2"),
 }
 
-# mfx-1/mfx-2 (10/10/2026): o MASTER FX, bloco 7, um por kit. TYPE no indice
-# 2512, na ordem do seletor do App (manual RM p.56); 1..12 medidos, 13..18 e o
-# BYPASS = 0 por DEDUCAO da ordem, a medir em mfx-3.
+# mfx-1/2/3 (10/10/2026): o MASTER FX, bloco 7, um por kit. TYPE no indice
+# 2512, na ordem do seletor do App (manual RM p.56): os 19, BYPASS = 0
+# incluido, medidos.
 MFX_TIPOS = ["BYPASS", "CRUSHER", "FILTER+DRIVE", "DJFX LOOPER", "ISOLATOR",
              "SCATTER", "FLANGER", "PHASER", "SIDE BAND FILTER", "COMPRESSOR",
              "FET COMP 76", "SDD-320", "TRANSIENT", "TRANSIENT2", "NOISE",
              "303 VINYL SIM", "404 VINYL SIM", "CASSETTE SIM", "DJFX DELAY"]
-TABELA["mfx.type"] = _p("mfx.type", 7, "kit", False, 2512, 0, 1, 12,
-                        "CRUSHER .. TRANSIENT (medidos)", "2026-10-10-mfx-1/2")
-SELETORES["mfx.type"] = TABELA["mfx.type"]._replace(minimo=0, maximo=len(MFX_TIPOS) - 1)
+TABELA["mfx.type"] = _p("mfx.type", 7, "kit", False, 2512, 0, 0, len(MFX_TIPOS) - 1,
+                        "BYPASS CRUSHER .. DJFX DELAY", "2026-10-10-mfx-1/2/3")
+SELETORES["mfx.type"] = TABELA["mfx.type"]
 # O SYNC do FLANGER e do PHASER muda o INDICE do STEP (o knob continua se
 # chamando STEP na tela - mfx-2): seletores proprios, lidos como o TYPE.
 SELETORES["mfx.sync.flanger"] = _p("mfx.sync.flanger", 7, "kit", False, 2561, 0, 0, 1,
@@ -194,11 +194,23 @@ _MFX_POR_TIPO = {
     11: [(2591, 0,   6, "MODE (1 2 3 4 1+4 2+4 3+4)"), (2592, 0, 150, "LO GAIN"),
          (2593, 0, 150, "HI GAIN"), (2594, 0, 255, "LEVEL")],
     12: [(2595, 0, 255, "ENV DEPTH"), (2596, 0, 255, "ATTACK"), (2597, 0, 255, "RELEASE")],
+    13: [(2598, 0, 255, "ENV DEPTH"), (2599, 0, 255, "ATTACK"), (2600, 0, 255, "RELEASE"),
+         (2604, 0, 255, "LP LEVEL"),  (2603, 0, 255, "BP LEVEL"), (2602, 0, 255, "HP LEVEL"),
+         (2605, 0, 255, "BYPASS")],                     # o 8o, Q 2601 0..7, fica fora
+    14: [(2606, 0, 255, "COLOR"),   (2607, 0, 255, "LEVEL"),
+         (2608, 0,   1, "DIRECTION (UP DOWN)")],
+    15: [(2609, 0, 255, "COMP"),    (2610, 0, 255, "NOISE"),  (2611, 0, 255, "WOW FLUT"),
+         (2612, 0, 255, "LEVEL")],
+    16: [(2613, 0, 255, "FREQ"),    (2614, 0, 255, "NOISE"),  (2615, 0, 255, "WOW FLUT")],
+    17: [(2616, 0, 255, "TONE"),    (2617, 0, 255, "HISS"),   (2618, 0, 255, "AGE"),
+         (2619, 0, 255, "DRIVE"),   (2620, 0, 255, "WOW FLUT")],
+    18: [(2621, 0, 255, "LENGTH"),  (2622, 0, 255, "TIME"),   (2623, 0, 1, "LOOP SW (OFF ON)"),
+         (2624, 0, 255, "FEEDBACK"), (2625, 0, 255, "LEVEL")],
 }
 for _n in range(1, 8):
     POR_TIPO[f"mfx.p{_n}"] = {}
 for _tipo, _lista in _MFX_POR_TIPO.items():
-    _fonte = "2026-10-10-mfx-1" if _tipo <= 6 else "2026-10-10-mfx-2"
+    _fonte = "2026-10-10-mfx-" + ("1" if _tipo <= 6 else "2" if _tipo <= 12 else "3")
     for _n, (_i, _mn, _mx, _nome) in enumerate(_lista, start=1):
         _id, _escala = f"mfx.p{_n}", f"{_nome} (type {MFX_TIPOS[_tipo]})"
         if isinstance(_i, list):                  # o indice depende do SYNC
@@ -215,7 +227,9 @@ del _tipo, _lista, _n, _i, _mn, _mx, _nome, _id, _escala, _fonte
 # botao ao lado do seletor, tocado sem querer no comeco da mfx-2); FX ROUTE
 # 2514 0..1 (THROUGH ANALOG neste kit); SYNC do FLANGER 2561 e do PHASER 2570
 # (ON = 1). Faixas que o giro NAO levou ao 255: SBF WIDTH 247 e FET IN/OUT
-# LEVEL 241 - o portao aceita so o medido. A leitura em bloco do App cobre
+# LEVEL 241 - o portao aceita so o medido. mfx-3: o SYNC do DJFX DELAY (2626,
+# ON = 1) NAO muda o indice do TIME (2622 foi a 0..255 nos dois); o TRANSIENT2
+# tem 8 parametros e o Q (2601, 0..7, o ultimo da tela) fica fora das placas. A leitura em bloco do App cobre
 # 2512..2534 (o comum do MFX); os parametros de cada efeito ele le um a um.
 # Medidos e fora das placas (registro): LFO do kit PHASE 521 0..359, S&H 522
 # 0..19, AMOUNT 1/2/3 523/524/525 500..1500 (centro 1000), MODE 520 (LFO_MODOS).
