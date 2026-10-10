@@ -201,10 +201,11 @@ def piso_de_ruido(fotos):
     return ruido
 
 
-def _enter(texto):
-    """Mostra o gesto e espera Enter. -> '' (feito), 'p' (pular) ou 'q'."""
+def _enter(c, texto):
+    """Mostra o gesto e espera Enter (com a sessao viva: c.perguntar).
+    -> '' (feito), 'p' (pular) ou 'q'."""
     try:
-        return input(f"\n>> {texto}\n   [Enter] feito   [p] pula   [q] encerra: ").strip().lower()
+        return c.perguntar(f"\n>> {texto}\n   [Enter] feito   [p] pula   [q] encerra: ").strip().lower()
     except EOFError:
         return "q"
 
@@ -219,15 +220,18 @@ def cmd_c5():
 
     with cs.ConexaoTR1000(nome_captura="c5") as c:
         c.aperto()
+
+        def espera(texto):
+            return _enter(c, texto)
         diga("C5 - de onde partir: pattern 1-01, var A, PARADA, [TR-REC] ligado, [SD] selecionado.")
-        if _enter("Confira o painel assim e aperte Enter (vou tirar 3 fotos sem gesto: o piso).") == "q":
+        if espera("Confira o painel assim e aperte Enter (vou tirar 3 fotos sem gesto: o piso).") == "q":
             return
         fotos = [tirar_foto(c)[2] for _ in range(3)]
         ruido = piso_de_ruido(fotos)
         diga(f"piso de ruido: {len(ruido)} valores mudam sozinhos (ignorados daqui em diante)")
         base = fotos[-1]
         for id, ida, volta in GESTOS:
-            r = _enter(f"[{id}] {ida}")
+            r = espera(f"[{id}] {ida}")
             if r == "q":
                 break
             if r == "p":
@@ -237,7 +241,7 @@ def cmd_c5():
             diga(f"\n[{id}] ida: {n} valores mudaram")
             for l in ls:
                 diga(l)
-            _enter(f"[{id}] VOLTA: {volta}")
+            espera(f"[{id}] VOLTA: {volta}")
             voltou = tirar_foto(c)[2]
             ls, n = ts.linhas_do_diff(base, voltou, ruido)
             diga(f"[{id}] volta: {'tudo como antes' if not n else f'{n} valores AINDA diferentes do inicio'}")

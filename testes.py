@@ -15,7 +15,7 @@ Na fase 0 o que se prova de mesa e pouco e e de proposito:
   - o portao da fase 0: cada comando do lp_tr1000.py roda contra portas
     falsas, e o unico SysEx que pode sair e o Identity Request
 """
-import os, py_compile, sys, tempfile, unittest
+import contextlib, io, os, py_compile, sys, tempfile, unittest
 
 AQUI = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, AQUI)
@@ -1287,6 +1287,35 @@ class TesteControladorasNoMotor(unittest.TestCase):
         self.assertTrue(ok(112, 3, 0, 606, 1))             # LFO DTH do RC
         self.assertFalse(ok(7, 5, 0, 2555, 1))             # o App nunca leu
         self.assertFalse(ok(7, 128, 0, 2564, 1))           # x fora de 0..127
+
+
+class TesteManterViva(unittest.TestCase):
+    """A maquina desiste da sessao em 1-3 s sem pedido (C5, 10/10/2026)."""
+
+    def test_perguntar_le_o_bloco_3_enquanto_espera(self):
+        import struct
+        maq = _MaquinaFalsa()
+        maq.zeros_ok = True
+
+        class Teclado:
+            def isatty(self): return True
+            def readline(self): return "sim\n"
+        rodadas = iter([([], [], []), ([], [], []), (["pronto"], [], [])])
+        orig = conexao_serial.select.select
+        conexao_serial.select.select = lambda r, w, x, t: (
+            next(rodadas) if r and isinstance(r[0], Teclado) else orig(r, w, x, t))
+        try:
+            with conexao_serial.ConexaoTR1000(porta=maq) as c:
+                c.aperto()
+                with contextlib.redirect_stdout(io.StringIO()):
+                    self.assertEqual(c.perguntar("? ", Teclado()), "sim")
+        finally:
+            conexao_serial.select.select = orig
+        lidos = [struct.unpack_from("<HHHHH", tr1000_serial.carga(p), 1)
+                 for p in maq.recebido if tr1000_serial.carga(p)[:1] == b"\x82"]
+        self.assertEqual(len(lidos), 2)                    # um por segundo de espera
+        self.assertEqual({l[0] for l in lidos}, {3})
+        self.assertLessEqual(conexao_serial.MANTER_VIVA_A_CADA, 1.0)
 
 
 class TesteFoto(unittest.TestCase):

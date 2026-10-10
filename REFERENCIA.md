@@ -430,6 +430,7 @@ da Chart. Se a Roland publicou algum mapa SysEx, é lá. Baixar antes da C1.
 | x dos blocos de kit = o do bloco 3 `[2..4]` quando os três coincidem | **medido 10/10** (F2.9: no 1-02, o PAN escrito com x = 1 mudou o som tocando); qual dos três é "o kit" segue **(deduzido)** | 7.5 |
 | escrita nossa de parâmetro pelas controladoras | **medido 10/10, OUVIDO** (ROTEIRO-F2 inteiro) e conferido no App | 7.5 |
 | os 8 tracks do meio (SD..CC) nos parâmetros por track: o mesmo passo do BD ao RC | **(deduzido)** — o App foi visto só no BD e no RC; SD PAN/RVB/DLY **ouvidos** no F2.2 | 7.5 |
+| **a sessão serial morre com 1–3 s sem pedido**: depois disso a máquina não responde; uma conexão nova (aperto de novo) volta na hora | **medido 10/10** (1 s ok, 3 s não; lendo a cada 1–2 s, viva por 47 s) | 2.1c |
 | model ID | **não se aplica** à serial (não é SysEx); a versão `"1.22"` vem no aperto de mão | 2.1c |
 | ordem dos parâmetros por bloco | **(catálogo)** | 2.2 |
 | endereços de qualquer coisa | **desconhecido** | |
@@ -699,6 +700,28 @@ O Luan apertou o primeiro achando que era o segundo. O ROTEIRO-F1 agora diz qual
   - sem ACC/TRG;
   - sem scale/last step;
   - não grava.
+
+### 7.4b A sessão serial morre parada (medido 10/10/2026)
+
+A primeira rodada da C5 falhou: o aperto de mão respondeu, mas a primeira leitura, **37 s
+depois** (o tempo até o Enter), não. Medido em seguida, só com leituras:
+
+| espera desde o último pedido | resposta |
+|---|---|
+| 1 s | ✅ |
+| 3, 4, 5, 7, 10, 20, 30, 40 s | ❌ nenhuma |
+| lendo a cada 2 s por 47 s | ✅ 23 de 23 |
+| conexão nova depois da falha | ✅ na hora; nada travou, ao contrário da CTRL da TR-8S |
+
+- **O App faz isso sozinho:** ocioso, ele relê uns parâmetros a cada ~1,5 s
+  (`app-tocando-2`). Era o keep-alive dele.
+- **O grid nunca viu o problema** porque lê a cada 0,5 s.
+- **Explica a C3:** a `sessao_c3` "não mandou nada" quando esperou o `sim` digitado. O
+  aperto já tinha sido feito, e a sessão morreu enquanto ela esperava. Foi atribuído ao
+  EOF.
+- **A correção:** `ConexaoTR1000.perguntar` substitui o `input()`, lendo 1 valor do bloco 3
+  a cada `MANTER_VIVA_A_CADA` = 1 s enquanto espera. A `sessao_c3` e a `sessao_c4 c5` a
+  usam.
 
 ### 7.5 Fase 1b — as controladoras de knobs (09–10/10/2026; F2 PASSOU no hardware em 10/10)
 
