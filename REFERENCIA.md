@@ -426,6 +426,10 @@ da Chart. Se a Roland publicou algum mapa SysEx, é lá. Baixar antes da C1.
 | espião grava `read`/`write` da serial, quadros remontados | **medido 08/10** (pty e com o App) | 2.1b |
 | **escrita nossa de um step (`01`) obedecida: bumbo some/volta, LED apaga/acende vermelho** | **medido 08/10, OUVIDO** (C3.1, C3.2) | 3.1 |
 | **escrita nossa de parâmetro de kit (TUNE do sample do BD) obedecida** | **medido 08/10, OUVIDO** e conferido no App (C3.3) | 3.1 |
+| os 74 parâmetros das controladoras (mixer, reverb, delay nos 4 types, LFO, MASTER FX nos 19 types): endereço e faixa | **medido 09–10/10** (o App escrevendo; nunca por nós) | 7.5 |
+| x dos blocos de kit = o do bloco 3 `[2..4]` quando os três coincidem | **medido 10/10** (F2.9: no 1-02, o PAN escrito com x = 1 mudou o som tocando); qual dos três é "o kit" segue **(deduzido)** | 7.5 |
+| escrita nossa de parâmetro pelas controladoras | **medido 10/10, OUVIDO** (ROTEIRO-F2 inteiro) e conferido no App | 7.5 |
+| os 8 tracks do meio (SD..CC) nos parâmetros por track: o mesmo passo do BD ao RC | **(deduzido)** — o App foi visto só no BD e no RC; SD PAN/RVB/DLY **ouvidos** no F2.2 | 7.5 |
 | model ID | **não se aplica** à serial (não é SysEx); a versão `"1.22"` vem no aperto de mão | 2.1c |
 | ordem dos parâmetros por bloco | **(catálogo)** | 2.2 |
 | endereços de qualquer coisa | **desconhecido** | |
@@ -696,8 +700,102 @@ O Luan apertou o primeiro achando que era o segundo. O ROTEIRO-F1 agora diz qual
   - sem scale/last step;
   - não grava.
 
+### 7.5 Fase 1b — as controladoras de knobs (09–10/10/2026; F2 PASSOU no hardware em 10/10)
+
+**Resultado do ROTEIRO-F2 (10/10/2026, o Luan na frente da máquina):**
+
+| passo | o que | resultado |
+|---|---|---|
+| F2.1 | BD GAIN | ✅ suave, sem pulo; **silêncio** no fim anti-horário (−INF), forte no horário |
+| F2.2 | SD PAN, RVB SND, DLY SND | ✅ de ouvido |
+| F2.3 | BD LFO DTH | ✅ **no App**: o AMOUNT 1 foi ao máximo. Não se ouve porque o TARGET 1 do LFO do BD está em NONE neste kit |
+| F2.4 | REVERB | ✅ TYPE e TIME de ouvido; PREDELAY, LOWCUT, HIGHCUT e DENSITY **no App** (máx, máx, mín, meio, como os knobs ficaram) |
+| F2.5 | DELAY | ✅ LEVEL, TYPE e DELAY 2–3, **inclusive depois de trocar o TYPE**: os knobs seguem o type da máquina |
+| F2.6 | LFO do kit | ✅ RATE e WAVEFORM de ouvido, com o TARGET 1 = MFX: MANUAL posto no App e o **SYNC em STEP** (o RATE foi para o 530) |
+| F2.7 | MASTER FX | ✅ TYPE troca o efeito; ISOLATOR LOW, MID e HIGH; CRUSHER BALANCE, SAMPLE e FILTER, com MFX 4–7 parados; FLANGER DEPTH e STEP, com o SYNC em OFF (o 2557) |
+| F2.8 | conferir no App | ✅ ver F2.3 e F2.4 |
+| F2.9 | pickup depois de trocar de pattern | ✅ a caixa não pulou; o knob só pegou no centro, o PAN do 1-02 |
+
+**O que confundiu no caminho:**
+- **O MASTER FX não soava** porque o knob de TYPE tinha parado no **BYPASS**, o fim
+  anti-horário. O terminal agora diz o nome do TYPE, do WAVEFORM e do REVERB TYPE onde o
+  knob parou.
+- **O FILTER do CRUSHER parecia não responder:** o pickup esperava o knob passar pelo valor
+  da máquina, e só uma volta inteira passou. Ficou registrado como ideia, na seção 8.
+
+Duas controladoras na USB, cada uma uma porta MIDI:
+- **MC-24** (canal 2): REVERB, LFO, DELAY, MASTER FX;
+- **CM-MC50** (canal 3): 10 tracks × GAIN, PAN, RVB SND, DLY SND, LFO DTH.
+
+O `controladoras.py mapear` mediu o CC de cada uma das 74 posições (`mapas/controladoras.json`).
+Todas são **potenciômetros absolutos**, e 49 param em 125, não em 127. A conversão usa a
+faixa medida de cada knob.
+
+**Como cada parâmetro foi decifrado (B2):**
+- uma captura do espião por tela do App, com o Luan girando um knob de cada vez, ponta a
+  ponta;
+- `tr1000_serial.py escritas` lista os endereços na ordem em que foram tocados, com
+  mín/máx;
+- a escala vem do visor do App, lida pelo Luan.
+
+Tudo vai para a `parametros.py`, com a captura de origem.
+
+| o quê | bloco | índice | faixa | captura |
+|---|---|---|---|---|
+| GAIN (TRK GAIN, −INF..+6 dB) | 116 (**pattern**) | 1014 + track | 0..661 | mixer-bd/rc |
+| PAN / RVB SND / DLY SND | 13, y = track | 556 / 557 / 558 | 0..1000 | mixer-bd/rc |
+| LFO DTH = AMOUNT 1 do LFO do instrumento | 22 + 10·track | 606 | 500..1500 (centro 1000) | inst-lfo |
+| REVERB TYPE, TIME, PREDELAY, LOWCUT, HIGHCUT, DENSITY | 5 | 2368, 2371, 2402..2405 | ver tabela | kit-reverb |
+| DELAY TYPE / LEVEL (DELAY 1) / RVB SEND | 6 | 2407 / 2409 / 2410 | 0..3 / 0..1000 | kit-delay |
+| DELAY 2–6 | 6 | **próprios de cada type** (DELAY 2429.., PAN 2437.., ECHO 2446.., PITCH 2458..) | por type | delay-tipos |
+| LFO WAVEFORM | 10 | 519 | 0..4 | kit-lfo |
+| LFO RATE | 10 | **529 / 530 / 531** com o SYNC (532) em TIME / STEP / NOTE | 0..180 / 0..255 / 0..24 | kit-lfo, lfo-sync |
+| MASTER FX TYPE | 7 | 2512 | 0..18 (BYPASS, CRUSHER … DJFX DELAY) | mfx-1/2/3 |
+| MFX 1–7 | 7 | **próprios de cada efeito** (2536..2625) | por efeito | mfx-1/2/3 |
+
+**O que as capturas ensinaram:**
+- **Os parâmetros que dependem do type não são slots compartilhados.** Cada type de delay
+  e cada efeito do MASTER FX tem os seus índices. O knob lê o TYPE da máquina e escolhe a
+  entrada. Num type sem aquele parâmetro (o CRUSHER só tem 3), o knob fica parado.
+- **O SYNC pode mudar o índice de um knob que não muda de nome.** O STEP do FLANGER é 2564
+  com SYNC ON e 2557 com OFF; o do PHASER é 2572 / 2566. A tabela tem uma segunda
+  condição para isso. O SYNC do DJFX DELAY (2626) **não** muda o índice do TIME.
+- **"DELAY 2–6" e "MFX 1–7"** são os parâmetros na ordem da tela do App: de cima, da
+  esquerda para a direita, depois a fileira de baixo. Entram os menus; ficam fora os
+  botões de SYNC e o FX ROUTE (decisão do Luan).
+  - O TRANSIENT2 tem 8, e o Q (2601) ficou de fora.
+- **Faixas que o giro não levou ao topo:** SBF WIDTH (247) e FET IN/OUT LEVEL (241). O
+  portão aceita só o medido.
+
+**O motor (B5):**
+- **Pickup** ("pegar no caminho"): no primeiro movimento, o knob lê o valor da máquina e
+  só escreve depois de passar por ele, ou de chegar a um passo dele. Troca de pattern ou de
+  kit solta todos os knobs.
+- **Escritas juntadas:** só o último valor de cada knob, no máximo a cada 30 ms.
+- **Os TYPEs e SYNCs** são relidos a cada releitura de 0,5 s, porque o painel pode tê-los
+  trocado. Um knob cujo endereço mudou volta ao pickup.
+- **O x do kit** sai do bloco 3: `[2]`, `[3]` e `[4]` vieram sempre iguais, e o x dos
+  blocos de kit também. Com eles diferentes, os knobs de kit param; o GAIN, que mora no
+  pattern, segue.
+- **Leitura:** as capturas B2 entraram nas `CAPTURAS_DE_REFERENCIA`, porque nelas o App
+  lê de volta, um a um, cada parâmetro que escreve. Nos blocos de kit e de pattern, as
+  faixas lidas com x = 0 valem para todo x de 0..127.
+
 ## 8. Ideias registradas, não implementadas
 
+- **Side chain e routing matrix no Launchpad** (pedido do Luan, 10/10/2026, a planejar):
+  - testar o **SIDE CHAIN** (o botão "Side Chain" no rodapé do App, e os SC DEPTH do
+    reverb, do delay e do external input);
+  - testar a **Routing Matrix** do KIT: cada track e o RVB, DLY e EXT vão para THROUGH,
+    MASTER FX ou ANALOG FX;
+  - talvez virar funções no Launchpad, por exemplo uma página com a matriz de
+    roteamento e o liga/desliga do MASTER FX (2513) e do ANALOG FX.
+
+  Cada endereço precisa de uma captura antes, e escrever neles é ampliar a regra:
+  decisão do Luan.
+- **Mostrar o knob "esperando" o pickup:** no F2, o FILTER do CRUSHER só respondeu
+  depois de uma volta inteira, porque o knob ainda não tinha passado pelo valor da
+  máquina. Um aviso no terminal ou um LED evitaria a dúvida.
 - **Leitura por CC como plano B:** se `Tx Edit Data` funcionar de verdade (a TR-8S não
   transmitia), os knobs do painel chegam de graça para a página de mixer
 - **Polimetria visível:** com FIRST/LAST STEP por track, pintar fora da janela de cada

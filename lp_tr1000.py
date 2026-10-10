@@ -319,8 +319,9 @@ def cmd_sniff(argv):
 # Fase 1: o grid (launchpad.py + motor.py)
 # ─────────────────────────────────────────────────────────────
 def cmd_run():
-    """O grid ao vivo. Le a maquina pela serial e escreve SO steps, quando um
-    pad e apertado (conexao_serial.escrita_permitida). ROTEIRO-F1.md."""
+    """O grid ao vivo. Le a maquina pela serial e escreve steps quando um pad
+    e apertado e parametros quando um knob das controladoras gira
+    (conexao_serial.escrita_permitida). ROTEIRO-F1.md e ROTEIRO-F2.md."""
     import launchpad, motor
     cfg = launchpad.carregar_layout()
     launchpad.programmer_mode(True)
@@ -330,6 +331,8 @@ def cmd_run():
             return
         print("\nGrid ligado. Topo esquerdo: variacoes A-H. Borda direita: velocity.")
         print("Topo direito: rolar (1o e 2o), layer AB / A / B (3o, 4o, 5o).")
+        if m.pickup is not None:
+            print("Knobs: cada um so age depois de passar pelo valor da maquina.")
         print("Nada e gravado: para guardar, WRITE no painel. Ctrl+C sai.\n")
         while True:
             m.tick()

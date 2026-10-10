@@ -28,6 +28,8 @@ import catalogo_app
 import espiao
 import conexao_serial
 import motor
+import controladoras
+import parametros
 
 # Mensagem real, capturada do site ARIA falando com uma TR-8S (tr8s-grid
 # REFERENCIA 2.9): "pattern atual -> 127". E o unico SysEx Roland medido que
@@ -1007,6 +1009,394 @@ class TesteMotor(unittest.TestCase):
                              mido.Message("control_change", control=95, value=127)]
         m._ler_pads()
         self.assertEqual((m.variacao, m.vel_idx, m.modo_layer), (1, 7, "B"))
+
+
+class TesteControladorasMapear(unittest.TestCase):
+    def test_rotulos_das_placas(self):
+        # fotos de 09/10/2026: 24 + 50 knobs, sem id repetido
+        self.assertEqual(len(controladoras.ROTULOS_MC24), 24)
+        self.assertEqual(len(controladoras.ROTULOS_MC50), 50)
+        ids = [i for rs in controladoras.ROTULOS.values() for i, _ in rs]
+        self.assertEqual(len(ids), len(set(ids)))
+        self.assertEqual(controladoras.ROTULOS_MC50[0], ("bd.gain", "BD GAIN"))
+        self.assertEqual(controladoras.ROTULOS_MC50[-1], ("rc.lfo", "RC LFO DTH"))
+
+    def test_tipo_do_knob(self):
+        d = controladoras.detectar_tipo
+        self.assertEqual(d(range(30, 90)), "absoluto")
+        self.assertEqual(d([1, 1, 2, 1, 127, 127, 126]), "relativo")
+        self.assertEqual(d([65, 65, 66, 65, 63, 63, 62]), "relativo")
+        self.assertEqual(d([127, 127, 127]), "absoluto")       # potenciometro no fim
+
+    def test_chave_dominante_e_recusa_o_ja_mapeado(self):
+        evs = [("MC-24", 0, 20, v) for v in (10, 11, 12)] + [("MC-24", 0, 21, 5)]
+        self.assertEqual(controladoras.chave_dominante(evs), ("MC-24", 0, 20))
+        self.assertIsNone(controladoras.chave_dominante(evs, {("MC-24", 0, 20)}))
+        self.assertIsNone(controladoras.chave_dominante(evs[:2]))   # pouco: ruido
+
+    def test_sequencia_oferece_o_proximo_cc(self):
+        ids = ["a", "b", "c", "d"]
+        knobs = {i: dict(porta="MC-24", canal=0, cc=20 + n) for n, i in enumerate(ids)}
+        self.assertEqual(controladoras.sequencia(knobs, ids), ("MC-24", 0, 24))
+        knobs["d"]["cc"] = 40
+        self.assertIsNone(controladoras.sequencia(knobs, ids))
+        self.assertIsNone(controladoras.sequencia(knobs, ids[:3]))
+
+    def test_resumo_do_giro(self):
+        self.assertIn("faixa inteira", controladoras.resumo_do_giro([60, 0, 127, 30]))
+        self.assertNotIn("faixa inteira", controladoras.resumo_do_giro([10, 90]))
+        self.assertEqual(controladoras.resumo_do_giro([]), "nada")
+
+    def test_mapa_ida_e_volta(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            c = os.path.join(tmp, "m", "controladoras.json")
+            m = controladoras.carregar_mapa(c)
+            m["knobs"]["bd.gain"] = dict(porta="CM-MC50", canal=0, cc=1,
+                                         tipo="absoluto", palpite=False)
+            controladoras.salvar_mapa(m, c)
+            m2 = controladoras.carregar_mapa(c)
+        self.assertEqual(controladoras.indice_reverso(m2), {("CM-MC50", 0, 1): "bd.gain"})
+
+
+def _mapa_falso(faixa=(0, 127)):
+    """Um knob por rotulo, canal 1, CC na ordem das placas (o real fica no
+    mapas/, que e do hardware do Luan)."""
+    knobs = {}
+    for porta, rotulos in controladoras.ROTULOS.items():
+        for cc, (i, _) in enumerate(rotulos):
+            knobs[i] = dict(porta=porta, canal=0, cc=cc, tipo="absoluto",
+                            palpite=False, faixa=list(faixa))
+    return {"versao": 1, "knobs": knobs}
+
+
+def motor_com_knobs(maq=None, faixa=(0, 127)):
+    m = motor_cru(maq)
+    m.x_kit = 0
+    mapa = _mapa_falso(faixa)
+    m.ctl = object.__new__(controladoras.Controladoras)
+    m.ctl.mapa, m.ctl.rev = mapa, controladoras.indice_reverso(mapa)
+    m.ctl.portas = {"MC-24": _PortaLP(), "CM-MC50": _PortaLP()}
+    m.log_visto = []
+    m.log = m.log_visto.append
+    m.pickup = m.novo_pickup(mapa)
+    m.agora = 100.0
+    return m
+
+
+def girar(m, id, *ccs, num_tick=False):
+    """Os CCs de um knob, um por tick do motor (o relogio anda 1 s por tick),
+    ou todos num tick so."""
+    import mido
+    k = m.ctl.mapa["knobs"][id]
+    for lote in ([ccs] if num_tick else [[v] for v in ccs]):
+        m.ctl.portas[k["porta"]].fila += [
+            mido.Message("control_change", channel=k["canal"], control=k["cc"], value=v)
+            for v in lote]
+        m.agora += 1
+        m._ler_controladoras(m.agora)
+
+
+class TesteControladorasNoMotor(unittest.TestCase):
+    """B5: os knobs escrevendo na maquina - pickup, juntar escritas, type."""
+
+    def test_ler_entrega_so_o_ultimo_de_cada_knob(self):
+        import mido
+        m = motor_com_knobs()
+        cc_pan = m.ctl.mapa["knobs"]["bd.pan"]["cc"]
+        m.ctl.portas["CM-MC50"].fila = [
+            mido.Message("control_change", channel=0, control=cc_pan, value=v)
+            for v in (1, 2, 3)] + [
+            mido.Message("control_change", channel=9, control=cc_pan, value=9),  # outro canal
+            mido.Message("note_on", note=1)]
+        self.assertEqual(m.ctl.ler(), {"bd.pan": 3})
+
+    def test_pickup_so_escreve_depois_de_cruzar_o_valor_da_maquina(self):
+        maq = _MaquinaFalsa()
+        maq.valores[(13, 0, 0, 556)] = 500                 # BD PAN no meio
+        m = motor_com_knobs(maq)
+        girar(m, "bd.pan", 0)
+        girar(m, "bd.pan", 30)                             # 236: ainda longe
+        self.assertEqual(_escritas(maq), [])
+        girar(m, "bd.pan", 70)                             # 551: passou do 500
+        self.assertEqual(_escritas(maq), [(13, 0, 0, 556, 551)])
+
+    def test_perto_do_valor_pega_de_cara(self):
+        maq = _MaquinaFalsa()
+        maq.valores[(13, 0, 9, 557)] = 500                 # RC RVB SND
+        m = motor_com_knobs(maq)
+        girar(m, "rc.rvb", 64)                             # 504: a um passo (8)
+        self.assertEqual(_escritas(maq), [(13, 0, 9, 557, 504)])
+
+    def test_cinquenta_mensagens_num_tick_viram_uma_escrita(self):
+        maq = _MaquinaFalsa()
+        m = motor_com_knobs(maq)                           # maquina em 0
+        girar(m, "sd.dly", 0)                              # pega no 0, nada a escrever
+        girar(m, "sd.dly", *range(50, 100), num_tick=True)
+        self.assertEqual(_escritas(maq), [(13, 0, 1, 558, 780)])  # so o 99
+
+    def test_escritas_no_maximo_a_cada_30_ms(self):
+        maq = _MaquinaFalsa()
+        m = motor_com_knobs(maq)
+        girar(m, "bd.gain", 0, 10)
+        m.agora += 0.01 - 1                                # o proximo tick: +10 ms
+        girar(m, "bd.gain", 20)
+        self.assertEqual(len(_escritas(maq)), 1)           # o 20 espera
+        m._ler_controladoras(m.agora + 0.05)
+        self.assertEqual(_escritas(maq)[-1], (116, 0, 0, 1014, 104))
+
+    def test_troca_de_pattern_solta_os_knobs(self):
+        maq = _MaquinaFalsa()
+        b3 = [0] * 292
+        maq.blocos = {(3, 0, 0): b3}
+        m = motor_com_knobs(maq)
+        girar(m, "bd.pan", 0, 64)
+        self.assertTrue(m.pickup.estado["bd.pan"]["pego"])
+        b3[2] = b3[3] = b3[4] = 16                         # o painel foi para 2-01
+        m.reler()
+        self.assertEqual((m.x_pattern, m.x_kit), (16, 16))
+        self.assertEqual(m.pickup.estado, {})
+        maq.valores[(13, 16, 0, 556)] = 1000
+        n = len(_escritas(maq))
+        girar(m, "bd.pan", 10)                             # longe do 1000 do kit novo
+        self.assertEqual(len(_escritas(maq)), n)
+
+    def test_kit_incerto_para_os_knobs_de_kit_mas_nao_o_gain(self):
+        maq = _MaquinaFalsa()
+        b3 = [0] * 292
+        b3[3] = 5                                          # [2] 0, [3] 5, [4] 0
+        maq.blocos = {(3, 0, 0): b3}
+        m = motor_com_knobs(maq)
+        m.reler()
+        self.assertIsNone(m.x_kit)
+        girar(m, "bd.pan", 0, 64)
+        girar(m, "reverb.time", 0, 64)
+        girar(m, "mfx.p1", 0, 64)
+        girar(m, "bd.gain", 0, 64)                         # o gain mora no PATTERN
+        self.assertEqual([e[0] for e in _escritas(maq)], [116])
+
+    def test_mfx_segue_o_type_e_o_sync_da_maquina(self):
+        maq = _MaquinaFalsa()
+        maq.valores[(7, 0, 0, 2512)] = 6                   # FLANGER
+        maq.valores[(7, 0, 0, 2561)] = 1                   # SYNC ON
+        m = motor_com_knobs(maq)
+        girar(m, "mfx.p2", 0, 10)                          # STEP com SYNC ON
+        self.assertEqual(_escritas(maq), [(7, 0, 0, 2564, 20)])
+        maq.valores[(7, 0, 0, 2561)] = 0                   # SYNC OFF no painel
+        m.pickup.reconferir()                              # (a releitura de 0,5 s)
+        girar(m, "mfx.p2", 12)                             # outro indice: pickup de novo
+        self.assertEqual(len(_escritas(maq)), 1)
+        girar(m, "mfx.p2", 0)                              # cruzou o 0 do 2557
+        girar(m, "mfx.p2", 30)
+        self.assertEqual(_escritas(maq)[-1], (7, 0, 0, 2557, 60))
+
+    def test_o_knob_de_type_muda_o_que_os_outros_escrevem(self):
+        maq = _MaquinaFalsa()
+        m = motor_com_knobs(maq)                           # MFX em BYPASS (0)
+        girar(m, "mfx.type", 0, 20)                        # 20 * 18 / 127 = 3: LOOPER
+        self.assertEqual(_escritas(maq), [(7, 0, 0, 2512, 3)])
+        self.assertEqual(m.pickup.seletores["mfx.type"], 3)
+        self.assertIn("mfx.type: DJFX LOOPER", m.log_visto)
+        girar(m, "mfx.p2", 0, 64)                          # SPEED do LOOPER
+        self.assertEqual(_escritas(maq)[-1], (7, 0, 0, 2546, 101))
+
+    def test_type_sem_entrada_deixa_o_knob_parado(self):
+        maq = _MaquinaFalsa()
+        maq.valores[(7, 0, 0, 2512)] = 1                   # CRUSHER: 3 parametros
+        m = motor_com_knobs(maq)
+        girar(m, "mfx.p5", 0, 64)
+        self.assertEqual(_escritas(maq), [])
+        self.assertNotIn("mfx.p5", m.pickup.estado)
+
+    def test_escrita_que_falha_solta_o_knob(self):
+        maq = _MaquinaFalsa()
+        maq.valores[(22, 0, 0, 606)] = 1000                # LFO DTH do BD no centro
+        m = motor_com_knobs(maq)
+
+        def recusa(*a):
+            raise PermissionError("teste")
+        m.pickup.escrever = recusa
+        girar(m, "bd.lfo", 64)                             # 1004: pega, tenta, falha
+        self.assertNotIn("bd.lfo", m.pickup.estado)
+
+    def test_edicao_no_painel_solta_o_knob_pego(self):
+        maq = _MaquinaFalsa()
+        maq.valores[(5, 0, 0, 2371)] = 300                 # REVERB TIME
+        m = motor_com_knobs(maq)
+        girar(m, "reverb.time", 38)                        # 299: pega
+        self.assertTrue(m.pickup.estado["reverb.time"]["pego"])
+        maq.valores[(5, 0, 0, 2371)] = 800                 # o Luan mexeu no painel
+        m.pickup.reconferir()                              # (a releitura de 0,5 s)
+        n = len(_escritas(maq))
+        girar(m, "reverb.time", 40)                        # 315: sem pular para ele
+        self.assertEqual(len(_escritas(maq)), n)
+        self.assertFalse(m.pickup.estado["reverb.time"]["pego"])
+        girar(m, "reverb.time", 102, 104)                  # 803: cruzou o 800
+        self.assertEqual(_escritas(maq)[-1], (5, 0, 0, 2371, 819))
+
+    def test_sem_edicao_no_painel_o_knob_continua_pego(self):
+        maq = _MaquinaFalsa()
+        m = motor_com_knobs(maq)
+        girar(m, "reverb.time", 0, 10)                     # pega no 0, escreve 79
+        m.pickup.reconferir()
+        girar(m, "reverb.time", 20)
+        self.assertEqual(_escritas(maq)[-1], (5, 0, 0, 2371, 157))
+
+    def test_maquina_que_nao_responde_para_os_knobs_um_tempo(self):
+        m = motor_com_knobs()
+        lidos = []
+
+        def ler(*a):
+            lidos.append(a)
+            raise conexao_serial.ErroConexao("sem resposta")
+        m.pickup.ler = ler
+        girar(m, "bd.pan", 10)
+        girar(m, "sd.pan", 10)                             # +1 s: ainda parado
+        self.assertEqual(len(lidos), 1)                    # uma espera, nao uma por knob
+        girar(m, "sd.pan", 10)                             # +2 s: tenta de novo
+        self.assertEqual(len(lidos), 2)
+
+    def test_mapa_corrompido_nao_derruba_o_grid(self):
+        import unittest.mock as um
+        logs = []
+        with um.patch.object(motor, "EntradaMIDI", lambda *a: _PortaLP()), \
+             um.patch.object(motor, "SaidaMIDI", lambda *a: _PortaLP()), \
+             um.patch.object(controladoras, "carregar_mapa",
+                             side_effect=ValueError("json truncado")):
+            cfg = {lado: {"in_idx": 0, "out_idx": 0, **GEO[d]}
+                   for d, lado in (("E", "esquerdo"), ("D", "direito"))}
+            m = motor.Motor(cfg, log=logs.append)
+        self.assertIsNone(m.ctl)
+        self.assertIsNone(m.pickup)
+        self.assertTrue(any("controladoras desligadas" in l for l in logs))
+
+    def test_faixa_do_knob_que_para_em_125_cobre_a_faixa(self):
+        maq = _MaquinaFalsa()
+        m = motor_com_knobs(maq, faixa=(0, 125))
+        girar(m, "reverb.type", 0, 125)
+        self.assertEqual(_escritas(maq)[-1], (5, 0, 0, 2368, 5))
+
+    def test_sem_controladoras_o_tick_roda(self):
+        m = motor_cru()
+        m.proxima_releitura = float("inf")
+        m.tick()                                           # ctl None: nada quebra
+
+    def test_leitura_dos_parametros_em_outro_kit(self):
+        ok = conexao_serial.leitura_permitida
+        self.assertTrue(ok(7, 5, 0, 2564, 1))              # STEP do FLANGER, kit 6
+        self.assertTrue(ok(6, 16, 0, 2429, 1))             # DELAY: SYNC TIME
+        self.assertTrue(ok(112, 3, 0, 606, 1))             # LFO DTH do RC
+        self.assertFalse(ok(7, 5, 0, 2555, 1))             # o App nunca leu
+        self.assertFalse(ok(7, 128, 0, 2564, 1))           # x fora de 0..127
+
+
+class TesteParametros(unittest.TestCase):
+    """A tabela decifrada em 09/10/2026 (mixer-bd/rc, kit-reverb)."""
+
+    def test_enderecos_medidos(self):
+        T = parametros.TABELA
+        self.assertEqual(parametros.endereco(T["bd.gain"], 0), (116, 0, 0, 1014))
+        self.assertEqual(parametros.endereco(T["rc.gain"], 0, 9), (116, 0, 0, 1023))
+        self.assertEqual(parametros.endereco(T["rc.pan"], 0, 9), (13, 0, 9, 556))
+        self.assertEqual(parametros.endereco(T["bd.dly"], 16, 0), (13, 16, 0, 558))
+        self.assertEqual(parametros.endereco(T["reverb.type"], 1), (5, 1, 0, 2368))
+
+    def test_todo_knob_das_placas_esta_na_tabela_ou_pendente(self):
+        ids = {i for rs in controladoras.ROTULOS.values() for i, _ in rs}
+        tem = set(parametros.TABELA) | set(parametros.POR_TIPO)
+        self.assertEqual(ids, tem | set(parametros.PENDENTES))
+        self.assertFalse(tem & set(parametros.PENDENTES))
+
+    def test_lfo_dth_e_o_amount_do_lfo_do_inst(self):
+        T, ok = parametros.TABELA, conexao_serial.escrita_permitida
+        self.assertEqual(parametros.endereco(T["bd.lfo"], 0, 0), (22, 0, 0, 606))
+        self.assertEqual(parametros.endereco(T["rc.lfo"], 0, 9), (112, 0, 0, 606))
+        self.assertTrue(ok(112, 0, 0, 606, 1500))
+        self.assertFalse(ok(112, 0, 0, 606, 499))
+        self.assertFalse(ok(122, 0, 0, 606, 1000))              # nao ha track 11
+        self.assertFalse(ok(27, 0, 0, 606, 1000))               # fora do passo de 10
+
+    def test_lfo_do_kit(self):
+        e = parametros.entrada_para
+        self.assertEqual(e("lfo.waveform").indice, 519)
+        self.assertEqual(e("lfo.rate", 0).maximo, 180)         # SYNC = TIME
+        self.assertEqual(e("lfo.rate", 1).indice, 530)          # STEP
+        self.assertEqual(e("lfo.rate", 2).maximo, 24)           # NOTE: 4/1 .. 1/64
+        self.assertIsNone(e("lfo.rate", 3))
+        self.assertFalse(conexao_serial.escrita_permitida(10, 0, 0, 532, 1))  # SYNC nao e knob
+
+    def test_mfx_por_type(self):
+        e, ok = parametros.entrada_para, conexao_serial.escrita_permitida
+        self.assertEqual(e("mfx.type").indice, 2512)
+        self.assertEqual(e("mfx.p1", 1).indice, 2536)             # CRUSHER: BALANCE
+        self.assertEqual(e("mfx.p6", 2).maximo, 48)               # F+DRIVE: LOW GAIN
+        self.assertEqual(e("mfx.p7", 6).indice, 2562)             # FLANGER: LOW CUT
+        self.assertEqual(e("mfx.p7", 9).maximo, 80)               # COMPRESSOR: GAIN
+        self.assertEqual(e("mfx.p4", 11).indice, 2594)            # SDD-320: LEVEL
+        self.assertIsNone(e("mfx.p4", 1))                         # CRUSHER so tem 3
+        self.assertEqual(e("mfx.p7", 13).indice, 2605)            # TRANSIENT2: BYPASS
+        self.assertEqual(e("mfx.p3", 14).maximo, 1)               # NOISE: DIRECTION
+        self.assertEqual(e("mfx.p2", 18).indice, 2622)            # DJFX DELAY: TIME
+        self.assertIsNone(e("mfx.p6", 18))                        # DJFX DELAY tem 5
+        self.assertEqual(len(parametros.MFX_TIPOS), 19)
+
+    def test_step_do_flanger_e_do_phaser_depende_do_sync(self):
+        e, ok = parametros.entrada_para, conexao_serial.escrita_permitida
+        self.assertEqual(e("mfx.p2", 6, {"mfx.sync.flanger": 1}).indice, 2564)
+        self.assertEqual(e("mfx.p2", 6, {"mfx.sync.flanger": 0}).indice, 2557)
+        self.assertEqual(e("mfx.p2", 7, {"mfx.sync.phaser": 0}).indice, 2566)
+        self.assertEqual(e("mfx.p2", 7, {"mfx.sync.phaser": 1}).indice, 2572)
+        self.assertIsNone(e("mfx.p2", 6))                         # SYNC nao lido: inativo
+        self.assertIsNone(e("mfx.p2", 6, {"mfx.sync.phaser": 1}))   # o SYNC do outro
+        self.assertEqual(e("mfx.p1", 6).indice, 2556)             # DEPTH nao depende
+        self.assertTrue(ok(7, 0, 0, 2557, 255))                   # os dois sao escreviveis
+        self.assertTrue(ok(7, 0, 0, 2572, 0))
+        self.assertFalse(ok(7, 0, 0, 2570, 1))                    # o SYNC em si nao
+        self.assertTrue(ok(7, 3, 0, 2546, 200))
+        self.assertFalse(ok(7, 0, 0, 2546, 201))                  # SPEED vai a 200
+        self.assertFalse(ok(7, 0, 0, 2514, 1))                    # FX ROUTE nao e knob
+        self.assertFalse(ok(7, 0, 0, 2561, 1))                    # SYNC do FLANGER
+        self.assertTrue(ok(7, 0, 0, 2512, 0))                     # BYPASS (mfx-3)
+        self.assertFalse(ok(7, 0, 0, 2512, 19))
+        self.assertFalse(ok(7, 0, 0, 2601, 3))                    # Q do TRANSIENT2: fora
+
+    def test_delay_por_type(self):
+        e = parametros.entrada_para
+        self.assertEqual(e("delay.p1").indice, 2409)              # LEVEL, sempre
+        self.assertEqual(e("delay.p3", 1).indice, 2438)           # FEEDBACK no PAN
+        self.assertEqual(e("delay.p3", 2).indice, 2447)           # ECHO: INTENSITY
+        self.assertEqual(e("delay.p6", 3).indice, 2464)           # PITCH: COARSE
+        self.assertEqual(e("delay.p2", 0).indice, 2429)           # DELAY: SYNC TIME
+        self.assertIsNone(e("delay.p2", 4))                       # type que nao existe
+        ok = conexao_serial.escrita_permitida
+        self.assertTrue(ok(6, 0, 0, 2438, 999))
+        self.assertFalse(ok(6, 0, 0, 2438, 1000))
+        self.assertTrue(ok(6, 0, 0, 2407, 3))                     # PITCH
+        self.assertFalse(ok(6, 0, 0, 2444, 50))                   # TAP: fora das placas
+
+    def test_portao_aceita_so_dentro_da_faixa(self):
+        ok = conexao_serial.escrita_permitida
+        self.assertTrue(ok(116, 0, 0, 1023, 661))             # RC gain, max
+        self.assertFalse(ok(116, 0, 0, 1023, 662))            # acima da faixa
+        self.assertFalse(ok(116, 0, 0, 1024, 100))            # track 11
+        self.assertTrue(ok(13, 5, 9, 556, 500))               # RC pan, kit 6
+        self.assertFalse(ok(13, 0, 10, 556, 500))             # y fora
+        self.assertFalse(ok(13, 0, 0, 559, 10))               # indice nao decifrado
+        self.assertTrue(ok(5, 0, 0, 2368, 5))                 # reverb PLATE..MOD
+        self.assertFalse(ok(5, 0, 0, 2368, 6))                # tipo que nao existe
+        self.assertFalse(ok(5, 0, 1, 2368, 1))                # reverb nao e por track
+
+    def test_conversao_do_knob(self):
+        T = parametros.TABELA
+        self.assertEqual(parametros.converter(T["bd.pan"], 0, 0, 125), 0)
+        self.assertEqual(parametros.converter(T["bd.pan"], 125, 0, 125), 1000)  # para em 125
+        self.assertEqual(parametros.converter(T["reverb.type"], 127), 5)
+        self.assertEqual(parametros.converter(T["reverb.lowcut"], 64), 9)
+
+    def test_leitura_dos_blocos_de_kit_para_qualquer_kit(self):
+        ok = conexao_serial.leitura_permitida
+        self.assertTrue(ok(13, 77, 9, 556, 9))
+        self.assertTrue(ok(5, 100, 0, 2368, 14))
+        self.assertFalse(ok(13, 128, 0, 556, 9))
 
 
 def _relogio_rapido(passo=0.3):
