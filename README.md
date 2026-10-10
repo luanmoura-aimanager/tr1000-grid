@@ -36,7 +36,7 @@ projeto decifrou (REFERENCIA 2.1b/2.1c):
 |---|---|---|
 | 0 | decifrar: serial, pattern, escrita, step atual (via MIDI) | **suficiente** — critérios 1–5 ✅, o 6 (WRITE) adiado |
 | 1 | o grid: 10 tracks (8 por vez), layer A/B, velocity, playhead pelo clock | ✅ **funcionando** (ROTEIRO-F1 passou em 09/10/2026) |
-| 1b | as controladoras de knobs (MC-24, CM-MC50): mixer, reverb, delay, LFO, MASTER FX | os 74 decifrados; **não testado em hardware** (ROTEIRO-F2) |
+| 1b | as controladoras de knobs (MC-24, CM-MC50): mixer, reverb, delay, LFO, MASTER FX | ✅ **funcionando** (ROTEIRO-F2 passou em 10/10/2026) |
 | 2 | parâmetros do step: probability, CYCLE, sub steps, micro-timing | |
 | 3 | performance: mute, fills, step loop, roll, morph; qual variação toca | |
 | 4 | a tela web e o empacotamento (LaunchAgent, `.app`) | |

@@ -427,8 +427,8 @@ da Chart. Se a Roland publicou algum mapa SysEx, é lá. Baixar antes da C1.
 | **escrita nossa de um step (`01`) obedecida: bumbo some/volta, LED apaga/acende vermelho** | **medido 08/10, OUVIDO** (C3.1, C3.2) | 3.1 |
 | **escrita nossa de parâmetro de kit (TUNE do sample do BD) obedecida** | **medido 08/10, OUVIDO** e conferido no App (C3.3) | 3.1 |
 | os 74 parâmetros das controladoras (mixer, reverb, delay nos 4 types, LFO, MASTER FX nos 19 types): endereço e faixa | **medido 09–10/10** (o App escrevendo; nunca por nós) | 7.5 |
-| x dos blocos de kit = bloco 3 `[3]` | **(deduzido)** — `[2]`, `[3]` e `[4]` sempre iguais nas capturas; o motor só escreve kit quando os três concordam | 7.5 |
-| escrita nossa de parâmetro pelas controladoras | **não testado** — é o ROTEIRO-F2 | 7.5 |
+| x dos blocos de kit = o do bloco 3 `[2..4]` quando os três coincidem | **medido 10/10** (F2.9: no 1-02, o PAN escrito com x = 1 mudou o som tocando); qual dos três é "o kit" segue **(deduzido)** | 7.5 |
+| escrita nossa de parâmetro pelas controladoras | **medido 10/10, OUVIDO** (ROTEIRO-F2 inteiro) e conferido no App | 7.5 |
 | model ID | **não se aplica** à serial (não é SysEx); a versão `"1.22"` vem no aperto de mão | 2.1c |
 | ordem dos parâmetros por bloco | **(catálogo)** | 2.2 |
 | endereços de qualquer coisa | **desconhecido** | |
@@ -699,7 +699,28 @@ O Luan apertou o primeiro achando que era o segundo. O ROTEIRO-F1 agora diz qual
   - sem scale/last step;
   - não grava.
 
-### 7.5 Fase 1b — as controladoras de knobs (09–10/10/2026; NÃO testado em hardware)
+### 7.5 Fase 1b — as controladoras de knobs (09–10/10/2026; F2 PASSOU no hardware em 10/10)
+
+**Resultado do ROTEIRO-F2 (10/10/2026, o Luan na frente da máquina):**
+
+| passo | o que | resultado |
+|---|---|---|
+| F2.1 | BD GAIN | ✅ suave, sem pulo; **silêncio** no fim anti-horário (−INF), forte no horário |
+| F2.2 | SD PAN, RVB SND, DLY SND | ✅ de ouvido |
+| F2.3 | BD LFO DTH | ✅ **no App**: o AMOUNT 1 foi ao máximo. Não se ouve porque o TARGET 1 do LFO do BD está em NONE neste kit |
+| F2.4 | REVERB | ✅ TYPE e TIME de ouvido; PREDELAY, LOWCUT, HIGHCUT e DENSITY **no App** (máx, máx, mín, meio, como os knobs ficaram) |
+| F2.5 | DELAY | ✅ LEVEL, TYPE e DELAY 2–3, **inclusive depois de trocar o TYPE**: os knobs seguem o type da máquina |
+| F2.6 | LFO do kit | ✅ RATE e WAVEFORM de ouvido, com o TARGET 1 = MFX: MANUAL posto no App e o **SYNC em STEP** (o RATE foi para o 530) |
+| F2.7 | MASTER FX | ✅ TYPE troca o efeito; ISOLATOR LOW, MID e HIGH; CRUSHER BALANCE, SAMPLE e FILTER, com MFX 4–7 parados; FLANGER DEPTH e STEP, com o SYNC em OFF (o 2557) |
+| F2.8 | conferir no App | ✅ ver F2.3 e F2.4 |
+| F2.9 | pickup depois de trocar de pattern | ✅ a caixa não pulou; o knob só pegou no centro, o PAN do 1-02 |
+
+**O que confundiu no caminho:**
+- **O MASTER FX não soava** porque o knob de TYPE tinha parado no **BYPASS**, o fim
+  anti-horário. O terminal agora diz o nome do TYPE, do WAVEFORM e do REVERB TYPE onde o
+  knob parou.
+- **O FILTER do CRUSHER parecia não responder:** o pickup esperava o knob passar pelo valor
+  da máquina, e só uma volta inteira passou. Ficou registrado como ideia, na seção 8.
 
 Duas controladoras na USB, cada uma uma porta MIDI:
 - **MC-24** (canal 2): REVERB, LFO, DELAY, MASTER FX;

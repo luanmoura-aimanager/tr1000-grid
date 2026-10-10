@@ -121,5 +121,10 @@ O **MASTER FX** precisa estar **ON** (o passo 2 do "Antes").
 **O que esperar:** nada muda até o knob passar pelo PAN que o 1-02 tem (provavelmente o
 centro); daí em diante, a caixa acompanha, **sem pular** para a esquerda na hora da troca.
 
+---
+
+**Resultado em 10/10/2026: todos os passos passaram** (REFERENCIA 7.5). O LFO DTH e o LFO
+do kit só se ouvem com um TARGET escolhido no App.
+
 **Para sair:** Ctrl+C. Para descartar o que os knobs mudaram: religue a máquina sem WRITE,
 ou use o Reload Kit no App.
