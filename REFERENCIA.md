@@ -763,7 +763,8 @@ Tudo vai para a `parametros.py`, com a captura de origem.
 - **"DELAY 2–6" e "MFX 1–7"** são os parâmetros na ordem da tela do App: de cima, da
   esquerda para a direita, depois a fileira de baixo. Entram os menus; ficam fora os
   botões de SYNC e o FX ROUTE (decisão do Luan).
-  - O TRANSIENT2 tem 8, e o Q (2601) ficou de fora.
+  - O TRANSIENT2 tem 8: o MFX 7 é o **Q** (2601), e o BYPASS dele (2605) ficou de fora
+    (decisão do Luan, 10/10).
 - **Faixas que o giro não levou ao topo:** SBF WIDTH (247) e FET IN/OUT LEVEL (241). O
   portão aceita só o medido.
 
