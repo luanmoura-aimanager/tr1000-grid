@@ -1091,6 +1091,21 @@ class TesteParametros(unittest.TestCase):
         self.assertIsNone(e("lfo.rate", 2))                      # NOTE: a capturar
         self.assertFalse(conexao_serial.escrita_permitida(10, 0, 0, 532, 1))  # SYNC nao e knob
 
+    def test_mfx_por_type(self):
+        e, ok = parametros.entrada_para, conexao_serial.escrita_permitida
+        self.assertEqual(e("mfx.type").indice, 2512)
+        self.assertEqual(e("mfx.p1", 1).indice, 2536)             # CRUSHER: BALANCE
+        self.assertEqual(e("mfx.p6", 2).maximo, 48)               # F+DRIVE: LOW GAIN
+        self.assertEqual(e("mfx.p2", 6).indice, 2564)             # FLANGER: STEP
+        self.assertEqual(e("mfx.p7", 6).indice, 2562)             # FLANGER: LOW CUT
+        self.assertIsNone(e("mfx.p4", 1))                         # CRUSHER so tem 3
+        self.assertIsNone(e("mfx.p1", 7))                         # PHASER: a capturar
+        self.assertTrue(ok(7, 3, 0, 2546, 200))
+        self.assertFalse(ok(7, 0, 0, 2546, 201))                  # SPEED vai a 200
+        self.assertFalse(ok(7, 0, 0, 2514, 1))                    # FX ROUTE nao e knob
+        self.assertFalse(ok(7, 0, 0, 2561, 1))                    # SYNC do FLANGER
+        self.assertFalse(ok(7, 0, 0, 2512, 0))                    # BYPASS nao medido
+
     def test_delay_por_type(self):
         e = parametros.entrada_para
         self.assertEqual(e("delay.p1").indice, 2409)              # LEVEL, sempre

@@ -140,6 +140,48 @@ SELETORES = {
     "lfo.sync":   _p("lfo.sync", 10, "kit", False, 532, 0, 0, 2, "TIME STEP NOTE",
                      "2026-10-09-kit-lfo-2"),
 }
+
+# mfx-1 (10/10/2026): o MASTER FX, bloco 7, um por kit. TYPE no indice 2512,
+# na ordem do seletor do App (manual RM p.56); 1..6 medidos, o resto e o
+# BYPASS = 0 por DEDUCAO da ordem, a medir em mfx-2/mfx-3.
+MFX_TIPOS = ["BYPASS", "CRUSHER", "FILTER+DRIVE", "DJFX LOOPER", "ISOLATOR",
+             "SCATTER", "FLANGER", "PHASER", "SIDE BAND FILTER", "COMPRESSOR",
+             "FET COMP 76", "SDD-320", "TRANSIENT", "TRANSIENT2", "NOISE",
+             "303 VINYL SIM", "404 VINYL SIM", "CASSETTE SIM", "DJFX DELAY"]
+TABELA["mfx.type"] = _p("mfx.type", 7, "kit", False, 2512, 0, 1, 6,
+                        "CRUSHER .. FLANGER (medidos)", "2026-10-10-mfx-1")
+SELETORES["mfx.type"] = TABELA["mfx.type"]._replace(minimo=0, maximo=len(MFX_TIPOS) - 1)
+# MFX 1-7 = os parametros do efeito na ordem da tela (de cima, esquerda ->
+# direita, depois a fileira de baixo), com os menus e sem os botoes (SYNC) e
+# o FX ROUTE - a mesma regra do DELAY 2-6. Como no delay, cada efeito tem os
+# PROPRIOS indices. (indice, min, max, nome) por type:
+_MFX_POR_TIPO = {
+    1: [(2536, 0, 255, "BALANCE"), (2537, 0, 255, "SAMPLE"), (2538, 0, 255, "FILTER")],
+    2: [(2539, 0, 255, "CUTOFF"),  (2540, 0, 255, "RESO"),   (2541, 0, 255, "DRIVE"),
+        (2542, 0,   1, "TYPE (menu HPF/LPF)"), (2543, 0, 255, "LOW FREQ"),
+        (2544, 0,  48, "LOW GAIN")],
+    3: [(2545, 0, 255, "LENGTH"),  (2546, 0, 200, "SPEED"),  (2547, 0, 1, "LOOP SW (OFF ON)")],
+    4: [(2548, 0, 255, "LOW"),     (2549, 0, 255, "MID"),    (2550, 0, 255, "HIGH")],
+    5: [(2551, 0,   9, "TYPE"),    (2552, 0,   9, "DEPTH"),  (2553, 0, 1, "SCATTER (OFF ON)"),
+        (2554, 0, 255, "BALANCE")],
+    6: [(2556, 0, 255, "DEPTH"),   (2564, 0, 255, "STEP (com SYNC ON)"),
+        (2558, 0, 255, "MANUAL"),  (2559, 0, 255, "RESO"),   (2563, 0, 1, "MODE (MONO STEREO)"),
+        (2560, 0, 255, "BALANCE"), (2562, 0,  17, "LOW CUT")],
+}
+for _n in range(1, 8):
+    POR_TIPO[f"mfx.p{_n}"] = {}
+for _tipo, _lista in _MFX_POR_TIPO.items():
+    for _n, (_i, _mn, _mx, _nome) in enumerate(_lista, start=1):
+        POR_TIPO[f"mfx.p{_n}"][_tipo] = _p(
+            f"mfx.p{_n}", 7, "kit", False, _i, 0, _mn, _mx,
+            f"{_nome} (type {MFX_TIPOS[_tipo]})", "2026-10-10-mfx-1",
+            ("mfx.type", _tipo))
+del _tipo, _lista, _n, _i, _mn, _mx, _nome
+# Medidos e fora das placas (registro), mfx-1: FX ROUTE 2514 0..1 (THROUGH
+# ANALOG neste kit); FLANGER SYNC 2561 0..1 (ON = 1). O FLANGER com SYNC OFF
+# troca STEP por RATE - provavelmente 2557, NAO medido: com SYNC OFF o MFX 2
+# escreve no STEP, que nao se ouve. A leitura em bloco do App cobre 2512..2534
+# (o comum do MFX; o OFF deve estar em 2513, nao tocado).
 # Medidos e fora das placas (registro): LFO do kit PHASE 521 0..359, S&H 522
 # 0..19, AMOUNT 1/2/3 523/524/525 500..1500 (centro 1000), MODE 520 (LFO_MODOS).
 # Medidos e fora das placas (registro): SYNC 2408 0..1, FX ROUTE 2411 0..2
@@ -162,7 +204,7 @@ def entrada_para(id, tipo_atual=None):
     return POR_TIPO.get(id, {}).get(tipo_atual)
 
 # O que as placas tem e ainda nao foi decifrado (B2): o mapa nao esquece ninguem
-PENDENTES = ["mfx.type"] + [f"mfx.p{i}" for i in range(1, 8)]
+PENDENTES = []
 
 
 def endereco(p, x, track=0):
