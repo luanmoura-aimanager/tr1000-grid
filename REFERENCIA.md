@@ -833,7 +833,7 @@ https://claude.ai/artifact/G8Zu9Zd3rDyRfEgK4DfMun; etiquetas em `adesivo.pdf`, g
 - **Escrita liberada pelo Luan** para os quatro grupos aprendidos pelo painel (step,
   accent, cabeçalho, performance do bloco 3). Cada um entra na regra com a faixa medida
   e é testado num roteiro F3 antes de valer.
-- **Etiquetas:** as de borda são as do tr8s-grid (13,3 mm para o botão de 15 mm). Os
+- **Etiquetas:** as de borda são as do tr8s-grid (12,3 mm para o botão de 15 mm: meio mm a menos de cada lado que no tr8s, pedido do Luan depois de colar). Os
   **números dos steps** são novos: 8 × 6,5 mm, pretos com letra branca, colados no bezel
   embaixo de cada coluna.
 

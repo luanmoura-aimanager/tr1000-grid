@@ -25,8 +25,11 @@ AQUI = os.path.dirname(os.path.abspath(__file__))
 
 # ── medidas, em mm (as do tr8s-grid, medidas no aparelho) ─────
 BOTAO = 15.0                   # lado do botao de borda do Mini MK3
-FOLGA = 1.7                    # a etiqueta sai menor para nao sobrar aba
-LADO = BOTAO - FOLGA           # 13,3 mm
+# A etiqueta sai menor que o botao para nao sobrar aba. O tr8s usava 1,7 (13,3
+# mm); colada a folha do layout A, o Luan pediu meio mm a menos de cada lado
+# (10/10/2026): 2,7, etiqueta de 12,3 mm.
+FOLGA = 2.7
+LADO = BOTAO - FOLGA           # 12,3 mm
 VAO = 4.5                      # branco entre etiquetas, para a tesoura
 # Os numeros dos steps vao no bezel embaixo dos pads, que e estreito: etiqueta
 # baixa. A largura nao precisa casar com o pad - cada uma e recortada sozinha.
@@ -124,8 +127,14 @@ def triangulo(cx, cy, base, direcao, cor):
                      color=cor, fill=cor, width=0.2)
 
 
+# A linha de corte fica a 0,85 mm da cor (a margem da folha que o Luan ja
+# colou). Fixa, e nao FOLGA/2: com a folga maior, o recorte tem que encolher
+# junto com a etiqueta - senao o adesivo continua com 15 mm, so com mais branco.
+MARGEM_CORTE = 0.85
+
+
 def corte(x, y, larg, alt):
-    m = FOLGA / 2
+    m = MARGEM_CORTE
     pg.draw_rect(fitz.Rect(mm(x - m), mm(y - m), mm(x + larg + m), mm(y + alt + m)),
                  color=CORTE, width=0.3, dashes="[1.5 1.5] 0")
 
