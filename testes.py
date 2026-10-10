@@ -1075,6 +1075,15 @@ class TesteParametros(unittest.TestCase):
         self.assertEqual(ids, tem | set(parametros.PENDENTES))
         self.assertFalse(tem & set(parametros.PENDENTES))
 
+    def test_lfo_dth_e_o_amount_do_lfo_do_inst(self):
+        T, ok = parametros.TABELA, conexao_serial.escrita_permitida
+        self.assertEqual(parametros.endereco(T["bd.lfo"], 0, 0), (22, 0, 0, 606))
+        self.assertEqual(parametros.endereco(T["rc.lfo"], 0, 9), (112, 0, 0, 606))
+        self.assertTrue(ok(112, 0, 0, 606, 1500))
+        self.assertFalse(ok(112, 0, 0, 606, 499))
+        self.assertFalse(ok(122, 0, 0, 606, 1000))              # nao ha track 11
+        self.assertFalse(ok(27, 0, 0, 606, 1000))               # fora do passo de 10
+
     def test_lfo_do_kit(self):
         e = parametros.entrada_para
         self.assertEqual(e("lfo.waveform").indice, 519)

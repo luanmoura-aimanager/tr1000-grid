@@ -27,14 +27,16 @@ TRACKS = ["bd", "sd", "lt", "ht", "rs", "hc", "ch", "oh", "cc", "rc"]
 # faixa mudam com o TYPE (DELAY 2-6, MFX 1-7): a entrada so vale com a maquina
 # naquele type. Types nao capturados ficam sem entrada = knob inativo
 # (decisao do Luan, 09/10/2026: capturar so os types que ele usa).
+# passo_bloco: o BLOCO anda com o track (o LFO de cada instrumento mora no
+# bloco 22 + 10 * track - inst-lfo, BD 22 e RC 112).
 Parametro = namedtuple("Parametro", "id bloco escopo por_track indice passo_track "
-                                    "minimo maximo escala fonte tipo")
+                                    "minimo maximo escala fonte tipo passo_bloco")
 
 
 def _p(id, bloco, escopo, por_track, indice, passo_track, minimo, maximo, escala,
-       fonte, tipo=None):
+       fonte, tipo=None, passo_bloco=0):
     return Parametro(id, bloco, escopo, por_track, indice, passo_track,
-                     minimo, maximo, escala, fonte, tipo)
+                     minimo, maximo, escala, fonte, tipo, passo_bloco)
 
 
 # ─────────────────────────────────────────────────────────────
@@ -102,6 +104,16 @@ LFO_SYNCS = ["TIME", "STEP", "NOTE"]                                 # indice 53
 POR_TIPO["lfo.rate"] = {0: _p("lfo.rate", 10, "kit", False, 529, 0, 0, 180,
                               "TIME (SYNC = TIME)", "2026-10-09-kit-lfo", ("lfo.sync", 0))}
 
+# inst-lfo (10/10/2026): LFO DTH = o AMOUNT 1 do MODULATOR LFO de cada
+# instrumento (decisao do Luan). Bloco 22 + 10*track (BD 22, RC 112: o grupo de
+# 9 subblocos por track da REFERENCIA 2.1c), indice 606, 500..1500 com 1000 no
+# centro (bipolar, como os AMOUNT do LFO do kit).
+for _n, _t in enumerate(TRACKS):
+    TABELA[f"{_t}.lfo"] = _p(f"{_t}.lfo", 22, "kit", True, 606, 0, 500, 1500,
+                             "AMOUNT 1 do LFO do inst. (-500 .. +500)",
+                             "2026-10-10-inst-lfo", passo_bloco=10)
+del _n, _t
+
 # Os parametros que dizem o TYPE/SYNC atual: o motor LE antes de escrever um
 # knob dependente. Nao sao knobs - nao entram no portao de escrita.
 SELETORES = {
@@ -131,12 +143,13 @@ def entrada_para(id, tipo_atual=None):
     return POR_TIPO.get(id, {}).get(tipo_atual)
 
 # O que as placas tem e ainda nao foi decifrado (B2): o mapa nao esquece ninguem
-PENDENTES = (["mfx.type"] + [f"mfx.p{i}" for i in range(1, 8)]
-             + [f"{t}.lfo" for t in TRACKS])
+PENDENTES = ["mfx.type"] + [f"mfx.p{i}" for i in range(1, 8)]
 
 
 def endereco(p, x, track=0):
     """(bloco, x, y, indice) de um parametro para o pattern/kit x."""
+    if p.passo_bloco:                             # o bloco anda com o track
+        return p.bloco + p.passo_bloco * track, x, 0, p.indice
     if p.por_track:
         if p.passo_track:                         # o indice anda com o track
             return p.bloco, x, 0, p.indice + p.passo_track * track
@@ -149,25 +162,19 @@ def track_do_id(id):
 
 
 def parametro_no_endereco(bloco, x, y, indice):
-    """O parametro da tabela que mora nesse endereco (qualquer x), ou None.
-    Com varias entradas no mesmo endereco (types diferentes), escrita_permitida
-    confere cada uma."""
-    for p in todas_as_entradas():
-        if p.bloco != bloco:
-            continue
-        if p.por_track and p.passo_track:
-            rel = indice - p.indice
-            if y == 0 and rel % p.passo_track == 0 and 0 <= rel // p.passo_track < len(TRACKS):
-                return p
-        elif p.por_track:
-            if indice == p.indice and 0 <= y < len(TRACKS):
-                return p
-        elif indice == p.indice and y == 0:
-            return p
-    return None
+    """O primeiro parametro da tabela que mora nesse endereco (qualquer x), ou
+    None. Com varias entradas no mesmo endereco (types diferentes),
+    escrita_permitida confere cada uma."""
+    return next((p for p in todas_as_entradas() if _casa(p, bloco, y, indice)), None)
 
 
-def _casa(p, y, indice):
+def _casa(p, bloco, y, indice):
+    if p.passo_bloco:
+        rel = bloco - p.bloco
+        return (y == 0 and indice == p.indice and rel % p.passo_bloco == 0
+                and 0 <= rel // p.passo_bloco < len(TRACKS))
+    if bloco != p.bloco:
+        return False
     if p.por_track and p.passo_track:
         rel = indice - p.indice
         return y == 0 and rel % p.passo_track == 0 and 0 <= rel // p.passo_track < len(TRACKS)
@@ -181,7 +188,7 @@ def escrita_permitida(bloco, x, y, indice, valor):
     de ALGUMA entrada dele (o type certo o motor confere antes de escrever)."""
     if not 0 <= x < 128:
         return False
-    return any(p.bloco == bloco and _casa(p, y, indice) and p.minimo <= valor <= p.maximo
+    return any(_casa(p, bloco, y, indice) and p.minimo <= valor <= p.maximo
                for p in todas_as_entradas())
 
 
