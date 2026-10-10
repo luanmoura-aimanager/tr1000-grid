@@ -76,7 +76,17 @@ e forte, pare e me conte.
 
 ## F1.4 — layer B
 
-No topo direito, aperte **`B`** (o 5º botão) e ligue um step vazio do **SD** (ou BD, LT, HT).
+**Atenção, há dois "B":** a **variação B** fica no topo do Launchpad **esquerdo**; o **layer
+B** é o botão **"Session"** do Launchpad **direito**. A fileira de cima do direito é:
+
+| botão | ação |
+|---|---|
+| ▲ / ▼ | rolar |
+| ◀ | `AB` |
+| ▶ | `A` |
+| Session | `B` |
+
+Aperte **Session** e ligue um step vazio do **SD** (ou BD, LT, HT).
 
 **O que esperar:** no painel, o step aparece **verde**, e só o layer B soa. Volte para
 **`AB`** (o 3º botão).
@@ -103,3 +113,8 @@ Aperte **START** no painel.
   CC e o RC embaixo.
 
 **Para sair:** Ctrl+C no terminal. Os LEDs apagam.
+
+---
+
+**Resultado em 09/10/2026: todos os passos passaram** (REFERENCIA 7.4). O playhead só
+aparece depois de um START com o grid já ligado.

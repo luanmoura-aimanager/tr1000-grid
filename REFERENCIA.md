@@ -653,7 +653,28 @@ Regra que atravessa todas: **nunca RQ1 em endereço que o App não pediu**.
 Capturas: `capturas/2026-10-08-c4-estado*.serlog`, `app-tocando*.serlog`,
 `c4-start.txt`, `c4-stop.txt`.
 
-### 7.4 Fase 1 — como o grid lê e escreve (09/10/2026, NADA testado em hardware ainda)
+### 7.4 Fase 1 — como o grid lê e escreve (09/10/2026; F1 PASSOU no hardware no mesmo dia)
+
+**Resultado do ROTEIRO-F1 (09/10/2026, o Luan na frente da máquina):**
+
+| passo | o que | resultado |
+|---|---|---|
+| F1.0 | `learn` | ✅ esquerdo origem 88 (girado), direito 81 — a mesma geometria do tr8s-grid |
+| F1.1 | o grid lê o 1-01 | ✅ BD, SD (vermelho/verde) e as outras linhas visíveis batem com o painel |
+| F1.2 | um step pelo grid | ✅ acende no painel, o bumbo soa; desligar também. E o **inverso**: editar no painel aparece no grid |
+| F1.3 | velocity 66 e 127 | ✅ **66 aparece e soa fraco, 127 forte** — a fórmula `nota(vel)` está **provada** |
+| F1.4 | layer B | ✅ **verde** no grid e no painel, e **só o layer B soa** |
+| F1.5 | playhead | ✅ anda em tempo **depois de um START**. Com o grid ligado e a máquina já tocando, não aparece até o próximo START (limite previsto) |
+| F1.6 | troca de pattern no painel | ✅ o grid segue (1-01 → 1-02 → 1-01) |
+| F1.7 | rolagem; variação B | ✅ CC e RC aparecem com ▼. Editar a **var B enquanto a máquina toca a A** funciona: o step só soa quando a máquina vai para a B |
+
+**Uma confusão que o roteiro precisa evitar:** há dois "B" no grid.
+- A **variação B** fica no topo do Launchpad esquerdo.
+- O **layer B** é o botão "Session" do Launchpad direito.
+
+O Luan apertou o primeiro achando que era o segundo. O ROTEIRO-F1 agora diz qual é qual pelo nome impresso no botão.
+
+**Ideia registrada:** adotar a máquina já tocando ao ligar o grid. As notas transmitidas (o TRG toca todo step no 2-01; o BD no step 1) dão a fase sem esperar o próximo START.
 
 - **Ler:** a cada ~0,5 s, o bloco 3 (`[2]` = x do pattern selecionado) e os 10 blocos
   `bloco_de_steps(v)` da variação mostrada (n = 131 a partir do índice 1249). Se o x mudou,
@@ -663,8 +684,8 @@ Capturas: `capturas/2026-10-08-c4-estado*.serlog`, `app-tocando*.serlog`,
   - **Slots:** layer A = 0, layer B = 1. O modo `AB` escreve os dois (o que o painel faz);
     track simples só o 0.
   - **Desligar = `FF`**, como o painel.
-  - **Velocity:** `nota(vel) = 0xA0000 | vel << 8 | 0x3C`. **(deduzido)** de cinco valores
-    lidos; escrever outra velocity além de 80 **não foi provado** — é o F1.3.
+  - **Velocity:** `nota(vel) = 0xA0000 | vel << 8 | 0x3C`. Deduzida de cinco valores lidos,
+    **provada no F1.3** (66 fraco, 127 forte, no painel e de ouvido).
 - **Playhead:** MIDI clock da porta `TR-1000`.
   - O `start` zera; 6 pulsos por step (scale 16th **assumida**); dá a volta em 16
     (**assumido**); o `stop` apaga.
