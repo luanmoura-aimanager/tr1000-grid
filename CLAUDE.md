@@ -37,7 +37,10 @@ grid — escreve na máquina. **Toda saída da serial passa por um único portã
     variações, de qualquer pattern (x 0..127), com valor só nota (`A··3C`, velocity
     1..127) ou pausa (`FF`). Nada de probability nem do resto do step.
   - **PARÂMETROS da tabela da `parametros.py`** (fase 1b, as controladoras de knobs):
-    - só endereço que o App foi **visto escrevendo** numa captura (B2);
+    - só endereço que o App foi **visto escrevendo** numa captura (B2). **Exceção, por
+      dedução:** nos parâmetros por track, o App foi visto no **BD e no RC**, e os 8 do
+      meio seguem o mesmo passo (y, índice ou bloco). SD PAN/RVB/DLY foram **ouvidos**
+      no F2.2; os outros tracks do meio não foram testados;
     - com valor **dentro da faixa medida**;
     - os SYNCs e o OFF/FX ROUTE do MASTER FX ficam fora: são lidos, não escritos.
 

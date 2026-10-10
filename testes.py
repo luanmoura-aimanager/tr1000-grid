@@ -1182,7 +1182,7 @@ class TesteControladorasNoMotor(unittest.TestCase):
         girar(m, "mfx.p2", 0, 10)                          # STEP com SYNC ON
         self.assertEqual(_escritas(maq), [(7, 0, 0, 2564, 20)])
         maq.valores[(7, 0, 0, 2561)] = 0                   # SYNC OFF no painel
-        m.pickup.esquecer_seletores()                      # (a releitura de 0,5 s)
+        m.pickup.reconferir()                              # (a releitura de 0,5 s)
         girar(m, "mfx.p2", 12)                             # outro indice: pickup de novo
         self.assertEqual(len(_escritas(maq)), 1)
         girar(m, "mfx.p2", 0)                              # cruzou o 0 do 2557
@@ -1217,6 +1217,57 @@ class TesteControladorasNoMotor(unittest.TestCase):
         m.pickup.escrever = recusa
         girar(m, "bd.lfo", 64)                             # 1004: pega, tenta, falha
         self.assertNotIn("bd.lfo", m.pickup.estado)
+
+    def test_edicao_no_painel_solta_o_knob_pego(self):
+        maq = _MaquinaFalsa()
+        maq.valores[(5, 0, 0, 2371)] = 300                 # REVERB TIME
+        m = motor_com_knobs(maq)
+        girar(m, "reverb.time", 38)                        # 299: pega
+        self.assertTrue(m.pickup.estado["reverb.time"]["pego"])
+        maq.valores[(5, 0, 0, 2371)] = 800                 # o Luan mexeu no painel
+        m.pickup.reconferir()                              # (a releitura de 0,5 s)
+        n = len(_escritas(maq))
+        girar(m, "reverb.time", 40)                        # 315: sem pular para ele
+        self.assertEqual(len(_escritas(maq)), n)
+        self.assertFalse(m.pickup.estado["reverb.time"]["pego"])
+        girar(m, "reverb.time", 102, 104)                  # 803: cruzou o 800
+        self.assertEqual(_escritas(maq)[-1], (5, 0, 0, 2371, 819))
+
+    def test_sem_edicao_no_painel_o_knob_continua_pego(self):
+        maq = _MaquinaFalsa()
+        m = motor_com_knobs(maq)
+        girar(m, "reverb.time", 0, 10)                     # pega no 0, escreve 79
+        m.pickup.reconferir()
+        girar(m, "reverb.time", 20)
+        self.assertEqual(_escritas(maq)[-1], (5, 0, 0, 2371, 157))
+
+    def test_maquina_que_nao_responde_para_os_knobs_um_tempo(self):
+        m = motor_com_knobs()
+        lidos = []
+
+        def ler(*a):
+            lidos.append(a)
+            raise conexao_serial.ErroConexao("sem resposta")
+        m.pickup.ler = ler
+        girar(m, "bd.pan", 10)
+        girar(m, "sd.pan", 10)                             # +1 s: ainda parado
+        self.assertEqual(len(lidos), 1)                    # uma espera, nao uma por knob
+        girar(m, "sd.pan", 10)                             # +2 s: tenta de novo
+        self.assertEqual(len(lidos), 2)
+
+    def test_mapa_corrompido_nao_derruba_o_grid(self):
+        import unittest.mock as um
+        logs = []
+        with um.patch.object(motor, "EntradaMIDI", lambda *a: _PortaLP()), \
+             um.patch.object(motor, "SaidaMIDI", lambda *a: _PortaLP()), \
+             um.patch.object(controladoras, "carregar_mapa",
+                             side_effect=ValueError("json truncado")):
+            cfg = {lado: {"in_idx": 0, "out_idx": 0, **GEO[d]}
+                   for d, lado in (("E", "esquerdo"), ("D", "direito"))}
+            m = motor.Motor(cfg, log=logs.append)
+        self.assertIsNone(m.ctl)
+        self.assertIsNone(m.pickup)
+        self.assertTrue(any("controladoras desligadas" in l for l in logs))
 
     def test_faixa_do_knob_que_para_em_125_cobre_a_faixa(self):
         maq = _MaquinaFalsa()

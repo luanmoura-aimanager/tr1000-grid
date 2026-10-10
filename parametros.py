@@ -55,7 +55,8 @@ _POR_TRACK = [
 ]
 # gain: TRK GAIN, mora no PATTERN (bloco 116, indice 1014 + track: BD 1014,
 #       RC 1023 - mixer-bd e mixer-rc). pan/sends: bloco 13 com y = track
-#       (mixer-bd y 0, mixer-rc y 9).
+#       (mixer-bd y 0, mixer-rc y 9). Os 8 tracks do meio sao DEDUCAO pelo
+#       passo (o App foi visto so no BD e no RC); SD pan/sends ouvidos no F2.2.
 
 TABELA = {}
 for _linha, _b, _esc, _i, _passo, _mn, _mx, _escala in _POR_TRACK:
@@ -261,6 +262,24 @@ def todas_as_entradas():
     for por_valor in POR_TIPO.values():
         for e in por_valor.values():
             yield from ((e,) if isinstance(e, Parametro) else e)
+
+
+def seletor_de(id):
+    """O SELETOR do TYPE que decide a entrada de um knob dependente de type
+    (delay.type, lfo.sync, mfx.type), ou None para os da TABELA."""
+    if id in TABELA or not POR_TIPO.get(id):
+        return None
+    e = next(iter(POR_TIPO[id].values()))
+    return (e if isinstance(e, Parametro) else e[0]).tipo[0]
+
+
+def condicoes_de(id, tipo_atual):
+    """Os seletores de condicao que a entrada desse type precisa (ex.: o SYNC
+    do FLANGER para o MFX 2 no FLANGER); vazio se ela nao depende de nada."""
+    e = POR_TIPO.get(id, {}).get(tipo_atual)
+    if e is None or isinstance(e, Parametro):
+        return []
+    return list(dict.fromkeys(a.condicao[0] for a in e))
 
 
 def entrada_para(id, tipo_atual=None, seletores=None):

@@ -26,6 +26,7 @@ import fcntl, os, select, struct, subprocess, termios, time
 
 AQUI = os.path.dirname(os.path.abspath(__file__))
 import espiao
+import parametros
 import tr1000_serial as ts
 
 NOME_USB = "Roland TR-1000"              # o no do ioreg (medido 08/10/2026)
@@ -52,7 +53,6 @@ def escrita_permitida(bloco, x, y, indice, valor):
       - os steps (o resto desta funcao)."""
     if (bloco, x, y, indice) in ESCRITAS_PERMITIDAS:          # as 3 da C3
         return True
-    import parametros
     if parametros.escrita_permitida(bloco, x, y, indice, valor):
         return True
     if bloco not in BLOCOS_DE_STEPS or not 0 <= x < N_PATTERNS or not 0 <= y < N_TRACKS:

@@ -112,10 +112,18 @@ class Motor:
             c = cfg[lado]
             self.lp_in[dev] = EntradaMIDI(c["in_idx"], c.get("in_nome"))
             self.lp_out[dev] = SaidaMIDI(c["out_idx"], c.get("out_nome"))
-        self.ctl = controladoras.Controladoras(log=log)
-        if self.ctl.portas:
-            self.pickup = self.novo_pickup(self.ctl.mapa)
-            self.log(f"controladoras: {', '.join(self.ctl.portas)}")
+        try:
+            self.ctl = controladoras.Controladoras(log=log)
+            if self.ctl.portas:
+                self.pickup = self.novo_pickup(self.ctl.mapa)
+                self.log(f"controladoras: {', '.join(self.ctl.portas)}")
+        except (ValueError, KeyError, TypeError, OSError) as e:
+            # mapa corrompido ou editado a mao: o grid roda sem os knobs
+            # (revisao do PR #5)
+            self.log(f"(!) controladoras desligadas - {controladoras.MAPA}: {e!r}")
+            if self.ctl is not None:
+                self.ctl.fechar()
+            self.ctl = self.pickup = None
 
     def novo_pickup(self, mapa):
         return controladoras.Pickup(
@@ -223,7 +231,7 @@ class Motor:
             if x != self.x_pattern or x_kit != self.x_kit:
                 self.pickup.soltar()                 # outro pattern/kit: pickup de novo
             else:
-                self.pickup.esquecer_seletores()     # o painel pode ter trocado o type
+                self.pickup.reconferir()             # o painel pode ter mexido
         if x_kit != self.x_kit and x_kit is None:
             self.log(f"(!) bloco 3 [2..4] = {[b3[o] for o in OFFS_DO_KIT]}: kit incerto, "
                      "knobs de kit parados")
@@ -420,7 +428,7 @@ class Motor:
         if self.pickup is None or self.modo_geral != MODO_ON or self.conexao is None:
             return
         if knobs and self.x_pattern is not None:
-            self.pickup.mover(knobs, self.x_pattern, self.x_kit)
+            self.pickup.mover(knobs, self.x_pattern, self.x_kit, agora)
         self.pickup.escrever_pendentes(agora)
 
     # ── pads e o laco ───────────────────────────────────────

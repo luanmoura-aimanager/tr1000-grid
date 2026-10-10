@@ -429,6 +429,7 @@ da Chart. Se a Roland publicou algum mapa SysEx, é lá. Baixar antes da C1.
 | os 74 parâmetros das controladoras (mixer, reverb, delay nos 4 types, LFO, MASTER FX nos 19 types): endereço e faixa | **medido 09–10/10** (o App escrevendo; nunca por nós) | 7.5 |
 | x dos blocos de kit = o do bloco 3 `[2..4]` quando os três coincidem | **medido 10/10** (F2.9: no 1-02, o PAN escrito com x = 1 mudou o som tocando); qual dos três é "o kit" segue **(deduzido)** | 7.5 |
 | escrita nossa de parâmetro pelas controladoras | **medido 10/10, OUVIDO** (ROTEIRO-F2 inteiro) e conferido no App | 7.5 |
+| os 8 tracks do meio (SD..CC) nos parâmetros por track: o mesmo passo do BD ao RC | **(deduzido)** — o App foi visto só no BD e no RC; SD PAN/RVB/DLY **ouvidos** no F2.2 | 7.5 |
 | model ID | **não se aplica** à serial (não é SysEx); a versão `"1.22"` vem no aperto de mão | 2.1c |
 | ordem dos parâmetros por bloco | **(catálogo)** | 2.2 |
 | endereços de qualquer coisa | **desconhecido** | |

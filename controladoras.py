@@ -298,18 +298,22 @@ class Pickup:
 
     ler(bloco, x, y, indice) -> valor e escrever(bloco, x, y, indice, valor)
     sao do motor (a mesma ConexaoTR1000, o mesmo portao). O valor atual da
-    maquina e lido UMA vez, no primeiro movimento do knob; depois dele, e o
-    que o proprio knob escreveu.
+    maquina e lido no primeiro movimento do knob; depois, e o que o proprio
+    knob escreveu.
 
-    Solta tudo (soltar) quando o pattern ou o kit trocam. Os seletores de
-    type sao relidos depois de esquecer_seletores (o motor chama a cada
-    releitura: o painel pode ter trocado o type). Um knob cujo endereco
-    mudou (o type mudou) e solto e lido de novo.
+    Solta tudo (soltar) quando o pattern ou o kit trocam. Depois de
+    reconferir (o motor chama a cada releitura de 0,5 s), os seletores de
+    type sao relidos e cada knob pego confere de novo o valor da maquina no
+    proximo movimento: se o painel mexeu nele, o knob e solto - sem pulo
+    (revisao do PR #5). Um knob cujo endereco mudou (o type mudou) tambem.
 
     As escritas saem juntas no maximo a cada INTERVALO: so o ultimo valor de
-    cada knob (o App escreveu ~30/s)."""
+    cada knob (o App escreveu ~30/s). Uma leitura ou escrita que falha
+    (maquina desligada, USB fora) para os knobs por PAUSA_APOS_ERRO, em vez
+    de cada knob esperar a sua ESPERA de 1 s a cada tick."""
 
     INTERVALO = 0.03
+    PAUSA_APOS_ERRO = 2.0
 
     def __init__(self, mapa, ler, escrever, erros=(Exception,), log=print):
         self.faixa = {i: tuple(k["faixa"]) for i, k in mapa["knobs"].items()
@@ -320,14 +324,23 @@ class Pickup:
         self.seletores = {}          # id do seletor -> valor lido
         self.avisados = set()
         self.proxima = 0.0
+        self.parado_ate = 0.0
 
     def soltar(self):
         self.estado.clear()
         self.pendentes.clear()
         self.seletores.clear()
 
-    def esquecer_seletores(self):
+    def reconferir(self):
         self.seletores.clear()
+        for st in self.estado.values():
+            st["conferir"] = True
+
+    def _falhou(self, id, exc, agora):
+        self.parado_ate = agora + self.PAUSA_APOS_ERRO
+        self.pendentes.clear()
+        self.log(f"(!) knob {id}: a maquina nao respondeu ({exc}) - "
+                 f"knobs parados {self.PAUSA_APOS_ERRO:.0f} s")
 
     def _aviso(self, chave, texto):
         if chave not in self.avisados:
@@ -342,27 +355,19 @@ class Pickup:
     def entrada(self, id, x_pattern, x_kit):
         """(Parametro, endereco) do knob agora, ou None (inativo: type sem
         entrada, kit incerto, nada decifrado)."""
-        if id in P.TABELA:
-            p = P.TABELA[id]
-        elif id in P.POR_TIPO:
+        sel = P.seletor_de(id)
+        if sel:
             if x_kit is None:
                 return None
-            alternativas = list(P.POR_TIPO[id].values())
-            if not alternativas:
-                return None
-            primeira = alternativas[0]
-            if not isinstance(primeira, P.Parametro):
-                primeira = primeira[0]
-            tipo = self._seletor(primeira.tipo[0], x_kit)
-            e = P.POR_TIPO[id].get(tipo)
-            conds = {}
-            if e is not None and not isinstance(e, P.Parametro):
-                for a in e:                               # o STEP com SYNC
-                    conds[a.condicao[0]] = self._seletor(a.condicao[0], x_kit)
-            p = P.entrada_para(id, tipo, conds)
+            tipo = self._seletor(sel, x_kit)
+            # so le o SYNC que importa para ESTE type (o do FLANGER no FLANGER)
+            conds = P.condicoes_de(id, tipo)
+            p = P.entrada_para(id, tipo, {c: self._seletor(c, x_kit) for c in conds})
             if p is None:
                 self._aviso((id, tipo), f"(knob {id}: inativo no type {tipo})")
                 return None
+        elif id in P.TABELA:
+            p = P.TABELA[id]
         else:
             return None
         x = x_pattern if p.escopo == "pattern" else x_kit
@@ -370,30 +375,34 @@ class Pickup:
             return None
         return p, P.endereco(p, x, P.track_do_id(id))
 
-    def mover(self, knobs, x_pattern, x_kit):
+    def mover(self, knobs, x_pattern, x_kit, agora=0.0):
         """{id: cc} de um tick -> o que escrever fica em pendentes."""
+        if agora < self.parado_ate:
+            return
         for id, cc in knobs.items():
             if id not in self.faixa:
                 continue
             try:
                 e = self.entrada(id, x_pattern, x_kit)
-            except self.erros as exc:
-                self._aviso(("ler", id), f"(!) knob {id}: nao li a maquina ({exc})")
-                continue
-            if e is None:
-                self.estado.pop(id, None)
-                continue
-            p, end = e
-            st = self.estado.get(id)
-            if st is None or st["endereco"] != end:
-                try:
-                    maquina = self.ler(*end)
-                except self.erros as exc:
-                    self._aviso(("ler", id), f"(!) knob {id}: nao li a maquina ({exc})")
+                if e is None:
+                    self.estado.pop(id, None)
                     continue
-                st = dict(endereco=end, p=p, maquina=maquina, anterior=None, pego=False)
-                self.estado[id] = st
-                self.pendentes.pop(id, None)
+                p, end = e
+                st = self.estado.get(id)
+                if st is None or st["endereco"] != end:
+                    st = dict(endereco=end, p=p, maquina=self.ler(*end), anterior=None,
+                              pego=False, conferir=False)
+                    self.estado[id] = st
+                    self.pendentes.pop(id, None)
+                elif st["conferir"]:
+                    st["conferir"] = False
+                    m = self.ler(*end)
+                    if m != st["maquina"]:                 # o painel mexeu
+                        st.update(maquina=m, pego=False, anterior=None)
+                        self.pendentes.pop(id, None)
+            except self.erros as exc:
+                self._falhou(id, exc, agora)
+                return
             v = P.converter(p, cc, *self.faixa[id])
             if not st["pego"]:
                 m = min(max(st["maquina"], p.minimo), p.maximo)
@@ -419,10 +428,14 @@ class Pickup:
                 continue
             try:
                 self.escrever(*st["endereco"], v)
-            except self.erros as exc:
-                self.log(f"(!) knob {id}: escrita recusada/sem resposta ({exc}) - solto")
+            except PermissionError as exc:                 # o portao: so esse knob
+                self.log(f"(!) knob {id}: escrita recusada ({exc}) - solto")
                 self.estado.pop(id, None)
                 continue
+            except self.erros as exc:
+                self.estado.pop(id, None)
+                self._falhou(id, exc, agora)
+                return n
             st["maquina"] = v
             n += 1
             nomes = P.NOMES.get(id)
