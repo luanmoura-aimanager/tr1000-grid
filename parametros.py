@@ -90,6 +90,27 @@ for _n, (_i, _mn, _mx, _nome) in enumerate((
                                      f"{_nome} (type PAN)", "2026-10-09-kit-delay",
                                      ("delay.type", 1))
 del _n, _i, _mn, _mx, _nome
+# kit-lfo / kit-lfo-2 (09/10/2026): o LFO do kit, bloco 10, um por kit.
+# Os TARGETs dele sao so do kit (RVB DLY MFX AFX EXT_IN S_CHAIN) - nao ha
+# profundidade por track; os knobs LFO DTH vao para o LFO de cada INSTRUMENTO
+# (decisao do Luan, 09/10/2026), a capturar.
+TABELA["lfo.waveform"] = _p("lfo.waveform", 10, "kit", False, 519, 0, 0, 4,
+                            "SINE TRI SAW SQR RANDOM", "2026-10-09-kit-lfo")
+LFO_MODOS = ["PATTERN", "TRIGGER", "TRIG 1X", "TRIG 1/2X", "FREE"]   # indice 520
+LFO_SYNCS = ["TIME", "STEP", "NOTE"]                                 # indice 532
+# O TIME (o RATE do MC-24) muda de faixa com o SYNC: medido so com SYNC = TIME.
+POR_TIPO["lfo.rate"] = {0: _p("lfo.rate", 10, "kit", False, 529, 0, 0, 180,
+                              "TIME (SYNC = TIME)", "2026-10-09-kit-lfo", ("lfo.sync", 0))}
+
+# Os parametros que dizem o TYPE/SYNC atual: o motor LE antes de escrever um
+# knob dependente. Nao sao knobs - nao entram no portao de escrita.
+SELETORES = {
+    "delay.type": _p("delay.type", 6, "kit", False, 2407, 0, 0, 3, "", "2026-10-09-kit-delay"),
+    "lfo.sync":   _p("lfo.sync", 10, "kit", False, 532, 0, 0, 2, "TIME STEP NOTE",
+                     "2026-10-09-kit-lfo-2"),
+}
+# Medidos e fora das placas (registro): LFO do kit PHASE 521 0..359, S&H 522
+# 0..19, AMOUNT 1/2/3 523/524/525 500..1500 (centro 1000), MODE 520 (LFO_MODOS).
 # Medidos e fora das placas (registro): SYNC 2408 0..1, FX ROUTE 2411 0..2
 # (THROUGH MASTER ANALOG), SC DEPTH 2414 0..1000; no PAN: L DAMP 2442 0..81,
 # L DAMP F 2443 0..10, TAP 2444 0..100.
@@ -110,8 +131,7 @@ def entrada_para(id, tipo_atual=None):
     return POR_TIPO.get(id, {}).get(tipo_atual)
 
 # O que as placas tem e ainda nao foi decifrado (B2): o mapa nao esquece ninguem
-PENDENTES = (["lfo.rate", "lfo.waveform"]
-             + ["mfx.type"] + [f"mfx.p{i}" for i in range(1, 8)]
+PENDENTES = (["mfx.type"] + [f"mfx.p{i}" for i in range(1, 8)]
              + [f"{t}.lfo" for t in TRACKS])
 
 

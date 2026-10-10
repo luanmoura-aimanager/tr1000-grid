@@ -1075,6 +1075,13 @@ class TesteParametros(unittest.TestCase):
         self.assertEqual(ids, tem | set(parametros.PENDENTES))
         self.assertFalse(tem & set(parametros.PENDENTES))
 
+    def test_lfo_do_kit(self):
+        e = parametros.entrada_para
+        self.assertEqual(e("lfo.waveform").indice, 519)
+        self.assertEqual(e("lfo.rate", 0).maximo, 180)         # SYNC = TIME
+        self.assertIsNone(e("lfo.rate", 2))                      # NOTE: a capturar
+        self.assertFalse(conexao_serial.escrita_permitida(10, 0, 0, 532, 1))  # SYNC nao e knob
+
     def test_delay_por_type(self):
         e = parametros.entrada_para
         self.assertEqual(e("delay.p1").indice, 2409)              # LEVEL, sempre
