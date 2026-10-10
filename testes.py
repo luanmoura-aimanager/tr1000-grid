@@ -1096,10 +1096,24 @@ class TesteParametros(unittest.TestCase):
         self.assertEqual(e("mfx.type").indice, 2512)
         self.assertEqual(e("mfx.p1", 1).indice, 2536)             # CRUSHER: BALANCE
         self.assertEqual(e("mfx.p6", 2).maximo, 48)               # F+DRIVE: LOW GAIN
-        self.assertEqual(e("mfx.p2", 6).indice, 2564)             # FLANGER: STEP
         self.assertEqual(e("mfx.p7", 6).indice, 2562)             # FLANGER: LOW CUT
+        self.assertEqual(e("mfx.p7", 9).maximo, 80)               # COMPRESSOR: GAIN
+        self.assertEqual(e("mfx.p4", 11).indice, 2594)            # SDD-320: LEVEL
         self.assertIsNone(e("mfx.p4", 1))                         # CRUSHER so tem 3
-        self.assertIsNone(e("mfx.p1", 7))                         # PHASER: a capturar
+        self.assertIsNone(e("mfx.p1", 13))                        # TRANSIENT2: a capturar
+
+    def test_step_do_flanger_e_do_phaser_depende_do_sync(self):
+        e, ok = parametros.entrada_para, conexao_serial.escrita_permitida
+        self.assertEqual(e("mfx.p2", 6, {"mfx.sync.flanger": 1}).indice, 2564)
+        self.assertEqual(e("mfx.p2", 6, {"mfx.sync.flanger": 0}).indice, 2557)
+        self.assertEqual(e("mfx.p2", 7, {"mfx.sync.phaser": 0}).indice, 2566)
+        self.assertEqual(e("mfx.p2", 7, {"mfx.sync.phaser": 1}).indice, 2572)
+        self.assertIsNone(e("mfx.p2", 6))                         # SYNC nao lido: inativo
+        self.assertIsNone(e("mfx.p2", 6, {"mfx.sync.phaser": 1}))   # o SYNC do outro
+        self.assertEqual(e("mfx.p1", 6).indice, 2556)             # DEPTH nao depende
+        self.assertTrue(ok(7, 0, 0, 2557, 255))                   # os dois sao escreviveis
+        self.assertTrue(ok(7, 0, 0, 2572, 0))
+        self.assertFalse(ok(7, 0, 0, 2570, 1))                    # o SYNC em si nao
         self.assertTrue(ok(7, 3, 0, 2546, 200))
         self.assertFalse(ok(7, 0, 0, 2546, 201))                  # SPEED vai a 200
         self.assertFalse(ok(7, 0, 0, 2514, 1))                    # FX ROUTE nao e knob

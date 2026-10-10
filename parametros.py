@@ -29,14 +29,18 @@ TRACKS = ["bd", "sd", "lt", "ht", "rs", "hc", "ch", "oh", "cc", "rc"]
 # (decisao do Luan, 09/10/2026: capturar so os types que ele usa).
 # passo_bloco: o BLOCO anda com o track (o LFO de cada instrumento mora no
 # bloco 22 + 10 * track - inst-lfo, BD 22 e RC 112).
+# condicao: None, ou (id de um SELETOR, valor) - uma 2a condicao alem do type,
+# quando o mesmo knob da tela muda de indice (o STEP com SYNC ON/OFF, mfx-2).
+# Em POR_TIPO, um type com condicao guarda uma tupla de alternativas.
 Parametro = namedtuple("Parametro", "id bloco escopo por_track indice passo_track "
-                                    "minimo maximo escala fonte tipo passo_bloco")
+                                    "minimo maximo escala fonte tipo passo_bloco "
+                                    "condicao")
 
 
 def _p(id, bloco, escopo, por_track, indice, passo_track, minimo, maximo, escala,
-       fonte, tipo=None, passo_bloco=0):
+       fonte, tipo=None, passo_bloco=0, condicao=None):
     return Parametro(id, bloco, escopo, por_track, indice, passo_track,
-                     minimo, maximo, escala, fonte, tipo, passo_bloco)
+                     minimo, maximo, escala, fonte, tipo, passo_bloco, condicao)
 
 
 # ─────────────────────────────────────────────────────────────
@@ -141,20 +145,29 @@ SELETORES = {
                      "2026-10-09-kit-lfo-2"),
 }
 
-# mfx-1 (10/10/2026): o MASTER FX, bloco 7, um por kit. TYPE no indice 2512,
-# na ordem do seletor do App (manual RM p.56); 1..6 medidos, o resto e o
-# BYPASS = 0 por DEDUCAO da ordem, a medir em mfx-2/mfx-3.
+# mfx-1/mfx-2 (10/10/2026): o MASTER FX, bloco 7, um por kit. TYPE no indice
+# 2512, na ordem do seletor do App (manual RM p.56); 1..12 medidos, 13..18 e o
+# BYPASS = 0 por DEDUCAO da ordem, a medir em mfx-3.
 MFX_TIPOS = ["BYPASS", "CRUSHER", "FILTER+DRIVE", "DJFX LOOPER", "ISOLATOR",
              "SCATTER", "FLANGER", "PHASER", "SIDE BAND FILTER", "COMPRESSOR",
              "FET COMP 76", "SDD-320", "TRANSIENT", "TRANSIENT2", "NOISE",
              "303 VINYL SIM", "404 VINYL SIM", "CASSETTE SIM", "DJFX DELAY"]
-TABELA["mfx.type"] = _p("mfx.type", 7, "kit", False, 2512, 0, 1, 6,
-                        "CRUSHER .. FLANGER (medidos)", "2026-10-10-mfx-1")
+TABELA["mfx.type"] = _p("mfx.type", 7, "kit", False, 2512, 0, 1, 12,
+                        "CRUSHER .. TRANSIENT (medidos)", "2026-10-10-mfx-1/2")
 SELETORES["mfx.type"] = TABELA["mfx.type"]._replace(minimo=0, maximo=len(MFX_TIPOS) - 1)
+# O SYNC do FLANGER e do PHASER muda o INDICE do STEP (o knob continua se
+# chamando STEP na tela - mfx-2): seletores proprios, lidos como o TYPE.
+SELETORES["mfx.sync.flanger"] = _p("mfx.sync.flanger", 7, "kit", False, 2561, 0, 0, 1,
+                                   "OFF ON", "2026-10-10-mfx-2")
+SELETORES["mfx.sync.phaser"] = _p("mfx.sync.phaser", 7, "kit", False, 2570, 0, 0, 1,
+                                  "OFF ON", "2026-10-10-mfx-2")
 # MFX 1-7 = os parametros do efeito na ordem da tela (de cima, esquerda ->
 # direita, depois a fileira de baixo), com os menus e sem os botoes (SYNC) e
 # o FX ROUTE - a mesma regra do DELAY 2-6. Como no delay, cada efeito tem os
-# PROPRIOS indices. (indice, min, max, nome) por type:
+# PROPRIOS indices. (indice, min, max, nome) por type; um STEP que depende do
+# SYNC e uma lista de (seletor, valor, indice) no lugar do indice.
+_STEP_FLANGER = [("mfx.sync.flanger", 0, 2557), ("mfx.sync.flanger", 1, 2564)]
+_STEP_PHASER = [("mfx.sync.phaser", 0, 2566), ("mfx.sync.phaser", 1, 2572)]
 _MFX_POR_TIPO = {
     1: [(2536, 0, 255, "BALANCE"), (2537, 0, 255, "SAMPLE"), (2538, 0, 255, "FILTER")],
     2: [(2539, 0, 255, "CUTOFF"),  (2540, 0, 255, "RESO"),   (2541, 0, 255, "DRIVE"),
@@ -164,24 +177,46 @@ _MFX_POR_TIPO = {
     4: [(2548, 0, 255, "LOW"),     (2549, 0, 255, "MID"),    (2550, 0, 255, "HIGH")],
     5: [(2551, 0,   9, "TYPE"),    (2552, 0,   9, "DEPTH"),  (2553, 0, 1, "SCATTER (OFF ON)"),
         (2554, 0, 255, "BALANCE")],
-    6: [(2556, 0, 255, "DEPTH"),   (2564, 0, 255, "STEP (com SYNC ON)"),
+    6: [(2556, 0, 255, "DEPTH"),   (_STEP_FLANGER, 0, 255, "STEP"),
         (2558, 0, 255, "MANUAL"),  (2559, 0, 255, "RESO"),   (2563, 0, 1, "MODE (MONO STEREO)"),
         (2560, 0, 255, "BALANCE"), (2562, 0,  17, "LOW CUT")],
+    7: [(2565, 0, 255, "DEPTH"),   (_STEP_PHASER, 0, 255, "STEP"),
+        (2567, 0, 255, "MANUAL"),  (2568, 0, 255, "RESO"),
+        (2571, 0,   3, "TYPE (4ST 8ST 12ST BI-PH)"), (2569, 0, 255, "BALANCE")],
+    8: [(2573, 0,   5, "TYPE (SBF1..SBF6)"), (2574, 0, 255, "INTERVAL"),
+        (2575, 0, 247, "WIDTH"),   (2576, 0, 255, "BALANCE"), (2577, 0, 255, "GAIN")],
+    9: [(2578, 0, 255, "BALANCE"), (2579, 0, 255, "ATTACK"), (2580, 0, 255, "RELEASE"),
+        (2581, 0,  40, "THRESHLD"), (2582, 0, 61, "RATIO"),  (2583, 0,  20, "KNEE"),
+        (2584, 0,  80, "GAIN")],
+    10: [(2585, 0, 241, "IN LEVEL"), (2586, 0, 241, "OUT LEVEL"), (2587, 0, 70, "ATTACK"),
+         (2588, 0,  70, "RELEASE"),
+         (2589, 0,   4, "RATIO (4 8 12 20 ALL)"), (2590, 0, 100, "BALANCE")],
+    11: [(2591, 0,   6, "MODE (1 2 3 4 1+4 2+4 3+4)"), (2592, 0, 150, "LO GAIN"),
+         (2593, 0, 150, "HI GAIN"), (2594, 0, 255, "LEVEL")],
+    12: [(2595, 0, 255, "ENV DEPTH"), (2596, 0, 255, "ATTACK"), (2597, 0, 255, "RELEASE")],
 }
 for _n in range(1, 8):
     POR_TIPO[f"mfx.p{_n}"] = {}
 for _tipo, _lista in _MFX_POR_TIPO.items():
+    _fonte = "2026-10-10-mfx-1" if _tipo <= 6 else "2026-10-10-mfx-2"
     for _n, (_i, _mn, _mx, _nome) in enumerate(_lista, start=1):
-        POR_TIPO[f"mfx.p{_n}"][_tipo] = _p(
-            f"mfx.p{_n}", 7, "kit", False, _i, 0, _mn, _mx,
-            f"{_nome} (type {MFX_TIPOS[_tipo]})", "2026-10-10-mfx-1",
-            ("mfx.type", _tipo))
-del _tipo, _lista, _n, _i, _mn, _mx, _nome
-# Medidos e fora das placas (registro), mfx-1: FX ROUTE 2514 0..1 (THROUGH
-# ANALOG neste kit); FLANGER SYNC 2561 0..1 (ON = 1). O FLANGER com SYNC OFF
-# troca STEP por RATE - provavelmente 2557, NAO medido: com SYNC OFF o MFX 2
-# escreve no STEP, que nao se ouve. A leitura em bloco do App cobre 2512..2534
-# (o comum do MFX; o OFF deve estar em 2513, nao tocado).
+        _id, _escala = f"mfx.p{_n}", f"{_nome} (type {MFX_TIPOS[_tipo]})"
+        if isinstance(_i, list):                  # o indice depende do SYNC
+            POR_TIPO[_id][_tipo] = tuple(
+                _p(_id, 7, "kit", False, _ii, 0, _mn, _mx,
+                   f"{_escala}, SYNC {'ON' if _v else 'OFF'}", "2026-10-10-mfx-2",
+                   ("mfx.type", _tipo), condicao=(_sel, _v))
+                for _sel, _v, _ii in _i)
+        else:
+            POR_TIPO[_id][_tipo] = _p(_id, 7, "kit", False, _i, 0, _mn, _mx, _escala,
+                                      _fonte, ("mfx.type", _tipo))
+del _tipo, _lista, _n, _i, _mn, _mx, _nome, _id, _escala, _fonte
+# Medidos e fora das placas (registro), mfx-1/2: OFF 2513 0..1 (ON = 1; o
+# botao ao lado do seletor, tocado sem querer no comeco da mfx-2); FX ROUTE
+# 2514 0..1 (THROUGH ANALOG neste kit); SYNC do FLANGER 2561 e do PHASER 2570
+# (ON = 1). Faixas que o giro NAO levou ao 255: SBF WIDTH 247 e FET IN/OUT
+# LEVEL 241 - o portao aceita so o medido. A leitura em bloco do App cobre
+# 2512..2534 (o comum do MFX); os parametros de cada efeito ele le um a um.
 # Medidos e fora das placas (registro): LFO do kit PHASE 521 0..359, S&H 522
 # 0..19, AMOUNT 1/2/3 523/524/525 500..1500 (centro 1000), MODE 520 (LFO_MODOS).
 # Medidos e fora das placas (registro): SYNC 2408 0..1, FX ROUTE 2411 0..2
@@ -193,15 +228,22 @@ def todas_as_entradas():
     """A tabela fixa e as dependentes de type, para o portao."""
     yield from TABELA.values()
     for por_valor in POR_TIPO.values():
-        yield from por_valor.values()
+        for e in por_valor.values():
+            yield from ((e,) if isinstance(e, Parametro) else e)
 
 
-def entrada_para(id, tipo_atual=None):
+def entrada_para(id, tipo_atual=None, seletores=None):
     """O Parametro de um knob com a maquina no type `tipo_atual` (o valor do
-    TYPE correspondente), ou None se o knob esta inativo nesse type."""
+    TYPE correspondente), ou None se o knob esta inativo nesse type. Se o
+    indice depende de outro seletor (condicao), `seletores` {id: valor} diz
+    qual alternativa vale; sem o valor dele, o knob fica inativo."""
     if id in TABELA:
         return TABELA[id]
-    return POR_TIPO.get(id, {}).get(tipo_atual)
+    e = POR_TIPO.get(id, {}).get(tipo_atual)
+    if e is not None and not isinstance(e, Parametro):
+        seletores = seletores or {}
+        return next((a for a in e if seletores.get(a.condicao[0]) == a.condicao[1]), None)
+    return e
 
 # O que as placas tem e ainda nao foi decifrado (B2): o mapa nao esquece ninguem
 PENDENTES = []
