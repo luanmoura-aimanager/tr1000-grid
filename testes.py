@@ -1289,6 +1289,79 @@ class TesteControladorasNoMotor(unittest.TestCase):
         self.assertFalse(ok(7, 128, 0, 2564, 1))           # x fora de 0..127
 
 
+class TesteFoto(unittest.TestCase):
+    """Fase 2, passo 1: a foto (tudo que o App le no boot) e o diff."""
+
+    def _lidos(self, maq):
+        import struct
+        return [struct.unpack_from("<HHHHH", tr1000_serial.carga(p), 1)
+                for p in maq.recebido if tr1000_serial.carga(p)[:1] == b"\x82"]
+
+    def test_foto_le_no_x_do_pattern_atual_e_o_sistema_no_0(self):
+        import sessao_c4
+        maq = _MaquinaFalsa()
+        maq.zeros_ok = True
+        b3 = [0] * 292
+        b3[2] = b3[3] = b3[4] = 16                         # 2-01
+        maq.blocos = {(3, 0, 0): b3}
+        with conexao_serial.ConexaoTR1000(porta=maq) as c:  # o portao confere tudo
+            c.aperto()
+            nome, x, vals = sessao_c4.tirar_foto(c)
+        self.assertEqual((nome, x), ("2-01", 16))
+        lidos = self._lidos(maq)
+        self.assertEqual(len(lidos), len(vals) + 1)
+        xs = {b: x for b, x, y, i, k in lidos[1:]}
+        self.assertEqual(xs[116], 16)                      # cabecalho do pattern
+        self.assertEqual(xs[118], 16)                      # steps var A
+        self.assertEqual(xs[5], 16)                        # reverb (kit)
+        self.assertEqual(xs[3], 0)                         # o estado: sistema
+        self.assertNotIn(b"\x01", {tr1000_serial.carga(p)[:1] for p in maq.recebido})
+        self.assertEqual(len({(b, y) for b, x, y, i, k in lidos[1:]}), len(lidos) - 1)
+
+    def test_piso_de_ruido_e_diff(self):
+        import sessao_c4
+        f1 = {(3, 0, 0): [1, 2, 3], (118, 0, 1): [0] * 80}
+        f2 = {(3, 0, 0): [1, 9, 3], (118, 0, 1): [0] * 80}
+        ruido = sessao_c4.piso_de_ruido([f1, f2])
+        self.assertEqual(ruido, {(3, 0, 0, 1)})
+        f3 = {(3, 0, 0): [1, 7, 3], (118, 0, 1): [0] * 64 + [50] + [0] * 15}
+        linhas, n = tr1000_serial.linhas_do_diff(f2, f3, ruido)
+        self.assertEqual(n, 1)                             # o [1] do bloco 3 e ruido
+        self.assertIn("steps var A, SD", linhas[0])
+        self.assertIn("[ 64] 0 -> 32", linhas[1])
+
+    def test_gestos_tem_ida_e_volta(self):
+        import sessao_c4
+        ids = [g[0] for g in sessao_c4.GESTOS]
+        self.assertEqual(len(ids), len(set(ids)))
+        self.assertTrue(all(len(g) == 3 and g[1] and g[2] for g in sessao_c4.GESTOS))
+
+    def test_nome_da_chave(self):
+        n = tr1000_serial.nome_da_chave
+        self.assertEqual(n(118, 1), "steps var A, SD")
+        self.assertEqual(n(117 + 3 * 11 + 1, 9), "steps var Fill 4, RC")
+        self.assertEqual(n(117, 0), "var A (bloco 1 de 3), BD")
+        self.assertEqual(n(116, 0), "cabecalho do pattern")
+        self.assertEqual(n(5, 0), "bloco 5")
+
+    def test_diff_acha_a_foto_mais_recente(self):
+        import sessao_c4, os, time
+        antigo = conexao_serial.AQUI
+        with tempfile.TemporaryDirectory() as d:
+            os.makedirs(os.path.join(d, "capturas"))
+            for dia, idade in (("10", 10), ("11", 0)):
+                p = os.path.join(d, "capturas", f"2026-10-{dia}-x.serlog")
+                open(p, "w").close()
+                os.utime(p, (time.time() - idade,) * 2)
+            try:
+                conexao_serial.AQUI = d
+                self.assertTrue(sessao_c4.captura_da_foto("x").endswith("2026-10-11-x.serlog"))
+                with self.assertRaises(FileNotFoundError):
+                    sessao_c4.captura_da_foto("nao-existe")
+            finally:
+                conexao_serial.AQUI = antigo
+
+
 class TesteParametros(unittest.TestCase):
     """A tabela decifrada em 09/10/2026 (mixer-bd/rc, kit-reverb)."""
 

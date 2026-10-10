@@ -548,33 +548,60 @@ def cmd_pattern(caminho):
         print(l)
 
 
+def nome_da_chave(bloco, y):
+    """'steps var A, SD' / 'cabecalho do pattern' / 'var B (bloco 1 de 3)'... -
+    so o que esta medido; o resto fica 'bloco N'."""
+    tr = f", {TRACKS_SERIAL[y]}" if 0 <= y < len(TRACKS_SERIAL) else f", y {y}"
+    if bloco == 3:
+        return "estado (pattern/kit selecionados, tempo)"
+    if bloco == BLOCO_CAB_PATTERN:
+        return "cabecalho do pattern"
+    rel = bloco - BLOCO_VAR0
+    if 0 <= rel < BLOCOS_POR_VAR * len(VARIACOES_SERIAL):
+        v, k = divmod(rel, BLOCOS_POR_VAR)
+        if k == 1:
+            return f"steps var {VARIACOES_SERIAL[v]}{tr}"
+        return f"var {VARIACOES_SERIAL[v]} (bloco {k + 1} de {BLOCOS_POR_VAR}){tr}"
+    return f"bloco {bloco}"
+
+
+def linhas_do_diff(va, vb, ignorar=(), maximo=40):
+    """{(bloco, x, y): [u32]} x 2 -> (linhas de texto, quantos valores
+    mudaram). `ignorar`: {(bloco, x, y, i)} do piso de ruido (os que mudam
+    sozinhos, Metodo regra 2)."""
+    linhas, n = [], 0
+    so_a = sorted(set(va) - set(vb)); so_b = sorted(set(vb) - set(va))
+    if so_a: linhas.append(f"so na primeira: {so_a}")
+    if so_b: linhas.append(f"so na segunda: {so_b}")
+    steps = {bloco_de_steps(v) for v in range(len(VARIACOES_SERIAL))}
+    for k in sorted(set(va) & set(vb)):
+        x, y = va[k], vb[k]
+        difs = [(i, p, q) for i, (p, q) in enumerate(zip(x, y))
+                if p != q and k + (i,) not in ignorar]
+        if not difs and len(x) == len(y):
+            continue
+        n += len(difs)
+        linhas.append(f"bloco {k[0]:3d} x {k[1]} y {k[2]}  - {nome_da_chave(k[0], k[2])}:")
+        for i, p, q in difs[:maximo]:
+            extra = (f"  (step {i // 4 + 1}, slot {i % 4}"
+                     f"{' = layer ' + 'AB'[i % 4] if i % 4 < 2 else ''})"
+                     if k[0] in steps and i < 64 else "")
+            linhas.append(f"   [{i:3d}] {p:X} -> {q:X}{extra}")
+        if len(difs) > maximo:
+            linhas.append(f"   ... +{len(difs) - maximo}")
+    return linhas, n
+
+
 def cmd_diffblocos(a, b):
     """O que mudou nos valores entre duas capturas, bloco a bloco - o
     snapdiff da serial: abre a copia, fecha, faz UM gesto no painel, abre de
     novo (o boot rele tudo), e compara. Metodo, regra 2: rode antes com duas
     capturas SEM gesto no meio para medir o piso de ruido."""
-    va = ultimos_valores(pacotes(ler_serlog(a)))
-    vb = ultimos_valores(pacotes(ler_serlog(b)))
-    so_a = sorted(set(va) - set(vb)); so_b = sorted(set(vb) - set(va))
-    if so_a: print(f"so em {a}: {so_a}")
-    if so_b: print(f"so em {b}: {so_b}")
-    mudou = 0
-    for k in sorted(set(va) & set(vb)):
-        x, y = va[k], vb[k]
-        difs = [(i, p, q) for i, (p, q) in enumerate(zip(x, y)) if p != q]
-        if not difs and len(x) == len(y):
-            continue
-        mudou += 1
-        print(f"bloco {k[0]:3d} x {k[1]} y {k[2]}:")
-        for i, p, q in difs[:40]:
-            eh_steps = (k[0] in {bloco_de_steps(v) for v in range(len(VARIACOES_SERIAL))}
-                        and i < 64)
-            extra = f"  (step {i // 4 + 1}, slot {i % 4}{' = layer ' + 'AB'[i % 4] if i % 4 < 2 else ''})" \
-                if eh_steps else ""
-            print(f"   [{i:3d}] {p:X} -> {q:X}{extra}")
-        if len(difs) > 40:
-            print(f"   ... +{len(difs) - 40}")
-    print(f"\n{mudou} blocos com diferenca")
+    linhas, n = linhas_do_diff(ultimos_valores(pacotes(ler_serlog(a))),
+                               ultimos_valores(pacotes(ler_serlog(b))))
+    for l in linhas:
+        print(l)
+    print(f"\n{n} valores mudaram")
 
 
 def cmd_pacotes(caminho, maximo=None):
