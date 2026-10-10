@@ -245,6 +245,16 @@ del _tipo, _lista, _n, _i, _mn, _mx, _nome, _id, _escala, _fonte
 # L DAMP F 2443 0..10, TAP 2444 0..100.
 
 
+# Os nomes dos knobs de escolha, para o terminal dizer onde o knob parou (o
+# painel nao mostra o type do MFX - ROTEIRO-F2, 10/10/2026)
+NOMES = {
+    "reverb.type":  TABELA["reverb.type"].escala.split(),
+    "delay.type":   DELAY_TIPOS,
+    "mfx.type":     MFX_TIPOS,
+    "lfo.waveform": TABELA["lfo.waveform"].escala.split(),
+}
+
+
 def todas_as_entradas():
     """A tabela fixa e as dependentes de type, para o portao."""
     yield from TABELA.values()

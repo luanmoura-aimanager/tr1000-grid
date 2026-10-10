@@ -1076,6 +1076,8 @@ def motor_com_knobs(maq=None, faixa=(0, 127)):
     m.ctl = object.__new__(controladoras.Controladoras)
     m.ctl.mapa, m.ctl.rev = mapa, controladoras.indice_reverso(mapa)
     m.ctl.portas = {"MC-24": _PortaLP(), "CM-MC50": _PortaLP()}
+    m.log_visto = []
+    m.log = m.log_visto.append
     m.pickup = m.novo_pickup(mapa)
     m.agora = 100.0
     return m
@@ -1193,6 +1195,7 @@ class TesteControladorasNoMotor(unittest.TestCase):
         girar(m, "mfx.type", 0, 20)                        # 20 * 18 / 127 = 3: LOOPER
         self.assertEqual(_escritas(maq), [(7, 0, 0, 2512, 3)])
         self.assertEqual(m.pickup.seletores["mfx.type"], 3)
+        self.assertIn("mfx.type: DJFX LOOPER", m.log_visto)
         girar(m, "mfx.p2", 0, 64)                          # SPEED do LOOPER
         self.assertEqual(_escritas(maq)[-1], (7, 0, 0, 2546, 101))
 

@@ -425,6 +425,9 @@ class Pickup:
                 continue
             st["maquina"] = v
             n += 1
+            nomes = P.NOMES.get(id)
+            if nomes and 0 <= v < len(nomes):
+                self.log(f"{id}: {nomes[v]}")
             if id in P.SELETORES:                      # TYPE do delay/MFX
                 self.seletores[id] = v
         return n
