@@ -83,15 +83,34 @@ del _linha, _b, _esc, _i, _passo, _mn, _mx, _escala, _t, _id
 # DELAY 2-6 = os 5 primeiros parametros do type (decisao do Luan, 09/10/2026).
 DELAY_TIPOS = ["DELAY", "PAN", "ECHO", "PITCH"]
 POR_TIPO = {f"delay.p{n}": {} for n in range(2, 7)}
-for _n, (_i, _mn, _mx, _nome) in enumerate((
-        # type PAN (1), medido em kit-delay - os outros types: a capturar
-        (2437, 0,  15, "SYNC TIME"), (2438, 0, 999, "FEEDBACK"),
-        (2439, 0,  14, "HIGH CUT"),  (2440, 0,  81, "H DAMP"),
-        (2441, 0,  13, "H DAMP F")), start=2):
-    POR_TIPO[f"delay.p{_n}"][1] = _p(f"delay.p{_n}", 6, "kit", False, _i, 0, _mn, _mx,
-                                     f"{_nome} (type PAN)", "2026-10-09-kit-delay",
-                                     ("delay.type", 1))
-del _n, _i, _mn, _mx, _nome
+# Cada type tem os PROPRIOS indices (nao sao slots compartilhados - medido em
+# delay-tipos, 10/10/2026). "Os 5 primeiros" = na ordem da tela do App (de
+# cima, esquerda -> direita, depois a fileira de baixo), pulando LEVEL e os
+# botoes. (indice, min, max, nome) por type:
+_DELAY_POR_TIPO = {
+    0: [(2429, 0,  14, "SYNC TIME"), (2430, 0, 998, "FEEDBACK"), (2431, 0, 14, "HIGH CUT"),
+        (2432, 0,  81, "H DAMP"),    (2433, 0,  13, "H DAMP F")],           # DELAY
+    1: [(2437, 0,  15, "SYNC TIME"), (2438, 0, 999, "FEEDBACK"), (2439, 0, 14, "HIGH CUT"),
+        (2440, 0,  81, "H DAMP"),    (2441, 0,  13, "H DAMP F")],           # PAN
+    2: [(2446, 0,  15, "SYNC TIME"), (2447, 0, 999, "INTENSITY"),
+        (2448, 0,   6, "MODE (S M L S+M S+L M+L S+M+L)"),
+        (2454, 0,   8, "TAPE DIST"), (2455, 0, 255, "W/F RATE")],          # ECHO
+    3: [(2458, 0,  15, "SYNC TIME"), (2459, 0, 999, "FEEDBACK"), (2460, 0, 81, "H DAMP"),
+        (2461, 0,  13, "H DAMP F"),  (2464, 0,  36, "COARSE")],             # PITCH
+}
+for _tipo, _lista in _DELAY_POR_TIPO.items():
+    for _n, (_i, _mn, _mx, _nome) in enumerate(_lista, start=2):
+        POR_TIPO[f"delay.p{_n}"][_tipo] = _p(
+            f"delay.p{_n}", 6, "kit", False, _i, 0, _mn, _mx,
+            f"{_nome} (type {DELAY_TIPOS[_tipo]})",
+            "2026-10-09-kit-delay" if _tipo == 1 else "2026-10-10-delay-tipos",
+            ("delay.type", _tipo))
+del _tipo, _lista, _n, _i, _mn, _mx, _nome
+# Medidos e fora das placas (registro), delay-tipos: DELAY L DAMP 2434 0..81,
+# L DAMP F 2435 0..10; ECHO BASS 2449 0..30, TREBLE 2450 0..30, PAN S/M/L
+# 2451/2452/2453 0..255, W/F DEPTH 2456 0..255; PITCH L DAMP 2462 0..81,
+# L DAMP F 2463 0..10, FINE 2465 0..200; PAN L DAMP 2442, L DAMP F 2443, TAP 2444.
+
 # kit-lfo / kit-lfo-2 (09/10/2026): o LFO do kit, bloco 10, um por kit.
 # Os TARGETs dele sao so do kit (RVB DLY MFX AFX EXT_IN S_CHAIN) - nao ha
 # profundidade por track; os knobs LFO DTH vao para o LFO de cada INSTRUMENTO

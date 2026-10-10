@@ -1095,7 +1095,10 @@ class TesteParametros(unittest.TestCase):
         e = parametros.entrada_para
         self.assertEqual(e("delay.p1").indice, 2409)              # LEVEL, sempre
         self.assertEqual(e("delay.p3", 1).indice, 2438)           # FEEDBACK no PAN
-        self.assertIsNone(e("delay.p3", 2))                       # ECHO: nao capturado
+        self.assertEqual(e("delay.p3", 2).indice, 2447)           # ECHO: INTENSITY
+        self.assertEqual(e("delay.p6", 3).indice, 2464)           # PITCH: COARSE
+        self.assertEqual(e("delay.p2", 0).indice, 2429)           # DELAY: SYNC TIME
+        self.assertIsNone(e("delay.p2", 4))                       # type que nao existe
         ok = conexao_serial.escrita_permitida
         self.assertTrue(ok(6, 0, 0, 2438, 999))
         self.assertFalse(ok(6, 0, 0, 2438, 1000))
