@@ -1333,7 +1333,7 @@ class TesteParametros(unittest.TestCase):
         self.assertEqual(e("mfx.p7", 9).maximo, 80)               # COMPRESSOR: GAIN
         self.assertEqual(e("mfx.p4", 11).indice, 2594)            # SDD-320: LEVEL
         self.assertIsNone(e("mfx.p4", 1))                         # CRUSHER so tem 3
-        self.assertEqual(e("mfx.p7", 13).indice, 2605)            # TRANSIENT2: BYPASS
+        self.assertEqual(e("mfx.p7", 13).indice, 2601)            # TRANSIENT2: Q
         self.assertEqual(e("mfx.p3", 14).maximo, 1)               # NOISE: DIRECTION
         self.assertEqual(e("mfx.p2", 18).indice, 2622)            # DJFX DELAY: TIME
         self.assertIsNone(e("mfx.p6", 18))                        # DJFX DELAY tem 5
@@ -1357,7 +1357,9 @@ class TesteParametros(unittest.TestCase):
         self.assertFalse(ok(7, 0, 0, 2561, 1))                    # SYNC do FLANGER
         self.assertTrue(ok(7, 0, 0, 2512, 0))                     # BYPASS (mfx-3)
         self.assertFalse(ok(7, 0, 0, 2512, 19))
-        self.assertFalse(ok(7, 0, 0, 2601, 3))                    # Q do TRANSIENT2: fora
+        self.assertTrue(ok(7, 0, 0, 2601, 7))                     # Q do TRANSIENT2
+        self.assertFalse(ok(7, 0, 0, 2601, 8))
+        self.assertFalse(ok(7, 0, 0, 2605, 3))                    # o BYPASS dele: fora
 
     def test_delay_por_type(self):
         e = parametros.entrada_para

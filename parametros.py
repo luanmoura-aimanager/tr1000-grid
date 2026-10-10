@@ -204,7 +204,7 @@ _MFX_POR_TIPO = {
     12: [(2595, 0, 255, "ENV DEPTH"), (2596, 0, 255, "ATTACK"), (2597, 0, 255, "RELEASE")],
     13: [(2598, 0, 255, "ENV DEPTH"), (2599, 0, 255, "ATTACK"), (2600, 0, 255, "RELEASE"),
          (2604, 0, 255, "LP LEVEL"),  (2603, 0, 255, "BP LEVEL"), (2602, 0, 255, "HP LEVEL"),
-         (2605, 0, 255, "BYPASS")],                     # o 8o, Q 2601 0..7, fica fora
+         (2601, 0,   7, "Q")],     # o Q no lugar do BYPASS (2605), decisao do Luan 10/10
     14: [(2606, 0, 255, "COLOR"),   (2607, 0, 255, "LEVEL"),
          (2608, 0,   1, "DIRECTION (UP DOWN)")],
     15: [(2609, 0, 255, "COMP"),    (2610, 0, 255, "NOISE"),  (2611, 0, 255, "WOW FLUT"),
@@ -237,8 +237,10 @@ del _tipo, _lista, _n, _i, _mn, _mx, _nome, _id, _escala, _fonte
 # (ON = 1). Faixas que o giro NAO levou ao 255: SBF WIDTH 247 e FET IN/OUT
 # LEVEL 241 - o portao aceita so o medido. mfx-3: o SYNC do DJFX DELAY (2626,
 # ON = 1) NAO muda o indice do TIME (2622 foi a 0..255 nos dois); o TRANSIENT2
-# tem 8 parametros e o Q (2601, 0..7, o ultimo da tela) fica fora das placas. A leitura em bloco do App cobre
-# 2512..2534 (o comum do MFX); os parametros de cada efeito ele le um a um.
+# tem 8 parametros: o MFX 7 e o Q (2601, 0..7, o ultimo da tela), nao o BYPASS
+# (2605, 0..255), que fica fora das placas - decisao do Luan, 10/10/2026.
+# A leitura em bloco do App cobre 2512..2534 (o comum do MFX); os parametros
+# de cada efeito ele le um a um.
 # Medidos e fora das placas (registro): LFO do kit PHASE 521 0..359, S&H 522
 # 0..19, AMOUNT 1/2/3 523/524/525 500..1500 (centro 1000), MODE 520 (LFO_MODOS).
 # Medidos e fora das placas (registro): SYNC 2408 0..1, FX ROUTE 2411 0..2
