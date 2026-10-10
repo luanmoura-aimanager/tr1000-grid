@@ -416,6 +416,35 @@ TRACKS_SERIAL = ["BD", "SD", "LT", "HT", "RS", "HC", "CH", "OH", "CC", "RC"]
 BLOCO_CAB_PATTERN, BLOCO_VAR0, BLOCOS_POR_VAR = 116, 117, 3
 
 
+# O bloco de steps (REFERENCIA 2.1c): o App le n = 131 a partir do indice
+# 1249; os 64 primeiros sao note0..63 = 16 steps x 4 slots.
+INDICE_STEPS = 1249                                  # (medido 08/10)
+N_STEPS_BLOCO = 131                                  # (medido 08/10)
+
+# O valor de uma nota: 0xA503C = A 50 3C, com o byte do meio = velocity.
+# Deduzido de cinco valores lidos (80 -> A503C, 90 -> A5A3C, 66 -> A423C,
+# 74 -> A4A3C, 88 -> A583C) e PROVADO escrevendo no F1.3 (09/10/2026): 66
+# apareceu e soou fraco no painel, 127 forte.
+NOTA_BASE, NOTA_FIM = 0xA0000, 0x3C
+
+
+def nota(vel):
+    """Velocity 1..127 -> o u32 de um slot com nota."""
+    if not 1 <= vel <= 127:
+        raise ValueError(f"velocity fora de 1..127: {vel}")
+    return NOTA_BASE | (vel << 8) | NOTA_FIM
+
+
+def velocidade(valor):
+    """O inverso de nota(): o byte do meio. Nao checa o resto - le o que vier."""
+    return (valor >> 8) & 0xFF
+
+
+def eh_nota(valor):
+    """O valor tem exatamente a forma A··3C com velocity 1..127."""
+    return (valor & ~0xFF00) == (NOTA_BASE | NOTA_FIM) and 1 <= velocidade(valor) <= 127
+
+
 def bloco_de_steps(v):
     """O bloco dos steps da variacao v (0..7 = A..H, 8..11 = Fill 1..4). UM
     lugar so: o layout dos blocos ainda e em parte deduzido, e tres copias da

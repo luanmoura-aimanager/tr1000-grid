@@ -27,6 +27,7 @@ import tr1000_serial
 import catalogo_app
 import espiao
 import conexao_serial
+import motor
 
 # Mensagem real, capturada do site ARIA falando com uma TR-8S (tr8s-grid
 # REFERENCIA 2.9): "pattern atual -> 127". E o unico SysEx Roland medido que
@@ -474,7 +475,7 @@ class TesteEscritaC3(unittest.TestCase):
         m = _MaquinaFalsa()
         with conexao_serial.ConexaoTR1000(porta=m) as c:
             with self.assertRaises(PermissionError):
-                c.escrever(118, 0, 0, 1257, 0xFF)          # step 3: nao liberado
+                c.escrever(118, 0, 0, 1251, 0xFF)          # slot 2: nao e layer A/B
             with self.assertRaises(PermissionError):
                 c.pacote_escrita(116, 0, 0, 988, 0)        # cabecalho do pattern
         self.assertEqual(m.recebido, [])
@@ -494,7 +495,7 @@ class TesteEscritaC3(unittest.TestCase):
     def test_a_captura_da_sessao_e_lida_como_as_do_espiao(self):
         m = _MaquinaFalsa()
         with tempfile.TemporaryDirectory() as tmp:
-            with conexao_serial.ConexaoTR1000(porta=m) as c:
+            with conexao_serial.ConexaoTR1000(porta=m, registrar=True) as c:
                 c.captura = os.path.join(tmp, "c3.serlog")
                 c.aperto(); c.ler(156, 126, 0, 962)
             regs = tr1000_serial.ler_serlog(c.captura)
@@ -610,7 +611,8 @@ class TesteRevisaoPR2(unittest.TestCase):
 
     def test_captura_comeca_pelo_S_e_no_tempo_certo(self):
         m = _MaquinaFalsa()
-        with conexao_serial.ConexaoTR1000(porta=m, relogio=_relogio_rapido(0.005)) as c:
+        with conexao_serial.ConexaoTR1000(porta=m, relogio=_relogio_rapido(0.005),
+                                          registrar=True) as c:
             c.aperto()
         tempos = [r[0] for r in c.registros]
         self.assertEqual(c.registros[0][1], "S")
@@ -658,7 +660,9 @@ class TesteRevisaoPR3(unittest.TestCase):
 
     def test_chave_nunca_lida_e_permission_error(self):
         with self.assertRaises(PermissionError):
-            conexao_serial.faixa_do_bloco(118, 50, 0)
+            conexao_serial.faixa_do_bloco(118, 130, 0)     # x fora de 0..127
+        with self.assertRaises(PermissionError):
+            conexao_serial.faixa_do_bloco(999, 0, 0)       # bloco que nao existe
 
     def test_segundos_invalido_nao_quebra(self):
         import io, contextlib, sessao_c4
@@ -711,14 +715,14 @@ class TesteSessaoC4(unittest.TestCase):
         # 1 aperto + bloco 3 + cabecalho + 12 bancos x 10 tracks
         self.assertEqual(len(m.recebido), 1 + 1 + 1 + 120)
 
-    def test_pattern_que_o_app_nunca_leu_nao_e_lido(self):
+    def test_pattern_fora_de_0_127_nao_e_lido(self):
         import sessao_c4
         m = _MaquinaFalsa()
         b3 = [0] * 292
-        b3[2] = 49                                # 4-02: nenhum boot capturado
+        b3[2] = 130                               # fora de 0..127: nao existe
         m.blocos = {(3, 0, 0): b3}
         saida = self._com_maquina(m, sessao_c4.cmd_pattern)
-        self.assertIn("o App ainda nao leu o pattern 4-02", saida)
+        self.assertIn("fora do que se pode ler", saida)
         self.assertEqual(len(m.recebido), 1 + 1)  # aperto + bloco 3, mais nada
 
     def test_x_do_pattern_medido(self):
@@ -746,6 +750,263 @@ class TesteSessaoC4(unittest.TestCase):
             fonte = f.read()
         self.assertNotIn(".escrever(", fonte)
         self.assertNotIn("pacote_escrita", fonte)
+
+
+class _PortaLP:
+    """Launchpad de mentira: a saida guarda o que foi mandado; a entrada
+    entrega uma vez o que o teste enfileirou."""
+
+    def __init__(self, entrada=()):
+        self.enviado, self.fila = [], list(entrada)
+
+    def send(self, msg):
+        self.enviado.append(msg)
+
+    def iter_pending(self):
+        f, self.fila = self.fila, []
+        return f
+
+    def close(self):
+        pass
+
+
+# geometria real do learn no tr8s-grid (o mesmo par de aparelhos): o esquerdo
+# girado 90 graus, o direito em pe
+GEO = {"E": {"origem": 88, "passo_col": -10, "passo_lin": -1},
+       "D": {"origem": 81, "passo_col": 1, "passo_lin": -10}}
+
+
+def motor_cru(maquina=None):
+    """Um Motor sem __init__ (sem abrir porta nenhuma), com Launchpad e
+    maquina falsos - o padrao motor_cru() do tr8s-grid."""
+    import threading, queue
+    m = object.__new__(motor.Motor)
+    m.log = lambda *a: None
+    m.lock = threading.RLock()
+    m.fila_cmd = queue.Queue()
+    m.cache = {}
+    m.geo = GEO
+    m.lp_in = {"E": _PortaLP(), "D": _PortaLP()}
+    m.lp_out = {"E": _PortaLP(), "D": _PortaLP()}
+    m.maquina = maquina or _MaquinaFalsa()
+    m.maquina.zeros_ok = True
+    m.conexao = conexao_serial.ConexaoTR1000(porta=m.maquina)
+    m.conexao.__enter__()
+    m.x_pattern = 0
+    m.modo_geral = motor.MODO_ON
+    for tr in range(10):
+        m.cache[(0, tr)] = [0] * 131
+    return m
+
+
+def _escritas(maq):
+    import struct
+    out = []
+    for p in maq.recebido:
+        c = tr1000_serial.carga(p)
+        if c[:1] == b"\x01":
+            out.append(struct.unpack_from("<HHHHI", c, 1))
+    return out
+
+
+class TesteRevisaoPR4(unittest.TestCase):
+    def test_conexao_sem_captura_nao_guarda_nada(self):
+        m = _MaquinaFalsa()
+        with conexao_serial.ConexaoTR1000(porta=m) as c:
+            c.aperto()
+        self.assertEqual(c.registros, [])
+
+    def test_leitura_recusada_nao_derruba_o_tick(self):
+        maq = _MaquinaFalsa()
+        b3 = [0] * 292
+        b3[2] = 130                                    # fora de 0..127
+        maq.blocos = {(3, 0, 0): b3}
+        m = motor_cru(maq)
+        m.proxima_releitura = 0
+        m.tick()                                       # nao pode levantar
+        self.assertEqual(m.x_pattern, 0)
+
+    def test_variacao_que_nao_le_nao_troca(self):
+        m = motor_cru()
+        def falha(*a):
+            raise conexao_serial.ErroConexao("sem resposta")
+        m._ler = falha
+        m.executar("variacao", 2)
+        self.assertEqual(m.variacao, 0)
+
+    def test_start_sem_stop_limpa_a_coluna_velha(self):
+        import mido
+        m = motor_cru()
+        m.tocando, m.passo = True, 9
+        pintadas = []
+        m.pintar_coluna = pintadas.append
+        m.clk = _PortaLP([mido.Message("start")])
+        m._ler_clock()
+        self.assertIn(9, pintadas)
+        self.assertEqual(m.passo, 0)
+
+    def test_o_sexto_pulso_ainda_e_do_step_0(self):
+        import mido
+        m = motor_cru()
+        m.clk = _PortaLP([mido.Message("start")] + [mido.Message("clock")] * 6)
+        m._ler_clock()
+        self.assertEqual(m.passo, 0)
+        m.clk.fila = [mido.Message("clock")]
+        m._ler_clock()
+        self.assertEqual(m.passo, 1)
+
+
+class TesteNota(unittest.TestCase):
+    def test_reproduz_os_valores_lidos(self):
+        # lidos na S0 e no boot-1-02 (08/10/2026)
+        for vel, valor in ((80, 0xA503C), (90, 0xA5A3C), (66, 0xA423C),
+                           (74, 0xA4A3C), (88, 0xA583C)):
+            self.assertEqual(tr1000_serial.nota(vel), valor)
+            self.assertEqual(tr1000_serial.velocidade(valor), vel)
+            self.assertTrue(tr1000_serial.eh_nota(valor))
+
+    def test_fora_da_forma(self):
+        for v in (0, 0xFF, 0xA503D, 0xB503C, 0xA003C):
+            self.assertFalse(tr1000_serial.eh_nota(v), hex(v))
+        with self.assertRaises(ValueError):
+            tr1000_serial.nota(0)
+
+
+class TestePortoesDaFase1(unittest.TestCase):
+    """A escrita do grid (decisao do Luan, 08/10/2026): so steps, layers A/B."""
+
+    def test_regra_da_escrita(self):
+        ok = conexao_serial.escrita_permitida
+        n = tr1000_serial.nota(127)
+        self.assertTrue(ok(118, 0, 0, 1253, 0xFF))            # BD var A step 2 A
+        self.assertTrue(ok(118, 127, 9, 1249 + 60 + 1, n))    # RC, step 16, B
+        self.assertTrue(ok(151, 16, 3, 1249, n))              # Fill 4
+        self.assertFalse(ok(118, 0, 0, 1251, n))              # slot 2
+        self.assertFalse(ok(118, 0, 10, 1249, n))             # track 11
+        self.assertFalse(ok(118, 128, 0, 1249, n))            # pattern 129
+        self.assertFalse(ok(118, 0, 0, 1249 + 64, n))         # alem do step 16
+        self.assertFalse(ok(119, 0, 0, 1249, n))              # bloco de motion
+        self.assertFalse(ok(116, 0, 0, 988, n))               # cabecalho
+        self.assertFalse(ok(118, 0, 0, 1249, 0))              # vazio nao: so pausa
+        self.assertFalse(ok(118, 0, 0, 1249, 0xA503D))        # forma estranha
+        self.assertTrue(ok(156, 126, 0, 962, 509))            # a C3 continua
+
+    def test_leitura_de_qualquer_pattern(self):
+        ok = conexao_serial.leitura_permitida
+        self.assertTrue(ok(118, 127, 9, 1249, 131))
+        self.assertTrue(ok(116, 77, 0, 988, 248))
+        self.assertFalse(ok(118, 128, 0, 1249, 131))
+        self.assertFalse(ok(3, 5, 0, 112, 292))               # so pattern generaliza
+
+
+class TesteMotor(unittest.TestCase):
+    def test_pads_ida_e_volta_nos_dois_aparelhos(self):
+        m = motor_cru()
+        for dev in ("E", "D"):
+            for l in range(8):
+                for c in range(8):
+                    self.assertEqual(m._decodificar(dev, m.nota_de(dev, l, c)), (l, c))
+
+    def test_toque_liga_e_desliga_os_dois_layers(self):
+        m = motor_cru()
+        m.alternar(0, 1)                                   # BD, step 2
+        n80 = tr1000_serial.nota(80)
+        self.assertEqual(_escritas(m.maquina),
+                         [(118, 0, 0, 1253, n80), (118, 0, 0, 1254, n80)])
+        self.assertEqual(m.slots(0, 1)[:2], [n80, n80])
+        m.maquina.recebido.clear()
+        m.alternar(0, 1)                                   # de novo: desliga
+        self.assertEqual(_escritas(m.maquina),
+                         [(118, 0, 0, 1253, 0xFF), (118, 0, 0, 1254, 0xFF)])
+
+    def test_outra_velocity_reescreve_em_vez_de_desligar(self):
+        m = motor_cru()
+        m.alternar(0, 0)
+        m.vel_idx = 4                                      # 66
+        m.maquina.recebido.clear()
+        m.alternar(0, 0)
+        n66 = tr1000_serial.nota(66)
+        self.assertEqual([e[4] for e in _escritas(m.maquina)], [n66, n66])
+
+    def test_track_simples_so_slot_0_e_layer_b(self):
+        m = motor_cru()
+        m.alternar(6, 3)                                   # CH, step 4
+        self.assertEqual([e[3] for e in _escritas(m.maquina)], [1249 + 12])
+        m.maquina.recebido.clear()
+        m.modo_layer = "B"
+        m.alternar(1, 4)                                   # SD, step 5, so B
+        self.assertEqual([e[2:4] for e in _escritas(m.maquina)], [(1, 1249 + 16 + 1)])
+
+    def test_rolagem_muda_o_track(self):
+        m = motor_cru()
+        m.executar("rolar", +5)                            # trava em 2
+        self.assertEqual(m.base_inst, 2)
+        m.alternar(7, 0)                                   # ultima linha = RC
+        self.assertEqual({e[2] for e in _escritas(m.maquina)}, {9})
+
+    def test_linha_alem_dos_tracks_nao_escreve(self):
+        m = motor_cru()
+        m.base_inst = 3                                    # forcado: linha 7 = track 10
+        m.alternar(7, 0)
+        self.assertEqual(_escritas(m.maquina), [])
+
+    def test_cores_espelham_o_painel(self):
+        m = motor_cru()
+        F, n, f = 0xFF, 0xA503C, 0xA423C
+        m.cache[(0, 1)][0:4] = [n, n, F, F]                # vermelho
+        m.cache[(0, 1)][4:8] = [F, n, 0, 0]                # so B: verde
+        m.cache[(0, 1)][8:12] = [f, f, F, F]               # fraco
+        m.cache[(0, 1)][12:16] = [F, F, F, F]              # pausa: apagado
+        cores = [m.cor_do_step(1, s) for s in range(5)]
+        import launchpad as lp
+        self.assertEqual(cores, [lp.COR_FORTE, lp.COR_B, lp.COR_FRACA,
+                                 lp.COR_OFF, lp.COR_TEMPO])
+
+    def test_clock_so_anda_depois_do_start(self):
+        import mido
+        m = motor_cru()
+        m.clk = _PortaLP([mido.Message("clock")] * 12)
+        m._ler_clock()
+        self.assertEqual((m.tocando, m.passo), (False, -1))   # parada: ignora
+        m.clk.fila = [mido.Message("start")] + [mido.Message("clock")] * 13
+        m._ler_clock()
+        self.assertEqual((m.tocando, m.passo), (True, 2))     # 13 // 6
+        m.clk.fila = [mido.Message("clock")] * (6 * 14)
+        m._ler_clock()
+        self.assertEqual(m.passo, 0)                          # deu a volta em 16
+        m.clk.fila = [mido.Message("stop")]
+        m._ler_clock()
+        self.assertEqual((m.tocando, m.passo), (False, -1))
+
+    def test_troca_de_pattern_no_painel_rele_com_o_novo_x(self):
+        maq = _MaquinaFalsa()
+        b3 = [0] * 292
+        b3[2] = 16                                            # 2-01
+        maq.blocos = {(3, 0, 0): b3}
+        m = motor_cru(maq)
+        self.assertTrue(m.reler())
+        self.assertEqual(m.x_pattern, 16)
+        lidos = {tr1000_serial.carga(p)[1:7] for p in maq.recebido
+                 if tr1000_serial.carga(p)[:1] == b"\x82"}
+        import struct
+        self.assertIn(struct.pack("<HHH", 118, 16, 9), lidos)
+
+    def test_pad_no_hardware_vira_escrita(self):
+        import mido
+        m = motor_cru()
+        nota_pad = m.nota_de("D", 0, 3)                       # direito: step 12
+        m.lp_in["D"].fila = [mido.Message("note_on", note=nota_pad, velocity=100)]
+        m._ler_pads()
+        self.assertEqual([e[3] for e in _escritas(m.maquina)], [1249 + 44, 1249 + 45])
+
+    def test_botoes(self):
+        import mido
+        m = motor_cru()
+        m.lp_in["E"].fila = [mido.Message("control_change", control=79, value=127)]
+        m.lp_in["D"].fila = [mido.Message("control_change", control=19, value=127),
+                             mido.Message("control_change", control=95, value=127)]
+        m._ler_pads()
+        self.assertEqual((m.variacao, m.vel_idx, m.modo_layer), (1, 7, "B"))
 
 
 def _relogio_rapido(passo=0.3):

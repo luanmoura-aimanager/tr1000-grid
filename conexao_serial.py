@@ -10,11 +10,13 @@ copiando os bytes das capturas, sem inventar campo nenhum.
 
 TODO PACOTE QUE SAI PASSA POR UM PONTO SO (_mandar), que recusa antes de
 qualquer byte sair:
-  - escrita (01) fora de ESCRITAS_PERMITIDAS - o portao da fase 0,
-    REFERENCIA 3.1. Ampliar essa lista e decisao do Luan, nao de codigo;
-  - leitura (82) fora das faixas que o PROPRIO App leu no boot
-    (CAPTURAS_DE_REFERENCIA) - a armadilha 1 do CLAUDE.md: na TR-8S, leitura
-    em endereco invalido derrubava a porta;
+  - escrita (01) que nao passa em escrita_permitida: so STEPS (layers A/B,
+    valor nota ou pausa, qualquer pattern) e as 3 historicas da C3 -
+    REFERENCIA 3.1. Ampliar a regra e decisao do Luan, nao de codigo;
+  - leitura (82) fora das faixas que o PROPRIO App leu nas capturas de
+    referencia (CAPTURAS_DE_REFERENCIA), com os blocos de pattern valendo
+    para qualquer x 0..127 - a armadilha 1 do CLAUDE.md: na TR-8S, leitura em
+    endereco invalido derrubava a porta;
   - qualquer outro pacote que nao seja o aperto de mao.
 
 Uso direto: ver sessao_c3.py. Aqui so a conexao.
@@ -31,6 +33,29 @@ IOSSIOSPEED = 0x80085402                 # o ultimo, com 230400
 BAUD = 230400
 ESPERA = 1.0                             # s: a maquina respondeu em ~2-30 ms
 
+# A ESCRITA DO GRID (fase 1, decisao do Luan de 08/10/2026): so STEPS -
+# os slots 0 e 1 (layer A e B) dos 16 steps dos 10 tracks, nas 12 variacoes,
+# de qualquer pattern; valor so nota (A··3C, velocity 1..127) ou pausa (FF).
+# Nada de cabecalho, kit, mixer, probability. Ver escrita_permitida.
+N_VARIACOES = len(ts.VARIACOES_SERIAL)             # 12: A..H + Fill 1..4
+N_TRACKS = len(ts.TRACKS_SERIAL)                   # 10: BD..RC
+N_PATTERNS = 128                                   # 8 bancos x 16 (manual RM p.13)
+BLOCOS_DE_STEPS = frozenset(ts.bloco_de_steps(v) for v in range(N_VARIACOES))
+
+
+def escrita_permitida(bloco, x, y, indice, valor):
+    """A regra da escrita do grid. Tudo que nao casa e recusado no portao."""
+    if (bloco, x, y, indice) in ESCRITAS_PERMITIDAS:          # as 3 da C3
+        return True
+    if bloco not in BLOCOS_DE_STEPS or not 0 <= x < N_PATTERNS or not 0 <= y < N_TRACKS:
+        return False
+    rel = indice - ts.INDICE_STEPS
+    if not 0 <= rel < 64 or rel % 4 not in (0, 1):            # slots 0 e 1
+        return False
+    return valor == ts.SLOT_PAUSA or ts.eh_nota(valor)
+
+
+# As 3 escritas da C3 (historicas; sessao_c3.py continua funcionando)
 # (bloco, x, y, indice) - REFERENCIA 2.1c
 ESCRITAS_PERMITIDAS = {
     (118, 0, 0, 1253): "BD var A step 2, layer A",      # 1249 + 4*1 + 0
@@ -74,15 +99,33 @@ def leituras_do_app():
 def faixa_do_bloco(bloco, x, y):
     """(indice, n) da maior faixa que o App leu nessa chave - o bloco inteiro.
     PermissionError se o App nunca leu a chave: o mesmo erro do portao."""
-    fs = leituras_do_app().get((bloco, x, y))
+    fs = _faixas(bloco, x, y)
     if not fs:
         raise PermissionError(f"o App nunca leu {(bloco, x, y)} numa captura de referencia")
     return max(fs, key=lambda f: f[1])
 
 
+# Os blocos de pattern (cabecalho e as 12 variacoes): o App os leu com x = 0,
+# 1 e 16 (tres patterns de dois bancos), e o x e o indice global do pattern.
+# Decisao do Luan (08/10/2026): a MESMA faixa vale para qualquer x de 0..127.
+BLOCOS_DE_PATTERN = range(ts.BLOCO_CAB_PATTERN,
+                          ts.BLOCO_VAR0 + ts.BLOCOS_POR_VAR * N_VARIACOES)
+
+
+def _faixas(bloco, x, y):
+    fs = leituras_do_app().get((bloco, x, y))
+    if not fs and bloco in BLOCOS_DE_PATTERN and 0 <= x < N_PATTERNS:
+        fs = leituras_do_app().get((bloco, 0, y))      # a do pattern 1-01
+    return fs or ()
+
+
+def chave_lida(bloco, x, y):
+    """A chave tem alguma faixa permitida (lida pelo App, ou pattern x 0..127)."""
+    return bool(_faixas(bloco, x, y))
+
+
 def leitura_permitida(bloco, x, y, indice, n):
-    return any(i <= indice and indice + n <= i + m
-               for i, m in leituras_do_app().get((bloco, x, y), ()))
+    return any(i <= indice and indice + n <= i + m for i, m in _faixas(bloco, x, y))
 
 
 def conferir_pacote(pac):
@@ -92,8 +135,9 @@ def conferir_pacote(pac):
     c = ts.carga(pac)
     if c[:1] == bytes([ts.ESCREVER]) and len(c) == 13:
         e = struct.unpack_from("<HHHH", c, 1)
-        if e not in ESCRITAS_PERMITIDAS:
-            raise PermissionError(f"escrita fora da lista permitida: {e}")
+        v = struct.unpack_from("<I", c, 9)[0]
+        if not escrita_permitida(*e, v):
+            raise PermissionError(f"escrita fora do permitido: {e} = {v:X}")
         return
     if c[:1] == bytes([ts.LER_BLOCO]) and len(c) == 11:
         b, x, y, i, n = struct.unpack_from("<HHHHH", c, 1)
@@ -176,7 +220,8 @@ class ConexaoTR1000:
     e RECUSA se o TR-1000 App estiver aberto - dois programas na mesma serial
     cruzariam as respostas."""
 
-    def __init__(self, nome_captura=None, porta=None, relogio=time.time):
+    def __init__(self, nome_captura=None, porta=None, relogio=time.time,
+                 registrar=None):
         self._porta_injetada = porta
         self.porta = None
         self.relogio = relogio
@@ -184,6 +229,10 @@ class ConexaoTR1000:
         self.registros = []
         # nunca por cima de uma captura que ja existe (espiao.caminho_livre)
         self.captura = espiao.caminho_livre(nome_captura) if nome_captura else None
+        # o log em memoria so existe quando vai virar arquivo: o grid fica
+        # horas com UMA conexao aberta, relendo 2x por segundo, e guardar tudo
+        # crescia sem limite (revisao do PR #4)
+        self.registrando = bool(nome_captura) if registrar is None else registrar
 
     # ── abrir / fechar ──────────────────────────────────────
     def __enter__(self):
@@ -217,6 +266,8 @@ class ConexaoTR1000:
 
     # ── log no formato do espiao (.serlog) ──────────────────
     def _registrar(self, tipo, dados, fd=0):
+        if not self.registrando:
+            return
         self.registros.append((int(self.relogio() * 1e9), tipo, fd, bytes(dados)))
 
     def _gravar_captura(self):
@@ -277,7 +328,8 @@ class ConexaoTR1000:
         return v
 
     def pacote_escrita(self, bloco, x, y, indice, valor):
-        """Os bytes exatos que escrever() mandaria - para mostrar antes."""
+        """Os bytes exatos que escrever() mandaria - para mostrar antes.
+        Passa pelo portao ja aqui: o que nao pode sair nem e montado."""
         if not 0 <= valor <= 0xFFFFFFFF:
             raise ValueError(valor)
         pac = ts.pacote_dados(ts.CAB_ESCRITA, ts.carga_escrever(bloco, x, y, indice, valor))
