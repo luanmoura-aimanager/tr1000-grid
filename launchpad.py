@@ -51,6 +51,13 @@ COR_VEL_OFF    = 1     # cinza escuro    - nivel de velocity nao selecionado
 # BRANCO: cheio sobre step ligado, cinza claro sobre step vazio.
 COR_PLAY_HIT   = 3
 COR_PLAY       = (30, 30, 30)
+# O ALT dos tracks simples: o painel mostra ROXO (c5, 10/10/2026), fraco com
+# velocity baixa. RGB, que a paleta indexada nao tem um roxo e um roxo escuro.
+COR_ALT        = (80, 0, 127)
+COR_ALT_FRACA  = (25, 0, 45)
+# a coluna de MUTE (layout A): verde = soando, rosa = mutado
+COR_SOANDO     = (0, 127, 0)
+COR_MUDO       = (127, 10, 60)
 
 # A paleta indexada nao escurece, entao a borda vai SEMPRE em RGB, escurecida
 # por um fator unico (o adesivo dos botoes fica ilegivel com LED forte em baixo

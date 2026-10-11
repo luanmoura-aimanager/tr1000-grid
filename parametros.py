@@ -345,7 +345,8 @@ def endereco(p, x, track=0):
 
 
 def track_do_id(id):
-    return TRACKS.index(id.split(".")[0]) if id.split(".")[0] in TRACKS else 0
+    """'sd.pan' -> 1, 'rota.rc' -> 9 (o track pode vir em qualquer parte); 0 se nenhum."""
+    return next((TRACKS.index(p) for p in id.split(".") if p in TRACKS), 0)
 
 
 def parametro_no_endereco(bloco, x, y, indice):

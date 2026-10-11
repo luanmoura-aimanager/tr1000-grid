@@ -28,6 +28,7 @@ import catalogo_app
 import espiao
 import conexao_serial
 import motor
+import launchpad
 import controladoras
 import parametros
 import campos
@@ -940,18 +941,97 @@ class TesteMotor(unittest.TestCase):
         m.alternar(1, 4)                                   # SD, step 5, so B
         self.assertEqual([e[2:4] for e in _escritas(m.maquina)], [(1, 1249 + 16 + 1)])
 
-    def test_rolagem_muda_o_track(self):
+    def test_bancos_trocam_so_as_linhas_5_e_6(self):
         m = motor_cru()
-        m.executar("rolar", +5)                            # trava em 2
-        self.assertEqual(m.base_inst, 2)
-        m.alternar(7, 0)                                   # ultima linha = RC
-        self.assertEqual({e[2] for e in _escritas(m.maquina)}, {9})
+        m.executar("banco", 2)                             # ▼ CC·RC
+        self.assertEqual(m.banco, 2)
+        m.alternar(4, 0)                                   # linha 5 = CC
+        m.alternar(5, 0)                                   # linha 6 = RC
+        m.alternar(0, 0)                                   # linha 1 = BD, nos dois
+        self.assertEqual([e[2] for e in _escritas(m.maquina)], [8, 9, 0, 0])
+        m.executar("banco", 1)
+        m.maquina.recebido.clear()
+        m.alternar(4, 0)                                   # linha 5 = RS
+        self.assertEqual({e[2] for e in _escritas(m.maquina)}, {4})
 
-    def test_linha_alem_dos_tracks_nao_escreve(self):
+    def test_coluna_lateral_e_o_mute_da_linha(self):
+        import mido
         m = motor_cru()
-        m.base_inst = 3                                    # forcado: linha 7 = track 10
-        m.alternar(7, 0)
-        self.assertEqual(_escritas(m.maquina), [])
+        m.maquina.valores[(3, 0, 0, 112 + 12)] = 0         # ninguem mutado
+        m.banco = 2
+        m.lp_in["E"].fila = [mido.Message("control_change", control=94, value=127)]
+        m._ler_pads()                                      # 5a de cima (98..94) = CC
+        self.assertEqual(_escritas(m.maquina), [(3, 0, 0, 124, 1 << 8)])
+        self.assertEqual(m.mudo_mascara, 1 << 8)
+
+    def test_alt_aparece_roxo_e_a_tela_liga(self):
+        m = motor_cru()
+        m.cache[(0, 4)][8] = 0x8A503C                      # RS step 3 com ALT (c5)
+        self.assertEqual(m.cor_do_step(4, 2), launchpad.COR_ALT)
+        m.definir_alt(4, 5, True)                          # step 6 vazio: nota + ALT
+        self.assertEqual(_escritas(m.maquina)[-1][4], tr1000_serial.nota(80) | campos.BIT_ALT)
+        m.definir_alt(0, 5, True)                          # BD nao tem ALT
+        self.assertEqual(len(_escritas(m.maquina)), 1)
+
+    def test_campos_do_step_pela_tela(self):
+        m = motor_cru()
+        m.definir_campo_step(1, 3, "prob", 50)
+        m.definir_campo_step(1, 3, "start", -100)
+        self.assertEqual(_escritas(m.maquina), [(118, 0, 1, 1249 + 67, 50),
+                                                (118, 0, 1, 1249 + 117, 0xFFFFFF9C)])
+        self.assertEqual(m.campos_do_step(1, 3)["start"], -100)
+        self.assertEqual(m.campos_do_step(1, 3)["prob"], 50)
+
+    def test_cabecalho_e_performance_pela_tela(self):
+        m = motor_cru()
+        m.cab = [0] * 248
+        m.definir_variacoes(3); m.definir_scale(3); m.definir_fill(1)
+        m.definir_extremos_track(1, 2, 7)
+        m.definir_loop(True); m.definir_loop(True, step=4)
+        self.assertEqual(_escritas(m.maquina), [
+            (116, 0, 0, 1006, 3), (116, 0, 0, 1024, 3), (116, 0, 0, 1107, 1),
+            (116, 0, 0, 1073, 2), (116, 0, 0, 1084, 7), (116, 0, 0, 1095, 1),
+            (3, 0, 0, 262, 1), (3, 0, 0, 267, 1)])
+
+    def test_definir_param_pela_tela_solta_o_pickup(self):
+        m = motor_com_knobs()
+        girar(m, "bd.pan", 0, 64)
+        m.definir_param("bd.pan", 1000)
+        self.assertEqual(_escritas(m.maquina)[-1], (13, 0, 0, 556, 1000))
+        self.assertNotIn("bd.pan", m.pickup.estado)        # o knob pega no caminho de novo
+        m.definir_param("bd.pan", 1001)                    # fora da faixa: nada sai
+        self.assertEqual(_escritas(m.maquina)[-1], (13, 0, 0, 556, 1000))
+        m.definir_param("rota.rc", 0)                      # a Routing Matrix
+        self.assertEqual(_escritas(m.maquina)[-1], (13, 0, 9, 559, 0))
+
+    def test_estado_vira_json(self):
+        import json
+        m = motor_cru()
+        m.cab = [0] * 248
+        m.cache[(0, 0)][0] = tr1000_serial.nota(80)
+        e = m.estado()
+        json.dumps(e)
+        self.assertTrue(e["grade"][0][0]["a"])
+        self.assertEqual(len(e["grade"]), 10)
+        self.assertEqual(len(e["mudos"]), 10)
+
+    def test_ler_kit_le_cada_parametro(self):
+        m = motor_cru()
+        m.x_kit = 0
+        m.ler_kit()
+        self.assertIn("bd.gain", m.kit_valores)
+        self.assertNotIn("mfx.p1", m.kit_valores)           # MFX em BYPASS: sem parametro
+        self.assertIn("rota.ext", m.kit_valores)
+        m.maquina.valores[(7, 0, 0, 2512)] = 1              # CRUSHER
+        m.ler_kit()
+        self.assertIn("mfx.p1", m.kit_valores)
+
+    def test_sem_launchpads_o_motor_funciona(self):
+        m = motor_cru()
+        m.lp_in, m.lp_out = {}, {}
+        m.alternar(0, 0)
+        m.pintar(); m.pintar_botoes(); m._ler_pads()
+        self.assertEqual(len(_escritas(m.maquina)), 2)
 
     def test_cores_espelham_o_painel(self):
         m = motor_cru()

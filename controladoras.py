@@ -366,10 +366,10 @@ class Pickup:
             if p is None:
                 self._aviso((id, tipo), f"(knob {id}: inativo no type {tipo})")
                 return None
-        elif id in P.TABELA:
-            p = P.TABELA[id]
         else:
-            return None
+            p = P.entrada_para(id)                    # a TABELA e os EXTRAS da tela
+            if p is None:
+                return None
         x = x_pattern if p.escopo == "pattern" else x_kit
         if x is None:
             return None
