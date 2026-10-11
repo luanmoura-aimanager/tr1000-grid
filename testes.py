@@ -30,6 +30,7 @@ import conexao_serial
 import motor
 import controladoras
 import parametros
+import campos
 
 # Mensagem real, capturada do site ARIA falando com uma TR-8S (tr8s-grid
 # REFERENCIA 2.9): "pattern atual -> 127". E o unico SysEx Roland medido que
@@ -1398,6 +1399,67 @@ class TesteFoto(unittest.TestCase):
                     sessao_c4.captura_da_foto("nao-existe")
             finally:
                 conexao_serial.AQUI = antigo
+
+
+class TesteCampos(unittest.TestCase):
+    """O que o painel mostrou (C5/C5b/C5c) - indices absolutos e faixas."""
+
+    def test_indices_batem_com_a_faixa_do_app(self):
+        fx = conexao_serial.faixa_do_bloco
+        self.assertEqual(fx(116, 0, 0)[0], campos.INI_CAB)
+        self.assertEqual(fx(3, 0, 0)[0], campos.INI_B3)
+        self.assertEqual(fx(117, 0, 0)[0], campos.INI_ACC)
+        self.assertEqual(fx(118, 0, 1)[0], campos.INI_STEPS)
+        c = campos.campo_step("prob", 0, 1, 3)              # o PROB do SD step 4 (c5)
+        self.assertEqual((c.bloco, c.y, c.indice), (118, 1, 1249 + 67))
+        self.assertEqual(campos.campo_step("start", 0, 1, 3).indice, 1249 + 117)
+
+    def test_mapas_do_visor(self):
+        self.assertEqual(len(campos.SUB_NOMES), 14)
+        self.assertEqual(campos.SUB_NOMES[4], "Flam")
+        self.assertEqual(len(campos.CYCLE_NOMES), 38)
+        self.assertEqual(campos.CYCLE_NOMES[3], "1/3")      # c5: 1/3 = 3
+        self.assertEqual(campos.CYCLE_NOMES[37], "Except 1st")
+        self.assertEqual(campos.u32(-100), 0xFFFFFF9C)      # c5c
+        self.assertEqual(campos.com_sinal(0xFFFFFF9C), -100)
+        self.assertEqual([i + 1 for i, a in enumerate(campos.acentos(0x1111)) if a], [1, 5, 9, 13])
+        self.assertTrue(campos.eh_alt(0x8A503C))
+        self.assertFalse(campos.eh_alt(0xA503C))
+
+    def test_portao_aceita_so_o_medido(self):
+        ok = conexao_serial.escrita_permitida
+        self.assertTrue(ok(118, 5, 1, 1249 + 67, 50))          # PROB 50
+        self.assertFalse(ok(118, 5, 1, 1249 + 67, 101))
+        self.assertTrue(ok(118, 0, 1, 1249 + 83, 13))          # SUB Quad 5
+        self.assertFalse(ok(118, 0, 1, 1249 + 83, 14))
+        self.assertTrue(ok(118, 0, 1, 1249 + 117, 0xFFFFFF9C)) # START -100
+        self.assertFalse(ok(118, 0, 1, 1249 + 117, 0xFFFFFF9B))  # -101
+        self.assertTrue(ok(118, 0, 4, 1249 + 8, 0x8A503C))     # ALT no RS
+        self.assertFalse(ok(118, 0, 0, 1249 + 8, 0x8A503C))    # ALT no BD: nao
+        self.assertFalse(ok(118, 0, 1, 1249 + 96, 0))          # [96]: sem leitura
+        self.assertTrue(ok(116, 3, 0, 988 + 36, 3))            # Scale 32nd
+        self.assertFalse(ok(116, 3, 0, 988 + 36, 4))
+        self.assertTrue(ok(116, 0, 0, 988 + 18, 3))            # chain A+B
+        self.assertFalse(ok(116, 0, 0, 988 + 18, 0))           # nenhuma variacao
+        self.assertTrue(ok(116, 0, 0, 988 + 72, 11))           # LAST da var A = 12
+        self.assertTrue(ok(116, 0, 0, 988 + 96, 7))            # LAST do SD = 8
+        self.assertFalse(ok(116, 0, 0, 988 + 40, 0))           # posicao sem campo medido
+        self.assertTrue(ok(3, 0, 0, 112 + 12, 2))              # MUTE do SD
+        self.assertFalse(ok(3, 0, 0, 112 + 12, 1024))
+        self.assertFalse(ok(3, 1, 0, 112 + 12, 2))             # bloco 3 so no x 0
+        self.assertFalse(ok(3, 0, 0, 112 + 11, 1))             # o modo MUTE: nao
+        self.assertTrue(ok(3, 0, 0, 112 + 155, 1))             # STEP LOOP no step 5
+        self.assertFalse(ok(117, 0, 0, 1236, 0x1131))          # accent: pelo painel
+
+    def test_side_chain_e_routing(self):
+        ok, e = conexao_serial.escrita_permitida, parametros.entrada_para
+        self.assertEqual(parametros.endereco(e("rota.sd"), 0, 1), (13, 0, 1, 559))
+        self.assertTrue(ok(13, 0, 9, 559, 2))                   # RC em ANALOG
+        self.assertFalse(ok(13, 0, 9, 559, 3))
+        self.assertTrue(ok(12, 0, 0, 546, 18))                  # SOURCE RC
+        self.assertTrue(ok(9, 0, 0, 517, 0))                    # EXT em THROUGH
+        self.assertEqual(len(parametros.SC_FONTES), 19)
+        self.assertNotIn("sc.source", controladoras.indice_reverso(_mapa_falso()).values())
 
 
 class TesteParametros(unittest.TestCase):

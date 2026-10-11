@@ -25,6 +25,7 @@ Uso direto: ver sessao_c3.py. Aqui so a conexao.
 import fcntl, os, select, struct, subprocess, sys, termios, time
 
 AQUI = os.path.dirname(os.path.abspath(__file__))
+import campos
 import espiao
 import parametros
 import tr1000_serial as ts
@@ -59,6 +60,8 @@ def escrita_permitida(bloco, x, y, indice, valor):
     if (bloco, x, y, indice) in ESCRITAS_PERMITIDAS:          # as 3 da C3
         return True
     if parametros.escrita_permitida(bloco, x, y, indice, valor):
+        return True
+    if campos.escrita_permitida(bloco, x, y, indice, valor):    # o que o painel mostrou
         return True
     if bloco not in BLOCOS_DE_STEPS or not 0 <= x < N_PATTERNS or not 0 <= y < N_TRACKS:
         return False
