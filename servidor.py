@@ -161,38 +161,88 @@ HOST = Host()
 # As acoes: tudo que a pagina pode pedir. Lista FECHADA de proposito - a
 # pagina nao chama metodo arbitrario do Motor.
 # ─────────────────────────────────────────────────────────────
-EXEC_OK = {"variacao", "velocidade", "banco", "layer"}
+# Cada argumento conferido AQUI, antes de chegar no motor (revisao do PR #7:
+# um banco 3 derrubava o tick; um step 20 virava o campo de outro step, e o
+# portao conferia contra a faixa errada).
+def _faixa(a, k, mn, mx):
+    v = int(a[k])
+    if not mn <= v <= mx:
+        raise ValueError(f"{k}={v} fora de {mn}..{mx}")
+    return v
+
+
+def _track(a):
+    return _faixa(a, "track", 0, M.N_TRACKS - 1)
+
+
+def _step(a, k="step"):
+    return _faixa(a, k, 0, 15)
+
+
+def _passo_ou_none(a, k):
+    return None if a.get(k) is None else _faixa(a, k, 0, 15)
+
+
+def _layer(v):
+    if v not in M.MODOS_LAYER:
+        raise ValueError(f"layer {v!r}")
+    return v
+
+
+EXEC_OK = {
+    "variacao": lambda v: _faixa({"v": v}, "v", 0, len(ts.VARIACOES_SERIAL) - 1),
+    "velocidade": lambda v: _faixa({"v": v}, "v", 0, len(M.VELOCIDADES) - 1),
+    "banco": lambda v: _faixa({"v": v}, "v", min(M.BANCOS), max(M.BANCOS)),
+    "layer": _layer,
+}
 
 
 def _exec(a):
-    if a.get("tipo") not in EXEC_OK:
-        raise ValueError(f"exec '{a.get('tipo')}' nao permitido")
-    HOST.enfileirar(HOST.motor.executar, a["tipo"], a["arg"])
+    tipo = a.get("tipo")
+    if tipo not in EXEC_OK:
+        raise ValueError(f"exec '{tipo}' nao permitido")
+    HOST.enfileirar(HOST.motor.executar, tipo, EXEC_OK[tipo](a["arg"]))
 
 
-def _int_ou_none(v):
-    return None if v is None else int(v)
+def _campo_step(a):
+    nome = str(a["nome"])
+    if nome not in campos.CAMPOS_STEP:
+        raise ValueError(f"campo {nome!r} desconhecido")
+    _pos, mn, mx = campos.CAMPOS_STEP[nome]
+    HOST.enfileirar(HOST.motor.definir_campo_step, _track(a), _step(a), nome,
+                    _faixa(a, "valor", mn, mx))
+
+
+def _extremos_track(a):
+    first, last = _passo_ou_none(a, "first"), _passo_ou_none(a, "last")
+    if (first is None) != (last is None):
+        raise ValueError("first e last vao juntos (ou os dois nulos, para limpar)")
+    HOST.enfileirar(HOST.motor.definir_extremos_track, _track(a), first, last)
+
+
+def _param(a):
+    id = str(a["id"])
+    if id not in P.TABELA and id not in P.POR_TIPO and id not in P.EXTRAS:
+        raise ValueError(f"parametro {id!r} desconhecido")
+    HOST.enfileirar(HOST.motor.definir_param, id, int(a["valor"]))   # a faixa: o motor (por type)
 
 
 ACOES = {
     "exec": _exec,
-    "step": lambda a: HOST.enfileirar(HOST.motor.alternar_step, int(a["track"]), int(a["step"])),
-    "campo_step": lambda a: HOST.enfileirar(HOST.motor.definir_campo_step, int(a["track"]),
-                                            int(a["step"]), str(a["nome"]), int(a["valor"])),
-    "alt": lambda a: HOST.enfileirar(HOST.motor.definir_alt, int(a["track"]), int(a["step"]),
-                                     bool(a["ligado"])),
-    "mudo": lambda a: HOST.enfileirar(HOST.motor.alternar_mudo, int(a["track"])),
-    "variacoes": lambda a: HOST.enfileirar(HOST.motor.definir_variacoes, int(a["mascara"])),
-    "scale": lambda a: HOST.enfileirar(HOST.motor.definir_scale, int(a["n"])),
-    "fill": lambda a: HOST.enfileirar(HOST.motor.definir_fill, int(a["n"])),
-    "extremos_var": lambda a: HOST.enfileirar(HOST.motor.definir_extremos_var, int(a["v"]),
-                                              int(a["first"]), int(a["last"])),
-    "extremos_track": lambda a: HOST.enfileirar(HOST.motor.definir_extremos_track, int(a["track"]),
-                                                _int_ou_none(a.get("first")),
-                                                _int_ou_none(a.get("last"))),
-    "loop": lambda a: HOST.enfileirar(HOST.motor.definir_loop, bool(a["ligado"]),
-                                      _int_ou_none(a.get("step"))),
-    "param": lambda a: HOST.enfileirar(HOST.motor.definir_param, str(a["id"]), int(a["valor"])),
+    "step": lambda a: HOST.enfileirar(HOST.motor.alternar_step, _track(a), _step(a)),
+    "campo_step": _campo_step,
+    "alt": lambda a: HOST.enfileirar(HOST.motor.definir_alt, _track(a), _step(a), bool(a["ligado"])),
+    "mudo": lambda a: HOST.enfileirar(HOST.motor.alternar_mudo, _track(a)),
+    "variacoes": lambda a: HOST.enfileirar(HOST.motor.definir_variacoes,
+                                           _faixa(a, "mascara", 1, (1 << campos.N_VARS) - 1)),
+    "scale": lambda a: HOST.enfileirar(HOST.motor.definir_scale, _faixa(a, "n", 0, len(campos.SCALES) - 1)),
+    "fill": lambda a: HOST.enfileirar(HOST.motor.definir_fill, _faixa(a, "n", 0, 1)),
+    "extremos_var": lambda a: HOST.enfileirar(HOST.motor.definir_extremos_var,
+                                              _faixa(a, "v", 0, campos.N_VARS - 1),
+                                              _step(a, "first"), _step(a, "last")),
+    "extremos_track": _extremos_track,
+    "loop": lambda a: HOST.enfileirar(HOST.motor.definir_loop, bool(a["ligado"]), _passo_ou_none(a, "step")),
+    "param": _param,
     "quer_kit": lambda a: setattr(HOST.motor, "quer_kit", bool(a["sim"])),
     "reler": lambda a: HOST.enfileirar(HOST.motor.reler, True),
 }

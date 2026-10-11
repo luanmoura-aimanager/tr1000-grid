@@ -260,7 +260,9 @@ NOMES = {
 
 # Fora das placas, para o Controller (a tela): o side chain e a Routing Matrix
 # (sidechain e routing-2, App escrevendo, 10/10/2026). MSTR DEP e HLD TIME o
-# App nao escreveu ao girar - vieram do PAINEL (c5c): bloco 12, 551 e 547.
+# App nao escreveu ao girar - vieram do PAINEL (c5c): bloco 12, 551 e 547, a
+# mesma origem dos campos.py, liberada pelo Luan com o routing e o side chain.
+# HLD TIME: so o valor do kit (20) e o fim a direita (500) foram vistos.
 EXTRAS = {}
 for _id, _b, _i, _mn, _mx, _escala, _fonte in (
         ("sc.source",    12, 546, 0,   18, "OFF, BD A&B, BD A, BD B, SD A&B ... RC", "sidechain"),

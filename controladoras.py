@@ -356,26 +356,10 @@ class Pickup:
         """(Parametro, endereco) do knob agora, ou None (inativo: type sem
         entrada, kit incerto, nada decifrado). avisar=False: quem pergunta nao
         e um knob girado (a leitura do kit do Controller) - sem log."""
-        sel = P.seletor_de(id)
-        if sel:
-            if x_kit is None:
-                return None
-            tipo = self._seletor(sel, x_kit)
-            # so le o SYNC que importa para ESTE type (o do FLANGER no FLANGER)
-            conds = P.condicoes_de(id, tipo)
-            p = P.entrada_para(id, tipo, {c: self._seletor(c, x_kit) for c in conds})
-            if p is None:
-                if avisar:
-                    self._aviso((id, tipo), f"(knob {id}: inativo no type {tipo})")
-                return None
-        else:
-            p = P.entrada_para(id)                    # a TABELA e os EXTRAS da tela
-            if p is None:
-                return None
-        x = x_pattern if p.escopo == "pattern" else x_kit
-        if x is None:
-            return None
-        return p, P.endereco(p, x, P.track_do_id(id))
+        def aviso(tipo):
+            if avisar:
+                self._aviso((id, tipo), f"(knob {id}: inativo no type {tipo})")
+        return resolver(id, x_pattern, x_kit, lambda sid: self._seletor(sid, x_kit), aviso)
 
     def mover(self, knobs, x_pattern, x_kit, agora=0.0):
         """{id: cc} de um tick -> o que escrever fica em pendentes."""
@@ -446,6 +430,32 @@ class Pickup:
             if id in P.SELETORES:                      # TYPE do delay/MFX
                 self.seletores[id] = v
         return n
+
+
+def resolver(id, x_pattern, x_kit, ler_seletor, inativo=None):
+    """A regra UNICA de onde um parametro mora agora: os dependentes de type
+    leem o seletor (e o SYNC, se houver condicao), o escopo diz o x. Os knobs
+    (Pickup) e a tela (Motor.ler_kit/definir_param) usam esta - revisao do PR
+    #7: eram duas copias. -> (Parametro, endereco) ou None."""
+    sel = P.seletor_de(id)
+    if sel:
+        if x_kit is None:
+            return None
+        tipo = ler_seletor(sel)
+        conds = {c: ler_seletor(c) for c in P.condicoes_de(id, tipo)}
+        p = P.entrada_para(id, tipo, conds)
+        if p is None:
+            if inativo:
+                inativo(tipo)
+            return None
+    else:
+        p = P.entrada_para(id)
+        if p is None:
+            return None
+    x = x_pattern if p.escopo == "pattern" else x_kit
+    if x is None:
+        return None
+    return p, P.endereco(p, x, P.track_do_id(id))
 
 
 def _passo_do_knob(p, faixa):

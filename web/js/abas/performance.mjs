@@ -50,7 +50,8 @@ export default {
         v,
       ),
     );
-    fills = [0, 1, 2, 3].map((n) =>
+    // so FILL 1 e 2: o 3 e o 4 nao foram medidos (revisao do PR #7)
+    fills = [0, 1].map((n) =>
       h(
         "button.bt",
         { type: "button", onclick: () => ctx.acao("fill", { n }) },
@@ -156,7 +157,7 @@ export default {
             "As acesas formam a chain (o painel faz igual apertando várias juntas).",
           ),
           h("div.toques", {}, fills),
-          h("p.nota", {}, "Qual fill o FILL IN TRIG toca."),
+          h("p.nota", {}, "Qual fill o FILL IN TRIG toca. FILL 3 e 4: ainda não medidos."),
         ),
         h(
           "div.secao",

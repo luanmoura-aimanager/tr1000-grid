@@ -58,9 +58,7 @@ export default {
     );
   },
 
-  mostrar(sim, ctx) {
-    if (ctx.E.ligado) ctx.acao("quer_kit", { sim });
-  },
+  querKit: true, // a aba mostra o kit: o app pede a leitura ao motor
 
   atualizar(E) {
     sliders.forEach((s) => s.atualizar(E));

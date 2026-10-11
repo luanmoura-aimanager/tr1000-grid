@@ -1026,6 +1026,24 @@ class TesteMotor(unittest.TestCase):
         m.ler_kit()
         self.assertIn("mfx.p1", m.kit_valores)
 
+    def test_revisao_pr7_clique_repinta_alt_e_kit(self):
+        m = motor_cru()
+        m.alternar_step(8, 2)                              # CC, fora do banco atual
+        self.assertEqual(_escritas(m.maquina)[0][2], 8)
+        self.assertEqual(m.banco, 1)                       # o banco nao mudou
+        self.assertTrue(any(msg.type == "sysex" for msg in m.lp_out["E"].enviado))  # repintou
+        m.maquina.recebido.clear()
+        m.definir_alt(4, 9, False)                         # tirar ALT de um step vazio
+        self.assertEqual(_escritas(m.maquina), [])         # nao liga nota nenhuma
+        m.x_kit = 0
+
+        def caiu(*a):
+            raise conexao_serial.ErroConexao("sem resposta")
+        lidos = []
+        m._ler = lambda *a: (lidos.append(a), caiu())[1]
+        m.ler_kit()
+        self.assertEqual(len(lidos), 1)                    # para na primeira falha
+
     def test_sem_launchpads_o_motor_funciona(self):
         m = motor_cru()
         m.lp_in, m.lp_out = {}, {}
@@ -1567,7 +1585,7 @@ class TesteController(unittest.TestCase):
         exec_usados = set()
         for src in self._js().values():
             exec_usados |= set(re.findall(r'tipo:\s*"([a-z_]+)"', src))
-        self.assertEqual(exec_usados - servidor.EXEC_OK, set())
+        self.assertEqual(exec_usados - set(servidor.EXEC_OK), set())
 
     def test_toda_chave_lida_e_produzida(self):
         import re, servidor
@@ -1590,6 +1608,28 @@ class TesteController(unittest.TestCase):
         for src in self._js().values():
             for i in re.findall(r'"((?:reverb|delay|lfo|mfx|sc|rota)\.[a-z_.0-9]+)"', src):
                 self.assertIn(i, ids, i)
+
+    def test_acoes_conferem_a_faixa(self):
+        import servidor
+        servidor.HOST.motor = m = motor_cru()
+        try:
+            for nome, args in (("exec", {"tipo": "banco", "arg": 3}),
+                               ("exec", {"tipo": "velocidade", "arg": 99}),
+                               ("exec", {"tipo": "layer", "arg": "C"}),
+                               ("campo_step", {"track": 1, "step": 20, "nome": "prob", "valor": 5}),
+                               ("campo_step", {"track": 1, "step": 3, "nome": "prob", "valor": 101}),
+                               ("campo_step", {"track": 1, "step": 3, "nome": "xx", "valor": 1}),
+                               ("step", {"track": 10, "step": 0}),
+                               ("fill", {"n": 2}),                      # FILL 3: nao medido
+                               ("variacoes", {"mascara": 0}),
+                               ("param", {"id": "os.system", "valor": 1})):
+                with self.assertRaises((ValueError, KeyError), msg=f"{nome} {args}"):
+                    servidor.ACOES[nome](args)
+            self.assertTrue(m.fila_cmd.empty())                         # nada chegou no motor
+            servidor.ACOES["exec"]({"tipo": "banco", "arg": 2})
+            self.assertFalse(m.fila_cmd.empty())
+        finally:
+            servidor.HOST.motor = None
 
     def test_modulos_compilam(self):
         import shutil, subprocess

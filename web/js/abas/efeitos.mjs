@@ -159,9 +159,7 @@ export default {
     el.append(h("div.colunas", {}, reverb, delay, lfo, mfx, sc), rota);
   },
 
-  mostrar(sim, ctx) {
-    if (ctx.E.ligado) ctx.acao("quer_kit", { sim });
-  },
+  querKit: true, // a aba mostra o kit: o app pede a leitura ao motor
 
   atualizar(E, ctx) {
     itens.forEach((s) => s.atualizar(E));

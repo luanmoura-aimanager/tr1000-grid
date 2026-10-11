@@ -313,11 +313,14 @@ class Motor:
 
     # ── escrever (o toque no pad) ───────────────────────────
     def alternar(self, linha, step):
+        """O toque no pad da linha (o banco diz qual track)."""
+        self.alternar_track(self.track_da_linha(linha), step)
+
+    def alternar_track(self, tr, step):
         """O toque: se os slots-alvo ja tem a nota na velocity atual, desliga
         (FF, como o painel); senao escreve a nota. Uma escrita por slot, cada
         uma com o 03 de volta; o cache so muda depois da confirmacao. Erro:
         rele o track e segue - nunca repete sozinho."""
-        tr = self.track_da_linha(linha)
         if self.conexao is None or self.x_pattern is None:
             return
         alvo = self.slots_alvo(tr)
@@ -479,15 +482,11 @@ class Motor:
             return False
 
     def alternar_step(self, track, step):
-        """O clique na grade da tela: o mesmo toque do pad, num track qualquer."""
-        if track in BANCOS[self.banco]:
-            return self.alternar(BANCOS[self.banco].index(track), step)
-        banco_antes = self.banco
-        self.banco = 1 if track in BANCOS[1] else 2
-        try:
-            self.alternar(BANCOS[self.banco].index(track), step)
-        finally:
-            self.banco = banco_antes
+        """O clique na grade da tela: o mesmo toque do pad, num track qualquer,
+        e a coluna repintada no Launchpad (revisao do PR #7: o pad ficava
+        apagado, e a releitura nao via mudanca no cache para repintar)."""
+        self.alternar_track(track, step)
+        self.pintar_coluna(step)
 
     def definir_campo_step(self, track, step, nome, valor):
         """PROB / SUB / CYCLE / START de um step da variacao mostrada."""
@@ -503,6 +502,8 @@ class Motor:
         if track < TRACKS_LAYER or self.x_pattern is None:
             return
         atual = self.slots(track, step)[0]
+        if not ligado and not ts.slot_toca(atual):
+            return                                   # nada a tirar: nao liga uma nota
         base = atual & ~campos.BIT_ALT if ts.slot_toca(atual) else ts.nota(VELOCIDADES[self.vel_idx])
         novo = base | campos.BIT_ALT if ligado else base
         i = indice_do_slot(step, 0)
@@ -564,25 +565,17 @@ class Motor:
             self._escrever(campos.B3, 0, 0, campos.INI_B3 + campos.B3_LOOP_STEP + step,
                            int(bool(ligado)))
 
-    def _resolver(self, id):
-        """(Parametro, endereco) de um parametro agora (type/sync lidos), ou None."""
-        if self.pickup is not None:
-            return self.pickup.entrada(id, self.x_pattern, self.x_kit, avisar=False)
-        p = parametros.entrada_para(id)
-        if p is None:
-            sel = parametros.seletor_de(id)
-            if not sel or self.x_kit is None:
-                return None
-            tipo = self._ler(*parametros.endereco(parametros.SELETORES[sel], self.x_kit), 1)[0]
-            conds = {c: self._ler(*parametros.endereco(parametros.SELETORES[c], self.x_kit), 1)[0]
-                     for c in parametros.condicoes_de(id, tipo)}
-            p = parametros.entrada_para(id, tipo, conds)
-            if p is None:
-                return None
-        x = self.x_pattern if p.escopo == "pattern" else self.x_kit
-        if x is None:
-            return None
-        return p, parametros.endereco(p, x, parametros.track_do_id(id))
+    def _resolver(self, id, seletores=None):
+        """(Parametro, endereco) de um parametro agora (type/sync lidos), ou None.
+        A MESMA regra dos knobs (controladoras.resolver); `seletores` e o cache
+        de uma passada do ler_kit, para ler cada TYPE/SYNC uma vez so."""
+        cache = {} if seletores is None else seletores
+
+        def ler_seletor(sid):
+            if sid not in cache:
+                cache[sid] = self._ler(*parametros.endereco(parametros.SELETORES[sid], self.x_kit), 1)[0]
+            return cache[sid]
+        return controladoras.resolver(id, self.x_pattern, self.x_kit, ler_seletor)
 
     def definir_param(self, id, valor):
         """Um parametro do mixer/efeitos pela tela - o mesmo id dos knobs. Solta
@@ -615,13 +608,18 @@ class Motor:
         foto de 439 levou 0,1 s). Os dependentes de type no type atual."""
         if self.conexao is None or self.x_pattern is None:
             return
-        novos = {}
+        novos, sels = {}, {}
         for id in self.ids_do_kit():
             try:
-                e = self._resolver(id)
+                e = self._resolver(id, sels)
                 if e is not None:
                     novos[id] = self._ler(*e[1], 1)[0]
-            except ERROS_DE_LEITURA:
+            except cs.ErroConexao as exc:
+                # a serial caiu: parar JA (revisao do PR #7 - seguir dava 1 s de
+                # espera por id, minutos com o motor travado)
+                self.log(f"(!) leitura do kit interrompida: {exc}")
+                return
+            except PermissionError:
                 continue
         # os seletores (o SYNC do LFO, do FLANGER e do PHASER): a tela usa para
         # dar o nome certo ao knob que depende deles
@@ -629,7 +627,8 @@ class Motor:
             for sid, p in parametros.SELETORES.items():
                 if sid not in novos:
                     try:
-                        novos[sid] = self._ler(*parametros.endereco(p, self.x_kit), 1)[0]
+                        novos[sid] = sels[sid] if sid in sels else \
+                            self._ler(*parametros.endereco(p, self.x_kit), 1)[0]
                     except ERROS_DE_LEITURA:
                         pass
         self.kit_valores = novos
@@ -644,8 +643,9 @@ class Motor:
             v = self.variacao
             grade = []
             for tr in range(N_TRACKS):
-                c = self.cache.get((v, tr)) or [0] * N_SLOTS
-                cheio = list(c) + [0] * (ts.N_STEPS_BLOCO - len(c))
+                c = self.cache.get((v, tr))
+                lido = c is not None
+                cheio = list(c or []) + [0] * (ts.N_STEPS_BLOCO - len(c or []))
                 linha = []
                 for s in range(16):
                     a, b = cheio[s * 4], cheio[s * 4 + 1]
@@ -654,7 +654,7 @@ class Motor:
                            "alt": campos.eh_alt(a)}
                     for nome, (pos, mn, _mx) in campos.CAMPOS_STEP.items():
                         x = cheio[pos + s]
-                        cel[nome] = campos.com_sinal(x) if mn < 0 else x
+                        cel[nome] = None if not lido else (campos.com_sinal(x) if mn < 0 else x)
                     linha.append(cel)
                 grade.append(linha)
             cab = self.cab or []

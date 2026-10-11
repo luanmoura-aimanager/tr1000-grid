@@ -54,9 +54,18 @@ function mostrarAba(i) {
     attr(a._botao, "aria-selected", k === i ? "true" : "false");
     a._painel.hidden = k !== i;
   });
-  if (antes !== ABAS[i] && antes.mostrar) antes.mostrar(false, ctx);
-  if (ABAS[i].mostrar) ABAS[i].mostrar(true, ctx);
+  if (antes !== ABAS[i]) pedirKit();
   if (E && Object.keys(E).length) ABAS[i].atualizar(E, ctx);
+}
+
+// UM pedido so, com o que a aba nova quer (revisao do PR #7: dois POSTs sem
+// esperar - false da aba velha, true da nova - chegavam em qualquer ordem)
+let kitPedido = null;
+function pedirKit(forcar = false) {
+  const sim = !!ABAS[atual].querKit;
+  if (!E.ligado || (!forcar && sim === kitPedido)) return;
+  kitPedido = sim;
+  acao("quer_kit", { sim });
 }
 
 function montar() {
@@ -123,7 +132,7 @@ async function laco() {
     E = await rede.estado();
     // a maquina acabou de ligar: a aba aberta pede de novo o que precisa
     // (Mixer/Efeitos pedem a leitura do kit - pedido feito com ela desligada se perde)
-    if (E.ligado && !ligadoAntes && ABAS[atual].mostrar) ABAS[atual].mostrar(true, ctx);
+    if (E.ligado && !ligadoAntes) pedirKit(true);
     ligadoAntes = !!E.ligado;
     pintarTopo();
     ABAS[atual].atualizar(E, ctx);

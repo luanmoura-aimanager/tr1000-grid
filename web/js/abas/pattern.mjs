@@ -256,10 +256,9 @@ export default {
         attr(
           el,
           "data-extra",
-          (c.prob !== null && c.prob < 100) ||
-            c.sub > 0 ||
-            c.cycle > 0 ||
-            c.start !== 0,
+          (c.a || c.b) &&
+            c.prob !== null &&
+            (c.prob < 100 || c.sub > 0 || c.cycle > 0 || c.start !== 0),
         );
       });
     });

@@ -44,7 +44,7 @@ CAB_SCALE = 36                                 # 0 8th(T) 1 16th(T) 2 16th 3 32n
 CAB_FIRST_VAR, CAB_LAST_VAR = 60, 72           # + v, 0-based (c5c / c5)
 CAB_FIRST_TRK, CAB_LAST_TRK = 84, 95           # + track, 0-based (c5c / c5)
 CAB_TRK_SW = 106                               # + track: o track tem FIRST/LAST proprio
-CAB_FILL = 119                                 # 0 FILL1, 1 FILL2 (c5); 2-3 deduzidos
+CAB_FILL = 119                                 # 0 FILL1, 1 FILL2 (c5); 2-3 NAO medidos
 SCALES = ["8th(T)", "16th(T)", "16th", "32nd"]
 
 # ── no bloco 3 (estado da maquina, x 0) ───────────────────────
@@ -95,7 +95,7 @@ def _no_cab(indice):
     if p == CAB_SCALE:
         return 0, len(SCALES) - 1
     if p == CAB_FILL:
-        return 0, 3
+        return 0, 1                             # so o medido (revisao do PR #7)
     if CAB_FIRST_VAR <= p < CAB_FIRST_VAR + N_VARS or CAB_LAST_VAR <= p < CAB_LAST_VAR + N_VARS:
         return 0, N_STEPS - 1
     if CAB_FIRST_TRK <= p < CAB_FIRST_TRK + N_TRACKS or CAB_LAST_TRK <= p < CAB_LAST_TRK + N_TRACKS:
