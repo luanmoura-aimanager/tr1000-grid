@@ -1542,6 +1542,90 @@ class TesteCampos(unittest.TestCase):
         self.assertNotIn("sc.source", controladoras.indice_reverso(_mapa_falso()).values())
 
 
+class TesteController(unittest.TestCase):
+    """Os contratos entre a pagina (web/js) e o servidor/motor - o mesmo
+    guarda do tr8s-grid contra a regressao "a tela chama uma acao que nao
+    existe" ou "le uma chave que ninguem produz"."""
+
+    @staticmethod
+    def _js():
+        import glob, os
+        base = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web", "js")
+        out = {}
+        for p in glob.glob(os.path.join(base, "**", "*.mjs"), recursive=True):
+            with open(p) as f:
+                out[p] = f.read()
+        return out
+
+    def test_toda_acao_da_pagina_existe(self):
+        import re, servidor
+        usadas = set()
+        for src in self._js().values():
+            usadas |= set(re.findall(r'acao\(\s*"([a-z_]+)"', src))
+        self.assertTrue(usadas)
+        self.assertEqual(usadas - set(servidor.ACOES), set())
+        exec_usados = set()
+        for src in self._js().values():
+            exec_usados |= set(re.findall(r'tipo:\s*"([a-z_]+)"', src))
+        self.assertEqual(exec_usados - servidor.EXEC_OK, set())
+
+    def test_toda_chave_lida_e_produzida(self):
+        import re, servidor
+        m = motor_cru()
+        m.cab = [0] * 248
+        produzidas = set(m.estado()) | {"servidor_ligado", "fresco", "log", "ligado"}
+        lidas = set()
+        for src in self._js().values():
+            lidas |= set(re.findall(r"\bE\.([a-z_]+)", src))
+        self.assertEqual(lidas - produzidas, set())
+        dados = set(servidor.dados_estaticos())
+        lidos = set()
+        for src in self._js().values():
+            lidos |= set(re.findall(r"\bD\.([a-z_]+)", src))
+        self.assertEqual(lidos - dados, set())
+
+    def test_ids_de_parametro_da_pagina_existem(self):
+        import re, servidor
+        ids = set(servidor.dados_estaticos()["params"]) | set(parametros.SELETORES)
+        for src in self._js().values():
+            for i in re.findall(r'"((?:reverb|delay|lfo|mfx|sc|rota)\.[a-z_.0-9]+)"', src):
+                self.assertIn(i, ids, i)
+
+    def test_modulos_compilam(self):
+        import shutil, subprocess
+        node = shutil.which("node")
+        if not node:
+            self.skipTest("sem node para conferir a sintaxe")
+        for p in self._js():
+            r = subprocess.run([node, "--check", p], capture_output=True, text=True)
+            self.assertEqual(r.returncode, 0, f"{p}: {r.stderr}")
+
+    def test_servidor_recusa_sem_token_e_de_fora(self):
+        import http.server, json, threading, urllib.request, urllib.error, servidor
+        srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), servidor.Handler)
+        porta = srv.server_port
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        try:
+            base = f"http://127.0.0.1:{porta}"
+
+            def post(cab, corpo):
+                rq = urllib.request.Request(base + "/acao", data=json.dumps(corpo).encode(),
+                                            headers={"Content-Type": "application/json", **cab})
+                try:
+                    return urllib.request.urlopen(rq).status
+                except urllib.error.HTTPError as e:
+                    return e.code
+            self.assertEqual(post({}, {"acao": "step"}), 403)
+            tok = servidor.TOKEN
+            self.assertEqual(post({"X-TR1000-Token": tok, "Origin": "http://x.com"}, {"acao": "step"}), 403)
+            self.assertEqual(post({"X-TR1000-Token": tok}, {"acao": "nao_existe"}), 400)
+            self.assertEqual(post({"X-TR1000-Token": tok}, {"acao": "step"}), 409)   # desligado
+            with urllib.request.urlopen(base + "/") as r:
+                self.assertIn("default-src 'none'", r.headers["Content-Security-Policy"])
+        finally:
+            srv.shutdown()
+
+
 class TesteParametros(unittest.TestCase):
     """A tabela decifrada em 09/10/2026 (mixer-bd/rc, kit-reverb)."""
 

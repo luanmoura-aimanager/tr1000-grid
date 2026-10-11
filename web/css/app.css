@@ -1,0 +1,127 @@
+/* app.css - o TR-1000 Controller. Um tema so, escuro, como o painel da maquina
+ * e o TR-8S Controller. O acento e o laranja do botao ON do App da Roland.
+ * As cores dos steps sao as dos LEDs (launchpad.py): vermelho = layer A,
+ * verde = so layer B, roxo = ALT, branco = playhead. */
+:root{
+  color-scheme: dark;
+  --e1:4px; --e2:8px; --e3:12px; --e4:16px; --e5:24px;
+  --r1:4px; --r2:8px;
+  --f-ui:-apple-system,BlinkMacSystemFont,"Helvetica Neue",Helvetica,sans-serif;
+  --f-mono:ui-monospace,SFMono-Regular,Menlo,monospace;
+  --fundo:#121110; --painel:#1c1a18; --painel2:#24211e; --linha:#34302b; --linha2:#46413a;
+  --tinta:#ece8e2; --tinta2:#bdb6ab; --fraco:#a39b90;
+  --acento:#ff7a1a; --acento-esc:#7a3a0c;
+  --ok:#4ade80; --erro:#f87171;
+  --c-a:#ff3b30; --c-a-fraca:#8f2b28; --c-b:#34d058; --c-b-fraca:#2a6b3c;
+  --c-alt:#a855f7; --c-alt-fraca:#5a2e86; --c-play:#f4f4f4; --c-acc:#ffb02e;
+  --c-vazio:#2a2724; --c-tempo:#3a3632; --c-mudo:#ff4f8b;
+  --cel:30px; --gap:3px;
+}
+*{ box-sizing:border-box; }
+/* sem isto, o display:grid dos paineis vence o atributo hidden */
+[hidden]{ display:none !important; }
+body{ margin:0; background:var(--fundo); color:var(--tinta); font:13px/1.45 var(--f-ui);
+      padding-inline:16px; padding-block:0 40px; }
+.mono{ font-family:var(--f-mono); }
+.fraco{ color:var(--fraco); }
+button, select, input{ font:inherit; color:inherit; }
+:focus-visible{ outline:2px solid var(--acento); outline-offset:2px; }
+
+/* ── topo ─────────────────────────────────────────────── */
+#topo{ display:flex; flex-wrap:wrap; align-items:center; gap:var(--e3) var(--e5);
+       padding-block:var(--e3); border-bottom:1px solid var(--linha); position:sticky;
+       top:env(safe-area-inset-top,0px); background:var(--fundo); z-index:5; }
+.marca{ display:flex; flex-direction:column; line-height:1; }
+.marca-tr{ font-weight:800; font-size:20px; letter-spacing:.04em; }
+.marca-ctl{ font-size:11px; letter-spacing:.18em; text-transform:uppercase; color:var(--acento); }
+.displays{ display:flex; gap:var(--e2); flex-wrap:wrap; }
+.seg{ background:#0a0908; border:1px solid var(--linha); border-radius:var(--r1);
+      padding:3px 9px; display:flex; flex-direction:column; min-width:64px; }
+.seg-rot{ font-size:9px; letter-spacing:.12em; text-transform:uppercase; color:var(--fraco); }
+.seg-val{ font:600 17px/1.15 var(--f-mono); color:var(--acento); font-variant-numeric:tabular-nums; }
+.leds{ display:flex; gap:var(--e3); flex-wrap:wrap; }
+.led{ display:flex; align-items:center; gap:6px; font-size:11px; color:var(--tinta2); }
+.led i{ width:9px; height:9px; border-radius:50%; background:#3a3632; display:inline-block; }
+.led[data-on] i{ background:var(--ok); box-shadow:0 0 6px var(--ok); }
+.bt{ background:var(--painel2); border:1px solid var(--linha2); border-radius:var(--r1);
+     padding:6px 12px; cursor:pointer; }
+.bt:hover{ border-color:var(--fraco); }
+.bt[aria-pressed="true"]{ background:var(--acento); color:#160a02; border-color:var(--acento); font-weight:700; }
+.bt-ligar{ margin-left:auto; min-width:72px; font-weight:800; letter-spacing:.06em; }
+.bt-peq{ padding:3px 8px; font-size:12px; }
+.aviso-off{ margin:var(--e3) 0 0; padding:var(--e2) var(--e3); background:var(--painel);
+            border:1px solid var(--linha); border-left:3px solid var(--acento); border-radius:var(--r1);
+            color:var(--tinta2); max-width:80ch; }
+
+/* ── abas ─────────────────────────────────────────────── */
+.abas{ display:flex; gap:var(--e1); margin-block:var(--e4) var(--e3); flex-wrap:wrap; }
+.aba{ background:none; border:1px solid var(--linha); border-radius:var(--r1); padding:7px 16px;
+      cursor:pointer; color:var(--tinta2); font-weight:600; letter-spacing:.02em; }
+.aba[aria-selected="true"]{ background:var(--painel2); color:var(--tinta); border-color:var(--acento); }
+.painel{ display:grid; gap:var(--e4); }
+.secao{ background:var(--painel); border:1px solid var(--linha); border-radius:var(--r2);
+        padding:var(--e3) var(--e4); display:grid; gap:var(--e3); min-width:0; }
+.secao > h2{ margin:0; font-size:12px; letter-spacing:.14em; text-transform:uppercase; color:var(--acento); }
+.fila{ display:flex; flex-wrap:wrap; gap:var(--e2); align-items:center; }
+.nota{ color:var(--fraco); font-size:12px; margin:0; max-width:80ch; }
+.colunas{ display:grid; grid-template-columns:repeat(auto-fit, minmax(300px, 1fr)); gap:var(--e4); }
+
+/* ── grade de steps ───────────────────────────────────── */
+.grade-rolo{ overflow-x:auto; }
+.grade{ display:grid; grid-template-columns:40px 34px repeat(16, var(--cel)); gap:var(--gap); justify-content:start;
+        align-items:center; min-width:max-content; }
+.grade .rot{ font:600 12px var(--f-mono); color:var(--tinta2); padding-right:6px; text-align:right; }
+.grade .num{ font:600 11px var(--f-mono); text-align:center; background:#000; color:#fff;
+             border-radius:2px; padding-block:1px; }
+.grade .num:nth-child(4n+3){ }
+.cel{ width:var(--cel); height:var(--cel); border-radius:4px; background:var(--c-vazio);
+      border:0; cursor:pointer; padding:0; position:relative; }
+.cel[data-tempo]{ background:var(--c-tempo); }
+.cel[data-k="a"]{ background:var(--c-a); }
+.cel[data-k="af"]{ background:var(--c-a-fraca); }
+.cel[data-k="b"]{ background:var(--c-b); }
+.cel[data-k="bf"]{ background:var(--c-b-fraca); }
+.cel[data-k="alt"]{ background:var(--c-alt); }
+.cel[data-k="altf"]{ background:var(--c-alt-fraca); }
+.cel[data-play]{ box-shadow:inset 0 0 0 3px var(--c-play); }
+.cel[data-sel]{ outline:2px solid var(--acento); outline-offset:1px; }
+.cel[data-extra]::after{ content:""; position:absolute; right:3px; top:3px; width:5px; height:5px;
+                         border-radius:50%; background:#fff; opacity:.85; }
+.cel.acc{ cursor:default; height:12px; }
+.cel.acc[data-on]{ background:var(--c-acc); }
+.mute{ width:30px; height:var(--cel); border-radius:4px; border:1px solid var(--linha2);
+       background:var(--painel2); cursor:pointer; font:700 10px var(--f-mono); color:var(--tinta2); }
+.bt[data-mudo]{ background:var(--c-mudo); color:#2a0010; border-color:var(--c-mudo); }
+.mute[data-mudo]{ background:var(--c-mudo); color:#2a0010; border-color:var(--c-mudo); }
+
+/* ── controles ────────────────────────────────────────── */
+.slider{ display:grid; grid-template-columns:minmax(80px, 128px) 1fr 64px; gap:var(--e2); align-items:center; }
+.slider .rot{ color:var(--tinta2); font-size:12px; }
+.slider .leitura{ text-align:right; font-size:12px; color:var(--tinta); font-variant-numeric:tabular-nums; }
+.slider[data-inativo]{ opacity:.35; }
+input[type=range]{ width:100%; accent-color:var(--acento); min-width:0; }
+select{ background:var(--painel2); border:1px solid var(--linha2); border-radius:var(--r1); padding:4px 6px; }
+.mesa{ display:grid; grid-template-columns:auto repeat(5, minmax(110px, 1fr)) auto; gap:6px var(--e3);
+       align-items:center; min-width:780px; }
+.mesa .cab{ font-size:11px; letter-spacing:.1em; text-transform:uppercase; color:var(--fraco); }
+.mesa input[type=range]{ width:100%; }
+.mesa .val{ font:12px var(--f-mono); color:var(--tinta2); }
+.celula-mesa{ display:grid; grid-template-columns:1fr 46px; gap:6px; align-items:center; }
+.matriz{ display:grid; grid-template-columns:96px repeat(13, 44px); gap:4px; align-items:center; min-width:max-content; }
+.matriz .cab{ font:600 11px var(--f-mono); text-align:center; color:var(--tinta2); }
+.ponto{ width:44px; height:26px; border-radius:var(--r1); border:1px solid var(--linha2); background:var(--painel2); cursor:pointer; }
+.ponto[aria-pressed="true"]{ background:var(--acento); border-color:var(--acento); }
+.editor{ border:1px solid var(--acento-esc); }
+.toques{ display:flex; gap:4px; flex-wrap:wrap; align-items:flex-start; }
+.secao{ align-content:start; }
+/* a CSP (style-src 'self') bloqueia style inline: o layout fica todo aqui */
+.tabela-trk{ display:grid; grid-template-columns:48px auto auto auto; gap:6px 12px;
+             align-items:center; justify-content:start; }
+.matriz .cab-esq{ text-align:left; }
+.toques .bt{ min-width:34px; text-align:center; }
+
+#rodape{ position:fixed; left:0; right:0; bottom:0; display:flex; justify-content:space-between; gap:var(--e3);
+         padding:6px 16px calc(6px + env(safe-area-inset-bottom,0px)); background:#0a0908;
+         border-top:1px solid var(--linha); font-size:11px; }
+#msg{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+@media (prefers-reduced-motion: no-preference){ .cel{ transition:background-color 90ms; } }

@@ -623,6 +623,15 @@ class Motor:
                     novos[id] = self._ler(*e[1], 1)[0]
             except ERROS_DE_LEITURA:
                 continue
+        # os seletores (o SYNC do LFO, do FLANGER e do PHASER): a tela usa para
+        # dar o nome certo ao knob que depende deles
+        if self.x_kit is not None:
+            for sid, p in parametros.SELETORES.items():
+                if sid not in novos:
+                    try:
+                        novos[sid] = self._ler(*parametros.endereco(p, self.x_kit), 1)[0]
+                    except ERROS_DE_LEITURA:
+                        pass
         self.kit_valores = novos
 
     # ── o espelho para a tela ───────────────────────────────
@@ -640,10 +649,13 @@ class Motor:
                 linha = []
                 for s in range(16):
                     a, b = cheio[s * 4], cheio[s * 4 + 1]
-                    linha.append({
-                        "a": ts.slot_toca(a), "b": ts.slot_toca(b),
-                        "vel": ts.velocidade(a & ~campos.BIT_ALT if ts.slot_toca(a) else b),
-                        "alt": campos.eh_alt(a)})
+                    cel = {"a": ts.slot_toca(a), "b": ts.slot_toca(b),
+                           "vel": ts.velocidade(a & ~campos.BIT_ALT if ts.slot_toca(a) else b),
+                           "alt": campos.eh_alt(a)}
+                    for nome, (pos, mn, _mx) in campos.CAMPOS_STEP.items():
+                        x = cheio[pos + s]
+                        cel[nome] = campos.com_sinal(x) if mn < 0 else x
+                    linha.append(cel)
                 grade.append(linha)
             cab = self.cab or []
 
