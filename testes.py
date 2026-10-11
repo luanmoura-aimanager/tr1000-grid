@@ -15,7 +15,7 @@ Na fase 0 o que se prova de mesa e pouco e e de proposito:
   - o portao da fase 0: cada comando do lp_tr1000.py roda contra portas
     falsas, e o unico SysEx que pode sair e o Identity Request
 """
-import os, py_compile, sys, tempfile, unittest
+import contextlib, io, os, py_compile, sys, tempfile, unittest
 
 AQUI = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, AQUI)
@@ -28,8 +28,10 @@ import catalogo_app
 import espiao
 import conexao_serial
 import motor
+import launchpad
 import controladoras
 import parametros
+import campos
 
 # Mensagem real, capturada do site ARIA falando com uma TR-8S (tr8s-grid
 # REFERENCIA 2.9): "pattern atual -> 127". E o unico SysEx Roland medido que
@@ -939,18 +941,115 @@ class TesteMotor(unittest.TestCase):
         m.alternar(1, 4)                                   # SD, step 5, so B
         self.assertEqual([e[2:4] for e in _escritas(m.maquina)], [(1, 1249 + 16 + 1)])
 
-    def test_rolagem_muda_o_track(self):
+    def test_bancos_trocam_so_as_linhas_5_e_6(self):
         m = motor_cru()
-        m.executar("rolar", +5)                            # trava em 2
-        self.assertEqual(m.base_inst, 2)
-        m.alternar(7, 0)                                   # ultima linha = RC
-        self.assertEqual({e[2] for e in _escritas(m.maquina)}, {9})
+        m.executar("banco", 2)                             # ▼ CC·RC
+        self.assertEqual(m.banco, 2)
+        m.alternar(4, 0)                                   # linha 5 = CC
+        m.alternar(5, 0)                                   # linha 6 = RC
+        m.alternar(0, 0)                                   # linha 1 = BD, nos dois
+        self.assertEqual([e[2] for e in _escritas(m.maquina)], [8, 9, 0, 0])
+        m.executar("banco", 1)
+        m.maquina.recebido.clear()
+        m.alternar(4, 0)                                   # linha 5 = RS
+        self.assertEqual({e[2] for e in _escritas(m.maquina)}, {4})
 
-    def test_linha_alem_dos_tracks_nao_escreve(self):
+    def test_coluna_lateral_e_o_mute_da_linha(self):
+        import mido
         m = motor_cru()
-        m.base_inst = 3                                    # forcado: linha 7 = track 10
-        m.alternar(7, 0)
-        self.assertEqual(_escritas(m.maquina), [])
+        m.maquina.valores[(3, 0, 0, 112 + 12)] = 0         # ninguem mutado
+        m.banco = 2
+        m.lp_in["E"].fila = [mido.Message("control_change", control=94, value=127)]
+        m._ler_pads()                                      # 5a de cima (98..94) = CC
+        self.assertEqual(_escritas(m.maquina), [(3, 0, 0, 124, 1 << 8)])
+        self.assertEqual(m.mudo_mascara, 1 << 8)
+
+    def test_alt_aparece_roxo_e_a_tela_liga(self):
+        m = motor_cru()
+        m.cache[(0, 4)][8] = 0x8A503C                      # RS step 3 com ALT (c5)
+        self.assertEqual(m.cor_do_step(4, 2), launchpad.COR_ALT)
+        m.definir_alt(4, 5, True)                          # step 6 vazio: nota + ALT
+        self.assertEqual(_escritas(m.maquina)[-1][4], tr1000_serial.nota(80) | campos.BIT_ALT)
+        m.definir_alt(0, 5, True)                          # BD nao tem ALT
+        self.assertEqual(len(_escritas(m.maquina)), 1)
+
+    def test_campos_do_step_pela_tela(self):
+        m = motor_cru()
+        m.definir_campo_step(1, 3, "prob", 50)
+        m.definir_campo_step(1, 3, "start", -100)
+        self.assertEqual(_escritas(m.maquina), [(118, 0, 1, 1249 + 67, 50),
+                                                (118, 0, 1, 1249 + 117, 0xFFFFFF9C)])
+        self.assertEqual(m.campos_do_step(1, 3)["start"], -100)
+        self.assertEqual(m.campos_do_step(1, 3)["prob"], 50)
+
+    def test_cabecalho_e_performance_pela_tela(self):
+        m = motor_cru()
+        m.cab = [0] * 248
+        m.definir_variacoes(3); m.definir_scale(3); m.definir_fill(1)
+        m.definir_extremos_track(1, 2, 7)
+        m.definir_loop(True); m.definir_loop(True, step=4)
+        self.assertEqual(_escritas(m.maquina), [
+            (116, 0, 0, 1006, 3), (116, 0, 0, 1024, 3), (116, 0, 0, 1107, 1),
+            (116, 0, 0, 1073, 2), (116, 0, 0, 1084, 7), (116, 0, 0, 1095, 1),
+            (3, 0, 0, 262, 1), (3, 0, 0, 267, 1)])
+
+    def test_definir_param_pela_tela_solta_o_pickup(self):
+        m = motor_com_knobs()
+        girar(m, "bd.pan", 0, 64)
+        m.definir_param("bd.pan", 1000)
+        self.assertEqual(_escritas(m.maquina)[-1], (13, 0, 0, 556, 1000))
+        self.assertNotIn("bd.pan", m.pickup.estado)        # o knob pega no caminho de novo
+        m.definir_param("bd.pan", 1001)                    # fora da faixa: nada sai
+        self.assertEqual(_escritas(m.maquina)[-1], (13, 0, 0, 556, 1000))
+        m.definir_param("rota.rc", 0)                      # a Routing Matrix
+        self.assertEqual(_escritas(m.maquina)[-1], (13, 0, 9, 559, 0))
+
+    def test_estado_vira_json(self):
+        import json
+        m = motor_cru()
+        m.cab = [0] * 248
+        m.cache[(0, 0)][0] = tr1000_serial.nota(80)
+        e = m.estado()
+        json.dumps(e)
+        self.assertTrue(e["grade"][0][0]["a"])
+        self.assertEqual(len(e["grade"]), 10)
+        self.assertEqual(len(e["mudos"]), 10)
+
+    def test_ler_kit_le_cada_parametro(self):
+        m = motor_cru()
+        m.x_kit = 0
+        m.ler_kit()
+        self.assertIn("bd.gain", m.kit_valores)
+        self.assertNotIn("mfx.p1", m.kit_valores)           # MFX em BYPASS: sem parametro
+        self.assertIn("rota.ext", m.kit_valores)
+        m.maquina.valores[(7, 0, 0, 2512)] = 1              # CRUSHER
+        m.ler_kit()
+        self.assertIn("mfx.p1", m.kit_valores)
+
+    def test_revisao_pr7_clique_repinta_alt_e_kit(self):
+        m = motor_cru()
+        m.alternar_step(8, 2)                              # CC, fora do banco atual
+        self.assertEqual(_escritas(m.maquina)[0][2], 8)
+        self.assertEqual(m.banco, 1)                       # o banco nao mudou
+        self.assertTrue(any(msg.type == "sysex" for msg in m.lp_out["E"].enviado))  # repintou
+        m.maquina.recebido.clear()
+        m.definir_alt(4, 9, False)                         # tirar ALT de um step vazio
+        self.assertEqual(_escritas(m.maquina), [])         # nao liga nota nenhuma
+        m.x_kit = 0
+
+        def caiu(*a):
+            raise conexao_serial.ErroConexao("sem resposta")
+        lidos = []
+        m._ler = lambda *a: (lidos.append(a), caiu())[1]
+        m.ler_kit()
+        self.assertEqual(len(lidos), 1)                    # para na primeira falha
+
+    def test_sem_launchpads_o_motor_funciona(self):
+        m = motor_cru()
+        m.lp_in, m.lp_out = {}, {}
+        m.alternar(0, 0)
+        m.pintar(); m.pintar_botoes(); m._ler_pads()
+        self.assertEqual(len(_escritas(m.maquina)), 2)
 
     def test_cores_espelham_o_painel(self):
         m = motor_cru()
@@ -1287,6 +1386,318 @@ class TesteControladorasNoMotor(unittest.TestCase):
         self.assertTrue(ok(112, 3, 0, 606, 1))             # LFO DTH do RC
         self.assertFalse(ok(7, 5, 0, 2555, 1))             # o App nunca leu
         self.assertFalse(ok(7, 128, 0, 2564, 1))           # x fora de 0..127
+
+
+class TesteManterViva(unittest.TestCase):
+    """A maquina desiste da sessao em 1-3 s sem pedido (C5, 10/10/2026)."""
+
+    def test_perguntar_le_o_bloco_3_enquanto_espera(self):
+        import struct
+        maq = _MaquinaFalsa()
+        maq.zeros_ok = True
+
+        class Teclado:
+            def isatty(self): return True
+            def readline(self): return "sim\n"
+        rodadas = iter([([], [], []), ([], [], []), (["pronto"], [], [])])
+        orig = conexao_serial.select.select
+        conexao_serial.select.select = lambda r, w, x, t: (
+            next(rodadas) if r and isinstance(r[0], Teclado) else orig(r, w, x, t))
+        try:
+            with conexao_serial.ConexaoTR1000(porta=maq) as c:
+                c.aperto()
+                with contextlib.redirect_stdout(io.StringIO()):
+                    self.assertEqual(c.perguntar("? ", Teclado()), "sim")
+        finally:
+            conexao_serial.select.select = orig
+        lidos = [struct.unpack_from("<HHHHH", tr1000_serial.carga(p), 1)
+                 for p in maq.recebido if tr1000_serial.carga(p)[:1] == b"\x82"]
+        self.assertEqual(len(lidos), 2)                    # um por segundo de espera
+        self.assertEqual({l[0] for l in lidos}, {3})
+        self.assertLessEqual(conexao_serial.MANTER_VIVA_A_CADA, 1.0)
+
+
+class TesteFoto(unittest.TestCase):
+    """Fase 2, passo 1: a foto (tudo que o App le no boot) e o diff."""
+
+    def _lidos(self, maq):
+        import struct
+        return [struct.unpack_from("<HHHHH", tr1000_serial.carga(p), 1)
+                for p in maq.recebido if tr1000_serial.carga(p)[:1] == b"\x82"]
+
+    def test_foto_le_no_x_do_pattern_atual_e_o_sistema_no_0(self):
+        import sessao_c4
+        maq = _MaquinaFalsa()
+        maq.zeros_ok = True
+        b3 = [0] * 292
+        b3[2] = b3[3] = b3[4] = 16                         # 2-01
+        maq.blocos = {(3, 0, 0): b3}
+        with conexao_serial.ConexaoTR1000(porta=maq) as c:  # o portao confere tudo
+            c.aperto()
+            nome, x, vals = sessao_c4.tirar_foto(c)
+        self.assertEqual((nome, x), ("2-01", 16))
+        lidos = self._lidos(maq)
+        self.assertEqual(len(lidos), len(vals) + 1)
+        xs = {b: x for b, x, y, i, k in lidos[1:]}
+        self.assertEqual(xs[116], 16)                      # cabecalho do pattern
+        self.assertEqual(xs[118], 16)                      # steps var A
+        self.assertEqual(xs[5], 16)                        # reverb (kit)
+        self.assertEqual(xs[3], 0)                         # o estado: sistema
+        self.assertNotIn(b"\x01", {tr1000_serial.carga(p)[:1] for p in maq.recebido})
+        self.assertEqual(len({(b, y) for b, x, y, i, k in lidos[1:]}), len(lidos) - 1)
+
+    def test_piso_de_ruido_e_diff(self):
+        import sessao_c4
+        f1 = {(3, 0, 0): [1, 2, 3], (118, 0, 1): [0] * 80}
+        f2 = {(3, 0, 0): [1, 9, 3], (118, 0, 1): [0] * 80}
+        ruido = sessao_c4.piso_de_ruido([f1, f2])
+        self.assertEqual(ruido, {(3, 0, 0, 1)})
+        f3 = {(3, 0, 0): [1, 7, 3], (118, 0, 1): [0] * 64 + [50] + [0] * 15}
+        linhas, n = tr1000_serial.linhas_do_diff(f2, f3, ruido)
+        self.assertEqual(n, 1)                             # o [1] do bloco 3 e ruido
+        self.assertIn("steps var A, SD", linhas[0])
+        self.assertIn("[ 64] 0 -> 32", linhas[1])
+
+    def test_gestos_tem_ida_e_volta(self):
+        import sessao_c4
+        for lista in (sessao_c4.GESTOS, sessao_c4.GESTOS_C5B, sessao_c4.GESTOS_C5C):
+            ids = [g[0] for g in lista]
+            self.assertEqual(len(ids), len(set(ids)))
+            self.assertTrue(all(len(g) in (3, 4) and g[1] and g[2] for g in lista))
+            self.assertTrue(all(g[3] == "serie" for g in lista if len(g) == 4))
+
+    def test_mudancas_de(self):
+        import sessao_c4
+        a = {(118, 0, 1): [0] * 120}
+        b = {(118, 0, 1): [0] * 82 + [7] + [0] * 37}
+        self.assertEqual(sessao_c4.mudancas_de(a, b), [(118, 0, 1, 82, 0, 7)])
+        self.assertEqual(sessao_c4.mudancas_de(a, b, {(118, 0, 1, 82)}), [])
+
+    def test_nome_da_chave(self):
+        n = tr1000_serial.nome_da_chave
+        self.assertEqual(n(118, 1), "steps var A, SD")
+        self.assertEqual(n(117 + 3 * 11 + 1, 9), "steps var Fill 4, RC")
+        self.assertEqual(n(117, 0), "var A (bloco 1 de 3), BD")
+        self.assertEqual(n(116, 0), "cabecalho do pattern")
+        self.assertEqual(n(5, 0), "bloco 5")
+
+    def test_diff_acha_a_foto_mais_recente(self):
+        import sessao_c4, os, time
+        antigo = conexao_serial.AQUI
+        with tempfile.TemporaryDirectory() as d:
+            os.makedirs(os.path.join(d, "capturas"))
+            for dia, idade in (("10", 10), ("11", 0)):
+                p = os.path.join(d, "capturas", f"2026-10-{dia}-x.serlog")
+                open(p, "w").close()
+                os.utime(p, (time.time() - idade,) * 2)
+            try:
+                conexao_serial.AQUI = d
+                self.assertTrue(sessao_c4.captura_da_foto("x").endswith("2026-10-11-x.serlog"))
+                with self.assertRaises(FileNotFoundError):
+                    sessao_c4.captura_da_foto("nao-existe")
+            finally:
+                conexao_serial.AQUI = antigo
+
+
+class TesteCampos(unittest.TestCase):
+    """O que o painel mostrou (C5/C5b/C5c) - indices absolutos e faixas."""
+
+    def test_indices_batem_com_a_faixa_do_app(self):
+        fx = conexao_serial.faixa_do_bloco
+        self.assertEqual(fx(116, 0, 0)[0], campos.INI_CAB)
+        self.assertEqual(fx(3, 0, 0)[0], campos.INI_B3)
+        self.assertEqual(fx(117, 0, 0)[0], campos.INI_ACC)
+        self.assertEqual(fx(118, 0, 1)[0], campos.INI_STEPS)
+        c = campos.campo_step("prob", 0, 1, 3)              # o PROB do SD step 4 (c5)
+        self.assertEqual((c.bloco, c.y, c.indice), (118, 1, 1249 + 67))
+        self.assertEqual(campos.campo_step("start", 0, 1, 3).indice, 1249 + 117)
+
+    def test_mapas_do_visor(self):
+        self.assertEqual(len(campos.SUB_NOMES), 14)
+        self.assertEqual(campos.SUB_NOMES[4], "Flam")
+        self.assertEqual(len(campos.CYCLE_NOMES), 38)
+        self.assertEqual(campos.CYCLE_NOMES[3], "1/3")      # c5: 1/3 = 3
+        self.assertEqual(campos.CYCLE_NOMES[37], "Except 1st")
+        self.assertEqual(campos.u32(-100), 0xFFFFFF9C)      # c5c
+        self.assertEqual(campos.com_sinal(0xFFFFFF9C), -100)
+        self.assertEqual([i + 1 for i, a in enumerate(campos.acentos(0x1111)) if a], [1, 5, 9, 13])
+        self.assertTrue(campos.eh_alt(0x8A503C))
+        self.assertFalse(campos.eh_alt(0xA503C))
+
+    def test_portao_aceita_so_o_medido(self):
+        ok = conexao_serial.escrita_permitida
+        self.assertTrue(ok(118, 5, 1, 1249 + 67, 50))          # PROB 50
+        self.assertFalse(ok(118, 5, 1, 1249 + 67, 101))
+        self.assertTrue(ok(118, 0, 1, 1249 + 83, 13))          # SUB Quad 5
+        self.assertFalse(ok(118, 0, 1, 1249 + 83, 14))
+        self.assertTrue(ok(118, 0, 1, 1249 + 117, 0xFFFFFF9C)) # START -100
+        self.assertFalse(ok(118, 0, 1, 1249 + 117, 0xFFFFFF9B))  # -101
+        self.assertTrue(ok(118, 0, 4, 1249 + 8, 0x8A503C))     # ALT no RS
+        self.assertFalse(ok(118, 0, 0, 1249 + 8, 0x8A503C))    # ALT no BD: nao
+        self.assertFalse(ok(118, 0, 1, 1249 + 96, 0))          # [96]: sem leitura
+        self.assertTrue(ok(116, 3, 0, 988 + 36, 3))            # Scale 32nd
+        self.assertFalse(ok(116, 3, 0, 988 + 36, 4))
+        self.assertTrue(ok(116, 0, 0, 988 + 18, 3))            # chain A+B
+        self.assertFalse(ok(116, 0, 0, 988 + 18, 0))           # nenhuma variacao
+        self.assertTrue(ok(116, 0, 0, 988 + 72, 11))           # LAST da var A = 12
+        self.assertTrue(ok(116, 0, 0, 988 + 96, 7))            # LAST do SD = 8
+        self.assertFalse(ok(116, 0, 0, 988 + 40, 0))           # posicao sem campo medido
+        self.assertTrue(ok(3, 0, 0, 112 + 12, 2))              # MUTE do SD
+        self.assertFalse(ok(3, 0, 0, 112 + 12, 1024))
+        self.assertFalse(ok(3, 1, 0, 112 + 12, 2))             # bloco 3 so no x 0
+        self.assertFalse(ok(3, 0, 0, 112 + 11, 1))             # o modo MUTE: nao
+        self.assertTrue(ok(3, 0, 0, 112 + 155, 1))             # STEP LOOP no step 5
+        self.assertFalse(ok(117, 0, 0, 1236, 0x1131))          # accent: pelo painel
+
+    def test_side_chain_e_routing(self):
+        ok, e = conexao_serial.escrita_permitida, parametros.entrada_para
+        self.assertEqual(parametros.endereco(e("rota.sd"), 0, 1), (13, 0, 1, 559))
+        self.assertTrue(ok(13, 0, 9, 559, 2))                   # RC em ANALOG
+        self.assertFalse(ok(13, 0, 9, 559, 3))
+        self.assertTrue(ok(12, 0, 0, 546, 18))                  # SOURCE RC
+        self.assertTrue(ok(9, 0, 0, 517, 0))                    # EXT em THROUGH
+        self.assertEqual(len(parametros.SC_FONTES), 19)
+        self.assertNotIn("sc.source", controladoras.indice_reverso(_mapa_falso()).values())
+
+
+class TesteController(unittest.TestCase):
+    """Os contratos entre a pagina (web/js) e o servidor/motor - o mesmo
+    guarda do tr8s-grid contra a regressao "a tela chama uma acao que nao
+    existe" ou "le uma chave que ninguem produz"."""
+
+    @staticmethod
+    def _js():
+        import glob, os
+        base = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web", "js")
+        out = {}
+        for p in glob.glob(os.path.join(base, "**", "*.mjs"), recursive=True):
+            with open(p) as f:
+                out[p] = f.read()
+        return out
+
+    def test_toda_acao_da_pagina_existe(self):
+        import re, servidor
+        usadas = set()
+        for src in self._js().values():
+            usadas |= set(re.findall(r'acao\(\s*"([a-z_]+)"', src))
+        self.assertTrue(usadas)
+        self.assertEqual(usadas - set(servidor.ACOES), set())
+        exec_usados = set()
+        for src in self._js().values():
+            exec_usados |= set(re.findall(r'tipo:\s*"([a-z_]+)"', src))
+        self.assertEqual(exec_usados - set(servidor.EXEC_OK), set())
+
+    def test_toda_chave_lida_e_produzida(self):
+        import re, servidor
+        m = motor_cru()
+        m.cab = [0] * 248
+        produzidas = set(m.estado()) | {"servidor_ligado", "fresco", "log", "ligado"}
+        lidas = set()
+        for src in self._js().values():
+            lidas |= set(re.findall(r"\bE\.([a-z_]+)", src))
+        self.assertEqual(lidas - produzidas, set())
+        dados = set(servidor.dados_estaticos())
+        lidos = set()
+        for src in self._js().values():
+            lidos |= set(re.findall(r"\bD\.([a-z_]+)", src))
+        self.assertEqual(lidos - dados, set())
+
+    def test_ids_de_parametro_da_pagina_existem(self):
+        import re, servidor
+        ids = set(servidor.dados_estaticos()["params"]) | set(parametros.SELETORES)
+        for src in self._js().values():
+            for i in re.findall(r'"((?:reverb|delay|lfo|mfx|sc|rota)\.[a-z_.0-9]+)"', src):
+                self.assertIn(i, ids, i)
+
+    def test_acoes_conferem_a_faixa(self):
+        import servidor
+        servidor.HOST.motor = m = motor_cru()
+        try:
+            for nome, args in (("exec", {"tipo": "banco", "arg": 3}),
+                               ("exec", {"tipo": "velocidade", "arg": 99}),
+                               ("exec", {"tipo": "layer", "arg": "C"}),
+                               ("campo_step", {"track": 1, "step": 20, "nome": "prob", "valor": 5}),
+                               ("campo_step", {"track": 1, "step": 3, "nome": "prob", "valor": 101}),
+                               ("campo_step", {"track": 1, "step": 3, "nome": "xx", "valor": 1}),
+                               ("step", {"track": 10, "step": 0}),
+                               ("fill", {"n": 2}),                      # FILL 3: nao medido
+                               ("variacoes", {"mascara": 0}),
+                               ("param", {"id": "os.system", "valor": 1})):
+                with self.assertRaises((ValueError, KeyError), msg=f"{nome} {args}"):
+                    servidor.ACOES[nome](args)
+            self.assertTrue(m.fila_cmd.empty())                         # nada chegou no motor
+            servidor.ACOES["exec"]({"tipo": "banco", "arg": 2})
+            self.assertFalse(m.fila_cmd.empty())
+        finally:
+            servidor.HOST.motor = None
+
+    def test_modulos_compilam(self):
+        import shutil, subprocess
+        node = shutil.which("node")
+        if not node:
+            self.skipTest("sem node para conferir a sintaxe")
+        for p in self._js():
+            r = subprocess.run([node, "--check", p], capture_output=True, text=True)
+            self.assertEqual(r.returncode, 0, f"{p}: {r.stderr}")
+
+    def test_servidor_recusa_sem_token_e_de_fora(self):
+        import http.server, json, threading, urllib.request, urllib.error, servidor
+        srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), servidor.Handler)
+        porta = srv.server_port
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        try:
+            base = f"http://127.0.0.1:{porta}"
+
+            def post(cab, corpo):
+                rq = urllib.request.Request(base + "/acao", data=json.dumps(corpo).encode(),
+                                            headers={"Content-Type": "application/json", **cab})
+                try:
+                    return urllib.request.urlopen(rq).status
+                except urllib.error.HTTPError as e:
+                    return e.code
+            self.assertEqual(post({}, {"acao": "step"}), 403)
+            tok = servidor.TOKEN
+            self.assertEqual(post({"X-TR1000-Token": tok, "Origin": "http://x.com"}, {"acao": "step"}), 403)
+            self.assertEqual(post({"X-TR1000-Token": tok}, {"acao": "nao_existe"}), 400)
+            self.assertEqual(post({"X-TR1000-Token": tok}, {"acao": "step"}), 409)   # desligado
+            with urllib.request.urlopen(base + "/") as r:
+                self.assertIn("default-src 'none'", r.headers["Content-Security-Policy"])
+        finally:
+            srv.shutdown()
+
+
+class TesteEmbalagem(unittest.TestCase):
+    """O LaunchAgent e o .app rodam uma COPIA (o TCC nao deixa ler
+    ~/Documents): se faltar um modulo ou uma captura de referencia, o
+    Controller sobe quebrado longe dos olhos."""
+
+    def test_arquivos_sao_tudo_que_o_servidor_importa(self):
+        import subprocess, instalar_agente
+        aqui = os.path.dirname(os.path.abspath(__file__))
+        r = subprocess.run([sys.executable, "-c",
+                            "import sys, os; import servidor; a = os.path.abspath('.'); "
+                            "print(' '.join(sorted(os.path.basename(m.__file__) for m in list(sys.modules.values()) "
+                            "if getattr(m, '__file__', None) and os.path.dirname(os.path.abspath(m.__file__)) == a)))"],
+                           cwd=aqui, capture_output=True, text=True)
+        self.assertEqual(set(r.stdout.split()), set(instalar_agente.ARQUIVOS), r.stderr[-300:])
+
+    def test_a_copia_funciona_sozinha(self):
+        import subprocess, instalar_agente
+        with tempfile.TemporaryDirectory() as d:
+            alvo = instalar_agente.copiar_projeto(d)
+            self.assertTrue(os.path.exists(alvo))
+            r = subprocess.run([sys.executable, "-c",
+                                "import servidor, conexao_serial as c, controladoras as k; "
+                                "print(len(c.leituras_do_app()), len(k.carregar_mapa()['knobs']), "
+                                "len(servidor.dados_estaticos()['params']))"],
+                               cwd=d, capture_output=True, text=True)
+            self.assertEqual(r.returncode, 0, r.stderr[-400:])
+            leituras, knobs, params = map(int, r.stdout.split())
+            self.assertGreater(leituras, 100)
+            self.assertEqual(knobs, 74)
+            self.assertGreater(params, 90)
+            self.assertTrue(os.path.exists(os.path.join(d, "web", "manifest.webmanifest")))
+            self.assertTrue(os.path.exists(os.path.join(d, "web", "icon-512.png")))
 
 
 class TesteParametros(unittest.TestCase):

@@ -1,0 +1,141 @@
+C5 - de onde partir: pattern 1-01, var A, PARADA, [TR-REC] ligado, [SD] selecionado.
+piso de ruido: 0 valores mudam sozinhos (ignorados daqui em diante)
+
+[velocity] ida: 2 valores mudaram
+bloco 118 x 0 y 1  - steps var A, SD:
+   [ 12] A5A3C -> A283C  (step 4, slot 0 = layer A)
+   [ 13] A5A3C -> A283C  (step 4, slot 1 = layer B)
+[velocity] volta: tudo como antes
+
+[start] ida: 1 valores mudaram
+bloco 118 x 0 y 1  - steps var A, SD:
+   [117] 0 -> F
+[start] volta: tudo como antes
+
+[substep] ida: 3 valores mudaram
+bloco 118 x 0 y 1  - steps var A, SD:
+   [ 12] A5A3C -> A503C  (step 4, slot 0 = layer A)
+   [ 13] A5A3C -> A503C  (step 4, slot 1 = layer B)
+   [ 83] 0 -> 1
+[substep] volta: 2 valores AINDA diferentes do inicio
+bloco 118 x 0 y 1  - steps var A, SD:
+   [ 12] A5A3C -> A503C  (step 4, slot 0 = layer A)
+   [ 13] A5A3C -> A503C  (step 4, slot 1 = layer B)
+
+[flam] ida: 0 valores mudaram
+[flam] volta: 2 valores AINDA diferentes do inicio
+bloco 118 x 0 y 1  - steps var A, SD:
+   [ 12] A503C -> FF  (step 4, slot 0 = layer A)
+   [ 13] A503C -> FF  (step 4, slot 1 = layer B)
+
+[prob] ida: 3 valores mudaram
+bloco 118 x 0 y 1  - steps var A, SD:
+   [ 12] FF -> A503C  (step 4, slot 0 = layer A)
+   [ 13] FF -> A503C  (step 4, slot 1 = layer B)
+   [ 67] 64 -> 32
+[prob] volta: 2 valores AINDA diferentes do inicio
+bloco 118 x 0 y 1  - steps var A, SD:
+   [ 12] FF -> A503C  (step 4, slot 0 = layer A)
+   [ 13] FF -> A503C  (step 4, slot 1 = layer B)
+
+[cycle] ida: 1 valores mudaram
+bloco 118 x 0 y 1  - steps var A, SD:
+   [101] 0 -> 3
+[cycle] volta: tudo como antes
+
+[accent] ida: 1 valores mudaram
+bloco 117 x 0 y 0  - var A (bloco 1 de 3), BD:
+   [  0] 1111 -> 1131
+[accent] volta: tudo como antes
+
+[alt] ida: 1 valores mudaram
+bloco 118 x 0 y 4  - steps var A, RS:
+   [  8] 0 -> 8A503C  (step 3, slot 0 = layer A)
+[alt] volta: 1 valores AINDA diferentes do inicio
+bloco 118 x 0 y 4  - steps var A, RS:
+   [  8] 0 -> 8A323C  (step 3, slot 0 = layer A)
+
+[last-var] ida: 1 valores mudaram
+bloco 116 x 0 y 0  - cabecalho do pattern:
+   [ 72] F -> B
+[last-var] volta: tudo como antes
+
+[last-trk] ida: 2 valores mudaram
+bloco 116 x 0 y 0  - cabecalho do pattern:
+   [ 96] F -> 7
+   [107] 0 -> 1
+[last-trk] volta: tudo como antes
+
+[scale] ida: 2 valores mudaram
+bloco   3 x 0 y 0  - estado (pattern/kit selecionados, tempo):
+   [131] 0 -> 4
+bloco 116 x 0 y 0  - cabecalho do pattern:
+   [ 36] 2 -> 3
+[scale] volta: 2 valores AINDA diferentes do inicio
+bloco   3 x 0 y 0  - estado (pattern/kit selecionados, tempo):
+   [131] 0 -> 4
+bloco 116 x 0 y 0  - cabecalho do pattern:
+   [ 36] 2 -> 1
+
+[var-b] ida: 1 valores mudaram
+bloco 116 x 0 y 0  - cabecalho do pattern:
+   [ 18] 1 -> 2
+[var-b] volta: tudo como antes
+
+[chain] ida: 1 valores mudaram
+bloco 116 x 0 y 0  - cabecalho do pattern:
+   [ 18] 1 -> 3
+[chain] volta: tudo como antes
+
+[mute] ida: 2 valores mudaram
+bloco   3 x 0 y 0  - estado (pattern/kit selecionados, tempo):
+   [ 11] 0 -> 1
+   [ 12] 0 -> 2
+[mute] volta: tudo como antes
+
+[fill] ida: 1 valores mudaram
+bloco 116 x 0 y 0  - cabecalho do pattern:
+   [119] 0 -> 1
+[fill] volta: tudo como antes
+
+[loop] ida: 22 valores mudaram
+bloco   3 x 0 y 0  - estado (pattern/kit selecionados, tempo):
+   [  7] 0 -> C
+   [ 10] 0 -> F
+   [103] 0 -> 1
+   [104] 0 -> D
+   [105] 0 -> CC
+   [106] 0 -> DD
+   [107] 0 -> CC
+   [108] 0 -> CC
+   [109] 0 -> CC
+   [110] 0 -> CC
+   [111] 0 -> CC
+   [112] 0 -> CC
+   [113] 0 -> CC
+   [114] 0 -> CC
+   [115] 0 -> CC
+   [131] 4 -> 7
+   [150] 0 -> 1
+   [168] 0 -> 49
+   [169] 0 -> 49
+   [179] 0 -> 1
+   [180] 0 -> D
+   [279] 0 -> 11
+[loop] volta: 15 valores AINDA diferentes do inicio
+bloco   3 x 0 y 0  - estado (pattern/kit selecionados, tempo):
+   [ 10] 0 -> F
+   [105] 0 -> FF
+   [106] 0 -> EE
+   [107] 0 -> FF
+   [108] 0 -> FF
+   [109] 0 -> FF
+   [110] 0 -> FF
+   [111] 0 -> FF
+   [112] 0 -> FF
+   [113] 0 -> FF
+   [114] 0 -> FF
+   [115] 0 -> FF
+   [168] 0 -> 13
+   [169] 0 -> 14
+   [279] 0 -> 11

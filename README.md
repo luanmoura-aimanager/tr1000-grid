@@ -41,6 +41,22 @@ projeto decifrou (REFERENCIA 2.1b/2.1c):
 | 3 | performance: mute, fills, step loop, roll, morph; qual variação toca | |
 | 4 | a tela web e o empacotamento (LaunchAgent, `.app`) | |
 
+## O TR-1000 Controller (a tela, como o TR-8S Controller)
+
+```bash
+python3 instalar_agente.py      # o servidor sempre no ar em http://127.0.0.1:8734/
+python3 criar_app.py            # "TR-1000 Controller.app" no Desktop
+```
+
+No Safari, abra `http://127.0.0.1:8734/` e use **Arquivo › Adicionar ao Dock**.
+
+- **Quatro abas:** Pattern, Mixer, Efeitos e Performance.
+- **O ON** liga a TR-1000, os Launchpads (layout A) e as controladoras num processo só.
+- **O OFF** solta a serial para o TR-1000 App da Roland.
+- **Roteiro de teste:** `ROTEIRO-F3.md`.
+- **Depois de editar o código:** rode `instalar_agente.py` e `criar_app.py` de novo. Os dois
+  rodam uma cópia, porque o macOS não deixa ler `~/Documents`.
+
 ## Uso (fase 1, o grid)
 
 ```bash

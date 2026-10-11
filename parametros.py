@@ -258,9 +258,41 @@ NOMES = {
 }
 
 
+# Fora das placas, para o Controller (a tela): o side chain e a Routing Matrix
+# (sidechain e routing-2, App escrevendo, 10/10/2026). MSTR DEP e HLD TIME o
+# App nao escreveu ao girar - vieram do PAINEL (c5c): bloco 12, 551 e 547, a
+# mesma origem dos campos.py, liberada pelo Luan com o routing e o side chain.
+# HLD TIME: so o valor do kit (20) e o fim a direita (500) foram vistos.
+EXTRAS = {}
+for _id, _b, _i, _mn, _mx, _escala, _fonte in (
+        ("sc.source",    12, 546, 0,   18, "OFF, BD A&B, BD A, BD B, SD A&B ... RC", "sidechain"),
+        ("sc.hld_time",  12, 547, 20, 500, "HLD TIME (so o fim a direita medido)", "c5c (painel)"),
+        ("sc.release",   12, 548, 1, 1000, "RELEASE", "sidechain"),
+        ("sc.curve",     12, 549, 0, 1000, "CURVE", "routing-2"),
+        ("sc.polarity",  12, 550, 0,    1, "DUCK GATE", "sidechain"),
+        ("sc.mstr_dep",  12, 551, 0, 1000, "MSTR DEP", "c5c (painel)"),
+        ("sc.hld_step",  12, 552, 0,   32, "HLD STEP", "sidechain"),
+        ("sc.hld_mode",  12, 553, 0,    1, "TIME STEP", "sidechain"),
+        ("sc.depth.rvb",  5, 2372, 0, 1000, "SC DEPTH do reverb", "routing-2"),
+        ("sc.depth.dly",  6, 2414, 0, 1000, "SC DEPTH do delay", "kit-delay"),
+        ("sc.depth.ext",  9, 516, 0, 1000, "SC DEPTH do EXT IN", "routing-2"),
+        ("rota.rvb",      5, 2369, 0,   2, "THROUGH MASTER ANALOG", "routing-2"),
+        ("rota.dly",      6, 2411, 0,   2, "THROUGH MASTER ANALOG", "routing-2"),
+        ("rota.ext",      9, 517, 0,    2, "THROUGH MASTER ANALOG", "routing-2")):
+    EXTRAS[_id] = _p(_id, _b, "kit", False, _i, 0, _mn, _mx, _escala, "2026-10-10-" + _fonte)
+for _t in TRACKS:
+    EXTRAS[f"rota.{_t}"] = _p(f"rota.{_t}", 13, "kit", True, 559, 0, 0, 2,
+                              "THROUGH MASTER ANALOG", "2026-10-10-routing-2")
+del _id, _b, _i, _mn, _mx, _escala, _fonte, _t
+ROTAS = ["THROUGH", "MASTER FX", "ANALOG FX"]
+SC_FONTES = ["OFF", "BD A&B", "BD A", "BD B", "SD A&B", "SD A", "SD B", "LT A&B", "LT A",
+             "LT B", "HT A&B", "HT A", "HT B", "RS", "HC", "CH", "OH", "CC", "RC"]
+
+
 def todas_as_entradas():
-    """A tabela fixa e as dependentes de type, para o portao."""
+    """A tabela fixa, as dependentes de type e os extras da tela, para o portao."""
     yield from TABELA.values()
+    yield from EXTRAS.values()
     for por_valor in POR_TIPO.values():
         for e in por_valor.values():
             yield from ((e,) if isinstance(e, Parametro) else e)
@@ -291,6 +323,8 @@ def entrada_para(id, tipo_atual=None, seletores=None):
     qual alternativa vale; sem o valor dele, o knob fica inativo."""
     if id in TABELA:
         return TABELA[id]
+    if id in EXTRAS:
+        return EXTRAS[id]
     e = POR_TIPO.get(id, {}).get(tipo_atual)
     if e is not None and not isinstance(e, Parametro):
         seletores = seletores or {}
@@ -313,7 +347,8 @@ def endereco(p, x, track=0):
 
 
 def track_do_id(id):
-    return TRACKS.index(id.split(".")[0]) if id.split(".")[0] in TRACKS else 0
+    """'sd.pan' -> 1, 'rota.rc' -> 9 (o track pode vir em qualquer parte); 0 se nenhum."""
+    return next((TRACKS.index(p) for p in id.split(".") if p in TRACKS), 0)
 
 
 def parametro_no_endereco(bloco, x, y, indice):

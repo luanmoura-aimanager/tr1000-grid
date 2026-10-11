@@ -42,7 +42,14 @@ grid — escreve na máquina. **Toda saída da serial passa por um único portã
       meio seguem o mesmo passo (y, índice ou bloco). SD PAN/RVB/DLY foram **ouvidos**
       no F2.2; os outros tracks do meio não foram testados;
     - com valor **dentro da faixa medida**;
-    - os SYNCs e o OFF/FX ROUTE do MASTER FX ficam fora: são lidos, não escritos.
+    - os SYNCs e o OFF/FX ROUTE do MASTER FX ficam fora: são lidos, não escritos;
+    - os **EXTRAS** da tela, o side chain e a Routing Matrix: vistos no App, menos o
+      **MSTR DEP** (551) e o **HLD TIME** (547), que o App não escreveu ao girar e vieram
+      do **painel** (c5c). O HLD TIME tem só 20..500 (o valor do kit e o fim à direita).
+  - **CAMPOS da `campos.py`**, aprendidos pelo **painel** (C5, REFERENCIA 7.6), liberados
+    pelo Luan em 10/10/2026: PROB/SUB/CYCLE/START/ALT do step; o cabeçalho do pattern
+    (variações/chain, Scale, FIRST/LAST, FILL); e o MUTE e o STEP LOOP do bloco 3. O
+    **accent fica de fora**: é feito no painel. Cada grupo só vale depois do ROTEIRO-F3.
 
   Ampliar a regra é **decisão do Luan**, não detalhe de código. As 3 escritas
   históricas da C3 continuam na lista `ESCRITAS_PERMITIDAS`.

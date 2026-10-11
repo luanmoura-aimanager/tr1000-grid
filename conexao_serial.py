@@ -22,9 +22,10 @@ qualquer byte sair:
 
 Uso direto: ver sessao_c3.py. Aqui so a conexao.
 """
-import fcntl, os, select, struct, subprocess, termios, time
+import fcntl, os, select, struct, subprocess, sys, termios, time
 
 AQUI = os.path.dirname(os.path.abspath(__file__))
+import campos
 import espiao
 import parametros
 import tr1000_serial as ts
@@ -34,6 +35,11 @@ TIOCEXCL = 0x2000740D                    # o 1o ioctl do App (espiao, 08/10/2026
 IOSSIOSPEED = 0x80085402                 # o ultimo, com 230400
 BAUD = 230400
 ESPERA = 1.0                             # s: a maquina respondeu em ~2-30 ms
+# A maquina ENCERRA a sessao se ficar entre 1 e 3 s sem pedido nenhum: depois
+# disso nao responde mais (o aperto continua valendo so numa conexao nova).
+# Medido em 10/10/2026 (C5): 1 s parado respondeu, 3 s nao. O App, ocioso,
+# rele uns parametros a cada ~1,5 s (app-tocando-2) - era o keep-alive dele.
+MANTER_VIVA_A_CADA = 1.0                 # s
 
 # A ESCRITA DO GRID (fase 1, decisao do Luan de 08/10/2026): so STEPS -
 # os slots 0 e 1 (layer A e B) dos 16 steps dos 10 tracks, nas 12 variacoes,
@@ -54,6 +60,8 @@ def escrita_permitida(bloco, x, y, indice, valor):
     if (bloco, x, y, indice) in ESCRITAS_PERMITIDAS:          # as 3 da C3
         return True
     if parametros.escrita_permitida(bloco, x, y, indice, valor):
+        return True
+    if campos.escrita_permitida(bloco, x, y, indice, valor):    # o que o painel mostrou
         return True
     if bloco not in BLOCOS_DE_STEPS or not 0 <= x < N_PATTERNS or not 0 <= y < N_TRACKS:
         return False
@@ -355,6 +363,27 @@ class ConexaoTR1000:
         if v is None:
             raise ErroConexao("a maquina nao respondeu ao aperto de mao em 1 s")
         return v
+
+    def manter_viva(self):
+        """Um pedido qualquer: a menor faixa do bloco 3 que o App leu."""
+        self.ler(3, 0, 0, *min(_faixas(3, 0, 0), key=lambda f: f[1]))
+
+    def perguntar(self, prompt, entrada=None):
+        """input() que mantem a sessao viva enquanto o Luan pensa (a maquina
+        desiste em 1-3 s). Sem terminal (testes, o "!" do Claude Code) e o
+        input() de sempre, com o EOFError de sempre."""
+        entrada = entrada or sys.stdin
+        if not entrada.isatty():
+            return input(prompt)
+        print(prompt, end="", flush=True)
+        while True:
+            r, _, _ = select.select([entrada], [], [], MANTER_VIVA_A_CADA)
+            if r:
+                linha = entrada.readline()
+                if not linha:
+                    raise EOFError
+                return linha.rstrip("\n")
+            self.manter_viva()
 
     def ler(self, bloco, x, y, indice, n=1):
         self._mandar(ts.pacote_dados(ts.CAB_LEITURA, ts.carga_ler(bloco, x, y, indice, n)))

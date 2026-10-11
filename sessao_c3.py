@@ -55,7 +55,7 @@ def _confirmar(c, enderecos, valores, ja_confirmado=False):
         print('\nconfirmado por --sim na linha de comando')
         return True
     try:
-        resp = input('\ndigite "sim" para mandar: ').strip().lower()
+        resp = c.perguntar('\ndigite "sim" para mandar: ').strip().lower()
     except EOFError:
         # sem teclado (o "!" do Claude Code): nao manda, e diz o que fazer
         print("\n(sem teclado para digitar - rode no Terminal, ou acrescente --sim)")
