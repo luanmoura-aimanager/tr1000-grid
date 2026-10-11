@@ -567,7 +567,7 @@ class Motor:
     def _resolver(self, id):
         """(Parametro, endereco) de um parametro agora (type/sync lidos), ou None."""
         if self.pickup is not None:
-            return self.pickup.entrada(id, self.x_pattern, self.x_kit)
+            return self.pickup.entrada(id, self.x_pattern, self.x_kit, avisar=False)
         p = parametros.entrada_para(id)
         if p is None:
             sel = parametros.seletor_de(id)

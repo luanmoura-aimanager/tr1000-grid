@@ -352,9 +352,10 @@ class Pickup:
             self.seletores[sid] = self.ler(*P.endereco(P.SELETORES[sid], x_kit))
         return self.seletores[sid]
 
-    def entrada(self, id, x_pattern, x_kit):
+    def entrada(self, id, x_pattern, x_kit, avisar=True):
         """(Parametro, endereco) do knob agora, ou None (inativo: type sem
-        entrada, kit incerto, nada decifrado)."""
+        entrada, kit incerto, nada decifrado). avisar=False: quem pergunta nao
+        e um knob girado (a leitura do kit do Controller) - sem log."""
         sel = P.seletor_de(id)
         if sel:
             if x_kit is None:
@@ -364,7 +365,8 @@ class Pickup:
             conds = P.condicoes_de(id, tipo)
             p = P.entrada_para(id, tipo, {c: self._seletor(c, x_kit) for c in conds})
             if p is None:
-                self._aviso((id, tipo), f"(knob {id}: inativo no type {tipo})")
+                if avisar:
+                    self._aviso((id, tipo), f"(knob {id}: inativo no type {tipo})")
                 return None
         else:
             p = P.entrada_para(id)                    # a TABELA e os EXTRAS da tela

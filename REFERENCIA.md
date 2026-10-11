@@ -839,7 +839,22 @@ https://claude.ai/artifact/G8Zu9Zd3rDyRfEgK4DfMun; etiquetas em `adesivo.pdf`, g
   **números dos steps** são novos: 8 × 6,5 mm, pretos com letra branca, colados no bezel
   embaixo de cada coluna.
 
-### 7.8 O TR-1000 Controller (10/10/2026; NÃO testado em hardware)
+### 7.8 O TR-1000 Controller (10/10/2026; LEITURA testada em hardware, escrita pendente do F3)
+
+**Testado na máquina em 10/10/2026, 23:07, só com leituras** (o agente não escreve):
+
+| o quê | resultado |
+|---|---|
+| ON pela API | ✅ TR-1000 (versão 1.22), os 2 Launchpads e as 2 controladoras |
+| grade do 1-01 | ✅ BD 1, 5, 9, 13; SD vermelho 4, 12, verde 2, 7, 9, 10, 13, 15, 16 (igual ao F1) |
+| accent / scale / tempo | ✅ 1, 5, 9, 13 (a máscara `1111` da C5); 16th; 128 BPM |
+| kit, 99 parâmetros | ✅ batem com o App: MFX SIDE BAND FILTER/SBF2, DELAY PAN, REVERB HALL2, SIDE CHAIN BD B, MSTR DEP 1000, HLD TIME 20, BD em MASTER FX |
+| tela | ✅ as 4 abas com os valores lidos; os nomes dos knobs mudam com o TYPE |
+| OFF | ✅ uma conexão nova faz o aperto e lê o pattern na hora: a serial ficou livre |
+
+**Falta o `ROTEIRO-F3.md`:** toda **escrita** pela tela (step, campos, mute, chain, fill,
+scale, FIRST/LAST, step loop, parâmetros), feita pelo Luan.
+
 
 O TR-8S Controller, para a TR-1000:
 - **`servidor.py`:** stdlib, 127.0.0.1:**8734**, cookie HttpOnly + token em header + Host +
