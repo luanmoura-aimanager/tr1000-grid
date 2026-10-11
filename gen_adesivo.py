@@ -74,11 +74,11 @@ GRUPOS = [
     ("ESQUERDO · borda de cima", "variações, da esquerda para a direita", "topo", "E",
      [(ch, VAR_C) for ch in "ABCDEFGH"]),
     ("ESQUERDO · borda da esquerda", "MUTE da linha ao lado, de cima para baixo "
-     "(no banco CC·RC as 3 primeiras são CC, RC e ACC)", "esq", "E",
-     [("BD/CC", MUTE_C), ("SD/RC", MUTE_C), ("LT/ACC", MUTE_C), ("HT", MUTE_C),
-      ("RS", MUTE_C), ("HC", MUTE_C), ("CH", MUTE_C), ("OH", MUTE_C)]),
+     "(no banco CC·RC, a 5a e a 6a linha são CC e RC)", "esq", "E",
+     [("BD", MUTE_C), ("SD", MUTE_C), ("LT", MUTE_C), ("HT", MUTE_C),
+      ("RS/CC", MUTE_C), ("HC/RC", MUTE_C), ("CH", MUTE_C), ("OH", MUTE_C)]),
     ("DIREITO · borda de cima", "da esquerda para a direita", "topo", "D",
-     [("BD-OH", BANCO_C, "cima"), ("CC·RC", BANCO_C, "baixo"),
+     [("RS·HC", BANCO_C, "cima"), ("CC·RC", BANCO_C, "baixo"),
       ("AB", LAYER_C), ("A", LAYER_C), ("B", LAYER_C),
       ("PAR", PAG_C), ("PERF", PAG_C), ("ROUT", PAG_C)]),
     ("DIREITO · borda da direita", "velocity de cima para baixo; embaixo, o "
@@ -305,8 +305,8 @@ y += ALT_AP + 3.0
 RODAPE = [
     "Cores:  teal = variações  ·  laranja = mute da linha  ·  preto = banco de tracks  ·  "
     "roxo = layer  ·  verde = páginas  ·  azul = velocity",
-    "Bancos: BD-OH mostra BD SD LT HT RS HC CH OH; CC·RC troca as 3 primeiras linhas por CC, "
-    "RC e ACC (accent). As linhas 4-8 não mudam.",
+    "Bancos: RS·HC mostra BD SD LT HT RS HC CH OH; CC·RC troca a 5a e a 6a linha por CC e RC. "
+    "As outras não mudam. O accent é pelo painel da TR-1000.",
     "Página PAR: a borda esquerda escolhe o track e a direita o parâmetro (PROB, SUB, CYCLE, "
     "START, VEL, ALT). PERF e ROUT usam os pads.",
     "Os logos dos cantos são LEDs, não botões: as etiquetas brancas (5) são o título da borda ao lado.",

@@ -820,10 +820,12 @@ https://claude.ai/artifact/G8Zu9Zd3rDyRfEgK4DfMun; etiquetas em `adesivo.pdf`, g
 `gen_adesivo.py --medido 93`.
 
 - **Steps** como hoje, 16 colunas nos dois aparelhos.
-  - **▲ / ▼ trocam direto entre dois bancos:** BD…OH, ou **CC, RC, ACC** nas linhas 1–3,
-    com HT…OH iguais nas linhas 4–8.
-  - As etiquetas laterais são BD/CC, SD/RC, LT/ACC, HT…OH.
-  - **Sem linha TRG** (o Luan não precisa).
+  - **▲ / ▼ trocam direto entre dois bancos** (ideia do Luan, 10/10/2026, 22:30): BD SD LT
+    HT **RS HC** CH OH, ou BD SD LT HT **CC RC** CH OH. O CC divide a linha do RS, e o RC a
+    do HC; BD e SD ficam independentes.
+  - As etiquetas laterais são BD, SD, LT, HT, RS/CC, HC/RC, CH, OH.
+  - **Sem linhas de accent e de TRG nos Launchpads:** o accent é feito no painel da TR-1000
+    (o Controller só o mostra).
 - **Coluna lateral do esquerdo:** o MUTE da linha ao lado. Na página PAR, ela escolhe o
   track.
 - **Topo direito:** bancos, layer AB/A/B, e as páginas **PAR** (96), **PERF** (97) e
