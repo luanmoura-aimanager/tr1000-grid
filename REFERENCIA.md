@@ -839,6 +839,25 @@ https://claude.ai/artifact/G8Zu9Zd3rDyRfEgK4DfMun; etiquetas em `adesivo.pdf`, g
   **números dos steps** são novos: 8 × 6,5 mm, pretos com letra branca, colados no bezel
   embaixo de cada coluna.
 
+### 7.8 O TR-1000 Controller (10/10/2026; NÃO testado em hardware)
+
+O TR-8S Controller, para a TR-1000:
+- **`servidor.py`:** stdlib, 127.0.0.1:**8734**, cookie HttpOnly + token em header + Host +
+  Origin + CSP, e ações numa lista fechada.
+- **`web/`:** ES modules sem build; abas Pattern, Mixer, Efeitos e Performance.
+- **`instalar_agente.py`:** o LaunchAgent, rodando uma cópia em `~/Library/Application
+  Support/tr1000-grid`, com as capturas de referência do portão.
+- **`criar_app.py`:** o `.app` no Desktop.
+- **`icone.py`:** o ícone e o PNG do "Adicionar ao Dock".
+
+**Um processo só é dono da serial:**
+- O ON liga a máquina, os Launchpads e as controladoras.
+- O OFF solta tudo.
+- O ON recusa com o App da Roland aberto.
+
+**O que a tela escreve:** o mesmo portão de sempre, `campos.py` + `parametros.py`. O accent
+é só leitura, porque é feito no painel. O roteiro é o `ROTEIRO-F3.md`.
+
 ### 7.5 Fase 1b — as controladoras de knobs (09–10/10/2026; F2 PASSOU no hardware em 10/10)
 
 **Resultado do ROTEIRO-F2 (10/10/2026, o Luan na frente da máquina):**

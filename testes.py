@@ -1626,6 +1626,40 @@ class TesteController(unittest.TestCase):
             srv.shutdown()
 
 
+class TesteEmbalagem(unittest.TestCase):
+    """O LaunchAgent e o .app rodam uma COPIA (o TCC nao deixa ler
+    ~/Documents): se faltar um modulo ou uma captura de referencia, o
+    Controller sobe quebrado longe dos olhos."""
+
+    def test_arquivos_sao_tudo_que_o_servidor_importa(self):
+        import subprocess, instalar_agente
+        aqui = os.path.dirname(os.path.abspath(__file__))
+        r = subprocess.run([sys.executable, "-c",
+                            "import sys, os; import servidor; a = os.path.abspath('.'); "
+                            "print(' '.join(sorted(os.path.basename(m.__file__) for m in list(sys.modules.values()) "
+                            "if getattr(m, '__file__', None) and os.path.dirname(os.path.abspath(m.__file__)) == a)))"],
+                           cwd=aqui, capture_output=True, text=True)
+        self.assertEqual(set(r.stdout.split()), set(instalar_agente.ARQUIVOS), r.stderr[-300:])
+
+    def test_a_copia_funciona_sozinha(self):
+        import subprocess, instalar_agente
+        with tempfile.TemporaryDirectory() as d:
+            alvo = instalar_agente.copiar_projeto(d)
+            self.assertTrue(os.path.exists(alvo))
+            r = subprocess.run([sys.executable, "-c",
+                                "import servidor, conexao_serial as c, controladoras as k; "
+                                "print(len(c.leituras_do_app()), len(k.carregar_mapa()['knobs']), "
+                                "len(servidor.dados_estaticos()['params']))"],
+                               cwd=d, capture_output=True, text=True)
+            self.assertEqual(r.returncode, 0, r.stderr[-400:])
+            leituras, knobs, params = map(int, r.stdout.split())
+            self.assertGreater(leituras, 100)
+            self.assertEqual(knobs, 74)
+            self.assertGreater(params, 90)
+            self.assertTrue(os.path.exists(os.path.join(d, "web", "manifest.webmanifest")))
+            self.assertTrue(os.path.exists(os.path.join(d, "web", "icon-512.png")))
+
+
 class TesteParametros(unittest.TestCase):
     """A tabela decifrada em 09/10/2026 (mixer-bd/rc, kit-reverb)."""
 
