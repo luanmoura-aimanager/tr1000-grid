@@ -2332,46 +2332,46 @@ class TesteTocando(unittest.TestCase):
         self.assertEqual([tocando.track_da_nota(n) for n in (36, 35, 99, 37, 56, 51, 84)],
                          [0, 0, 0, 4, 4, 9, None])
 
-    def test_qual_toca_unica_e_troca_rapida(self):
+    def test_sequencia_anda_pela_chain_com_comprimentos_diferentes(self):
+        # F4.1b: A com LAST 12 e B com 16 - a B comeca no step 1 dela
+        import tocando
+        ext = {0: (0, 11), 1: (0, 15)}
+        chain = tocando.chain_de(0b11)
+        e = tocando.inicio(chain, ext)
+        visto = [e]
+        for _ in range(12 + 16):
+            e = tocando.proximo(e, chain, ext)
+            visto.append(e)
+        self.assertEqual(visto[11], (0, 11))
+        self.assertEqual(visto[12], (1, 0))
+        self.assertEqual(visto[27], (1, 15))
+        self.assertEqual(visto[28], (0, 0))
+
+    def test_last_trocado_tocando_vale_quando_a_coluna_chega(self):
+        import tocando
+        chain = [0]
+        self.assertEqual(tocando.proximo((0, 10), chain, {0: (0, 11)}), (0, 11))
+        self.assertEqual(tocando.proximo((0, 11), chain, {0: (0, 11)}), (0, 0))
+        self.assertEqual(tocando.proximo((0, 13), chain, {0: (0, 11)}), (0, 0))   # ja passou
+
+    def test_estado_unico_e_periodico(self):
         import tocando
         vs = {0: self._var(self.A), 1: self._var(self.B)}
-        ext = {0: (0, 15), 1: (0, 15)}
-        janela = [(n, self._ouvido(self.A, n)) for n in range(6)]
-        self.assertEqual(tocando.qual_toca(janela, vs, ext), 0)
-        # a chain virou para a B no step 16: dois steps de B ja bastam
-        janela = [(n, self._ouvido(self.A, n % 16)) for n in range(12, 16)] + \
-                 [(n, self._ouvido(self.B, n % 16)) for n in range(16, 19)]
-        self.assertEqual(tocando.qual_toca(janela, vs, ext, antes=0), 1)
-
-    def test_empate_nao_chuta(self):
-        import tocando
-        vs = {0: self._var(self.A), 1: self._var(self.A)}         # iguais
-        ext = {0: (0, 15), 1: (0, 15)}
-        janela = [(n, self._ouvido(self.A, n)) for n in range(6)]
-        self.assertIsNone(tocando.qual_toca(janela, vs, ext))
-        self.assertEqual(tocando.qual_toca(janela, vs, ext, antes=1), 1)
-
-    def test_prob_e_mute_nao_contam(self):
-        import tocando
-        v = self._var({0: (0,), 6: (0,)})
-        v[6][64] = 50                                    # o CH do step 1 com PROB 50
-        certos, talvez = tocando.esperado(v, 0)
-        self.assertEqual((certos, talvez), ({0}, {6}))
-        self.assertTrue(tocando.bate({0}, certos, talvez))
-        self.assertTrue(tocando.bate({0, 6}, certos, talvez))
-        self.assertTrue(tocando.bate(set(), certos, talvez, mudos={0}))
-        self.assertFalse(tocando.bate(set(), certos, talvez))
-
-    def test_fase_unica_e_periodica(self):
-        import tocando
-        vs = {0: self._var(self.B)}
-        ext = {0: (0, 15)}
-        # o motor contou n = 0.. mas a maquina estava na coluna 5
-        janela = [(n, self._ouvido(self.B, (n + 5) % 16)) for n in range(8)]
-        self.assertEqual(tocando.achar_fase(janela, vs, ext), (0, 5))
-        so_tempos = {0: self._var(self.A)}               # repete a cada 4: nao da
+        ext = {0: (0, 11), 1: (0, 15)}
+        chain = [0, 1]
+        # a maquina estava na B, coluna 5 em diante
+        janela = [(n, self._ouvido(self.B, 5 + n)) for n in range(8)]
+        self.assertEqual(tocando.achar_estado(janela, vs, chain, ext), (1, 12))
+        so_a = {0: self._var(self.A)}
         janela = [(n, self._ouvido(self.A, (n + 1) % 16)) for n in range(8)]
-        self.assertIsNone(tocando.achar_fase(janela, so_tempos, ext))
+        self.assertIsNone(tocando.achar_estado(janela, so_a, [0], {0: (0, 15)}))
+
+    def test_estado_numa_variacao_de_8_steps(self):
+        import tocando
+        curta = {0: (0, 1, 5), 1: (6,)}
+        vs = {0: self._var(curta)}
+        janela = [(n, self._ouvido(curta, (n + 3) % 8)) for n in range(8)]
+        self.assertEqual(tocando.achar_estado(janela, vs, [0], {0: (0, 7)}), (0, (3 + 7) % 8))
 
     def _motor(self, chain=0b11):
         m = motor_cru()
@@ -2427,14 +2427,6 @@ class TesteTocando(unittest.TestCase):
         # o playhead esta na coluna da maquina (o ultimo step tocado foi o 16 = 5+11)
         self.assertEqual(m.passo, (5 + 11) % 16)
 
-    def test_fase_numa_variacao_de_8_steps(self):
-        import tocando
-        curta = {0: (0, 1, 5), 1: (6,)}                  # 8 steps, sem periodo menor
-        vs = {0: self._var(curta)}
-        ext = {0: (0, 7)}
-        janela = [(n, self._ouvido(curta, (n + 3) % 8)) for n in range(8)]
-        self.assertEqual(tocando.achar_fase(janela, vs, ext), (0, 3))
-
     def test_pads_fora_do_tempo_nao_adotam(self):
         import mido
         m = self._motor()
@@ -2453,6 +2445,26 @@ class TesteTocando(unittest.TestCase):
         m.soltar_maquina()
         self.assertEqual((m.adocao, m.ouvidos, m.tocando_var, m.fase_incerta, m.adotado),
                          (None, None, None, False, False))
+
+    def test_motor_chain_a12_b16_com_start(self):
+        m = self._motor()
+        m.cab[campos.CAB_LAST_VAR + 0] = 11              # A com 12 steps
+        cols = list(range(12))
+        self._tocar(m, self.A, cols, start=True)         # a A inteira
+        self.assertEqual((m.seq, m.passo), ((0, 11), 11))
+        import mido
+        m.clk.fila = [mido.Message("clock")]
+        m._ler_clock()
+        self.assertEqual((m.seq, m.passo, m.tocando_var), ((1, 0), 0, 1))
+
+    def test_motor_last_trocado_tocando(self):
+        import mido
+        m = self._motor(chain=0b01)
+        self._tocar(m, self.A, range(5), start=True)     # step 5 (col 4) aberto? 5 steps
+        m.cab[campos.CAB_LAST_VAR + 0] = 6               # LAST = 7 com a coluna em 5
+        m.clk.fila = [mido.Message("clock")] * (6 * 3)
+        m._ler_clock()
+        self.assertEqual(m.passo, 0)                     # 5 -> 6 -> volta no 7
 
     def test_pad_tocado_parado_nao_vira_playhead(self):
         import mido

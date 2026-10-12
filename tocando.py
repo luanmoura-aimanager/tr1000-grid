@@ -20,13 +20,12 @@ O SUB, o START e o FLAM nao mudam QUAIS tracks soam no step - ficam dentro.
 Limite: uma nota empurrada para o fim do step (START perto de +100) chega
 depois do ultimo pulso dele e conta no step seguinte; aquele trecho fica "?".
 
-A mesma comparacao, deslizando o deslocamento, da a FASE quando o Controller
-liga com a maquina ja tocando (sem o START, o playhead nao sabe em que step
-esta): o (variacao, deslocamento) unico que bate com os steps ouvidos.
-
-Limite, documentado: as variacoes da chain com comprimentos diferentes andam
-com o mesmo contador de steps, entao a coluna de cada uma so e exata enquanto
-o comprimento delas e o mesmo. E deducao nossa, a medir no ROTEIRO-F4.
+A sequencia (desde o F4.1b): o motor anda (variacao, coluna) como a maquina -
+a coluna sobe ate o LAST da variacao e a chain passa para a proxima, no FIRST
+dela. Com o START, o estado e conhecido; as notas so CONFEREM (e
+ressincronizam, se um so outro ponto explica o que soou). Sem o START (o
+Controller ligou com a maquina ja tocando), o ponto de partida unico que
+explica os ultimos steps ouvidos da o estado.
 """
 import campos
 import tr1000
@@ -42,8 +41,7 @@ for _t, _nome in enumerate(tr1000.TRACKS):
 del _t, _nome, _n
 
 JANELA = 8            # steps ouvidos que a decisao olha (os mais recentes)
-MIN_STEPS = 4         # steps na janela antes de decidir qualquer coisa
-MIN_STEPS_FASE = 8    # e para achar a fase (o deslocamento erra facil com pouco)
+MIN_STEPS_FASE = 8    # steps ouvidos para achar o estado sem START
 
 
 def track_da_nota(nota):
@@ -82,59 +80,88 @@ def volta(n, first, last, passos=16):
     return first + n % (last - first + 1)
 
 
-def candidatos(janela, vars_steps, extremos, mudos=frozenset(), deslocamento=0):
-    """As variacoes que batem com TODOS os steps da janela.
-    janela = [(n, tracks ouvidos)]; vars_steps = {v: {track: [131]}};
-    extremos = {v: (first, last)}."""
+# ─────────────────────────────────────────────────────────────
+# A sequencia: (variacao, coluna), andando como a maquina anda (F4.1b,
+# 12/10/2026: contar "steps desde o START" e dividir pelo comprimento de UMA
+# variacao errava com a chain A(12)+B(16) e com o LAST trocado tocando)
+# ─────────────────────────────────────────────────────────────
+def chain_de(mascara):
+    """As variacoes A..H da chain, na ordem em que tocam (A antes de B -
+    deducao a conferir no F4). Mascara vazia: a A."""
+    return [v for v in range(8) if mascara >> v & 1] or [0]
+
+
+def _extremos(extremos, v, passos=16):
+    first, last = extremos.get(v, (0, passos - 1))
+    if not (0 <= first <= last < passos):
+        first, last = 0, passos - 1
+    return first, last
+
+
+def inicio(chain, extremos):
+    """O estado do primeiro step depois do START."""
+    v = chain[0]
+    return v, _extremos(extremos, v)[0]
+
+
+def proximo(estado, chain, extremos):
+    """O step seguinte: a coluna anda; passou do LAST, a proxima variacao da
+    chain comeca no FIRST dela. Os extremos sao lidos a cada step, entao um
+    LAST trocado tocando vale na hora em que a coluna chega nele."""
+    v, col = estado
+    first, last = _extremos(extremos, v)
+    if v in chain and first <= col < last:
+        return v, col + 1
+    depois = [x for x in chain if x > v]
+    nv = depois[0] if depois else chain[0]
+    return nv, _extremos(extremos, nv)[0]
+
+
+def proximo_trk(col, first, last, passos=16):
+    """O mesmo para um track com FIRST/LAST proprio (polimetria)."""
+    if not (0 <= first <= last < passos):
+        first, last = 0, passos - 1
+    return col + 1 if first <= col < last else first
+
+
+def estados(chain, extremos):
+    """Todos os (variacao, coluna) de uma volta da chain."""
     out = []
-    for v, steps in vars_steps.items():
-        first, last = extremos.get(v, (0, 15))
-        ok = True
-        for n, ouvido in janela:
-            certos, talvez = esperado(steps, volta(n + deslocamento, first, last))
-            if not bate(ouvido, certos, talvez, mudos):
-                ok = False
-                break
-        if ok:
-            out.append(v)
+    for v in chain:
+        first, last = _extremos(extremos, v)
+        out += [(v, c) for c in range(first, last + 1)]
     return out
 
 
-def qual_toca(janela, vars_steps, extremos, mudos=frozenset(), antes=None):
-    """A variacao tocando, ou None. Olha o maior final da janela que ainda da
-    resposta unica - assim a troca A -> B da chain aparece logo, sem esperar a
-    janela inteira sair da A. Empate: fica na de antes se ela esta no empate."""
-    if len(janela) < MIN_STEPS or not any(o for _n, o in janela):
-        return antes
-    for k in range(len(janela), 0, -1):
-        final = janela[-k:]
-        if sum(1 for _n, o in final if o) < 1:
-            break
-        c = candidatos(final, vars_steps, extremos, mudos)
-        if len(c) == 1:
-            return c[0]
-        if len(c) > 1:
-            return antes if antes in c else None
-    return None
+def confere(ouvidos_e_estados, vars_steps, mudos=frozenset()):
+    """[(tracks ouvidos, (v, col))] -> quantos steps NAO batem."""
+    erros = 0
+    for ouvido, (v, col) in ouvidos_e_estados:
+        if v not in vars_steps:
+            continue
+        certos, talvez = esperado(vars_steps[v], col)
+        if not bate(ouvido, certos, talvez, mudos):
+            erros += 1
+    return erros
 
 
-def achar_fase(janela, vars_steps, extremos, mudos=frozenset(), passos=16):
-    """(variacao, deslocamento) unico que poe os steps ouvidos no lugar, ou
-    None. O deslocamento soma no contador de steps do motor. Pattern que se
-    repete dentro da variacao (o mesmo a cada 4 steps) da varios deslocamentos
-    iguais de ouvido - e ai fica None: o playhead nao aparece em vez de
-    aparecer no lugar errado."""
+def achar_estado(janela, vars_steps, chain, extremos, mudos=frozenset()):
+    """O estado da sequencia no ULTIMO step da janela, se um so ponto de
+    partida explica todos os steps ouvidos; senao None (nao chuta). Serve
+    para adotar a maquina ja tocando e para ressincronizar."""
     if len(janela) < MIN_STEPS_FASE or sum(1 for _n, o in janela if o) < 2:
         return None
-    achados = []
-    for v in vars_steps:
-        # so os deslocamentos de UMA volta da variacao: d e d + comprimento dao
-        # as mesmas colunas (revisao do PR #13 - 8 steps davam sempre empate)
-        first, last = extremos.get(v, (0, passos - 1))
-        comprimento = (last - first + 1) if 0 <= first <= last < passos else passos
-        for d in range(comprimento):
-            if candidatos(janela, {v: vars_steps[v]}, extremos, mudos, deslocamento=d):
-                achados.append((v, d))
-                if len(achados) > 1:
-                    return None
-    return achados[0] if achados else None
+    if any(v not in vars_steps for v in chain):
+        return None
+    achado = None
+    for s0 in estados(chain, extremos):
+        estado, seq = s0, []
+        for _n, ouvido in janela:
+            seq.append((ouvido, estado))
+            ultimo = estado
+            estado = proximo(estado, chain, extremos)
+        if confere(seq, vars_steps, mudos) == 0:
+            if achado is not None and achado != ultimo:
+                return None
+            achado = ultimo
+    return achado
