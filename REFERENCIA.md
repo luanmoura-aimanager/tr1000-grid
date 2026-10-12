@@ -916,6 +916,32 @@ O TR-8S Controller, para a TR-1000:
 **O que a tela escreve:** o mesmo portão de sempre, `campos.py` + `parametros.py`. O accent
 é só leitura, porque é feito no painel. O roteiro é o `ROTEIRO-F3.md`.
 
+**Fase 2f (12/10/2026): a variação que TOCA, pelas notas** (`tocando.py`).
+
+Pela serial não há de onde ler isso (7.3). Mas a máquina manda uma `note_on` por disparo
+(canal 10, as notas da chart), e o grid tem os steps de cada variação da chain:
+- **A comparação:** em cada step, o que **soou** (os tracks das notas) contra o que cada
+  variação **tocaria** naquela coluna. Ficam de fora os tracks mutados e os steps com
+  PROB < 100 ou CYCLE.
+- **A decisão:** a variação que bate com os últimos steps (janela de 8), e só ela. Para a
+  troca A → B aparecer logo, vale o maior final da janela que dá resposta única. Em empate,
+  fica na de antes, se ela ainda bate, ou mostra `?`. Não chuta.
+- **A máquina já tocando quando o Controller liga (sem START):**
+  - duas viradas de step com notas fazem o motor "adotar" a máquina;
+  - o deslocamento único que põe os 8 últimos steps ouvidos no lugar dá a fase;
+  - enquanto não acha, o playhead não aparece. Um pattern que se repete a cada 4 steps
+    não tem fase única, e aí o playhead fica escondido;
+  - 32 steps sem nota desistem (era um pad tocado com a máquina parada).
+- **Notas e steps:** a nota que chega depois do último pulso de um step é do step seguinte
+  (as do step 1 chegam ~3 ms antes do START).
+- **As outras variações da chain** são relidas uma por vez, a cada releitura (5 s cada).
+- **Mostrado em:**
+  - a tela: o mostrador TOCA e a borda branca na fileira "toca";
+  - o Launchpad: o botão de variação em branco = toca, azul = editada.
+- **Deduções, a medir no F4:**
+  - as variações da chain têm o mesmo comprimento (o contador de steps é um só);
+  - um track mutado não manda nota.
+
 **Fase 2e (12/10/2026): o gráfico e os presets do SIDE CHAIN** (aba Efeitos).
 - **O gráfico** (`web/js/envelope.mjs`) é a nossa leitura do App, com três pontos:
   - o de baixo: HOLD (o `sc.hld_step` ou o `sc.hld_time`, conforme o HLD MODE) × MSTR DEP;

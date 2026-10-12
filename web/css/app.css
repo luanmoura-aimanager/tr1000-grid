@@ -52,6 +52,7 @@ button, select, input{ font:inherit; color:inherit; }
      padding:6px 12px; cursor:pointer; }
 .bt:hover{ border-color:var(--fraco); }
 .bt[aria-pressed="true"]{ background:var(--acento); color:#160a02; border-color:var(--acento); font-weight:700; }
+.bt[data-tocando]{ box-shadow:0 0 0 2px var(--c-play); }
 .bt[disabled]{ opacity:.4; cursor:not-allowed; }
 .modos{ display:flex; gap:2px; }
 .bt-modo{ min-width:56px; font-weight:800; letter-spacing:.06em; }
