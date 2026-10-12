@@ -32,6 +32,13 @@ const EN = {
   step: "step",
   "Desligado: a serial está livre para o TR-1000 App da Roland. Aperte ON para o Controller assumir a máquina, os Launchpads e as controladoras.":
     "Off: the serial port is free for Roland's TR-1000 App. Press ON for the Controller to take over the machine, the Launchpads and the knob controllers.",
+  modo: "mode",
+  chuva: "rain",
+  ambiente: "ambient",
+  "standby: soltando a serial; os Launchpads fazem ondas...":
+    "standby: releasing the serial port; the Launchpads make waves...",
+  "Standby ({m}): a serial está livre para o TR-1000 App da Roland, e os Launchpads fazem ondas. Toque um pad para soltar mais uma. ON volta ao grid.":
+    "Standby ({m}): the serial port is free for Roland's TR-1000 App, and the Launchpads make waves. Touch a pad to drop another one. ON goes back to the grid.",
   "ligando: serial, Launchpads e controladoras...":
     "turning on: serial, Launchpads and controllers...",
   "desligando: soltando a serial...":
@@ -144,6 +151,8 @@ const LOG_EN = [
     "$1(!) the TR-1000 did not turn on - see the line above (Roland App open?)",
   ],
   [/^(\S+ )?controladoras: (.*)$/, "$1controllers: $2"],
+  [/^(\S+ )?standby \((\w+)\): .*$/,
+    "$1standby ($2): the serial port is free; the Launchpads make waves and a touch drops another one"],
   [
     /^(\S+ )?sessao salva no app: (\S+) \((.*)\)$/,
     "$1session saved in the app: $2 ($3)",

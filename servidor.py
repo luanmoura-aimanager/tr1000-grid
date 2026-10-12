@@ -90,6 +90,9 @@ class Host:
         self.thread = None
         self.rodando = False
         self.ultimo = {}
+        # um clique de modo por vez: dois botoes seguidos (OFF e chuva) nao
+        # sobem dois motores nem leem um motor ja derrubado (revisao do PR #10)
+        self.lock_modo = threading.Lock()
         # o playhead para o /passo: o motor avisa a cada step (F3, 12/10/2026:
         # o polling de 250 ms pulava steps a 128 BPM)
         self.cond_passo = threading.Condition()
@@ -109,7 +112,32 @@ class Host:
             self.cond_passo.wait_for(lambda: self.versao_passo != versao, timeout)
             return self.versao_passo, dict(self.passo)
 
+    def definir_modo(self, modo):
+        """A lista fechada da tela: on, off, chuva, ambiente. OFF solta TUDO
+        (serial, Launchpads, controladoras - outro programa pode usar os
+        Launchpads). Chuva/ambiente soltam so a serial: o App da Roland abre,
+        e os Launchpads fazem ondas."""
+        with self.lock_modo:
+            if modo == "on":
+                self.ligar()
+            elif modo == "off":
+                self.desligar()
+            elif modo in M.STANDBY_ESTILOS:
+                if self.motor is None and launchpad.carregar_layout_resolvido()[0] is None:
+                    raise RuntimeError("standby precisa dos Launchpads, e o layout deles nao "
+                                       "resolveu (estao na USB? rode o learn)")
+                self._subir_motor()
+                if not self.motor.lp_out:
+                    raise RuntimeError("standby precisa dos Launchpads, e eles nao abriram")
+                self.motor.enfileirar(self.motor.definir_modo, M.MODO_STANDBY, modo)
+            else:
+                raise ValueError(f"modo {modo!r}")
+
     def ligar(self):
+        self._subir_motor()
+        self.motor.enfileirar(self._ligar_motor)
+
+    def _subir_motor(self):
         if self.motor is None:
             cfg, msgs = launchpad.carregar_layout_resolvido()
             for m in msgs:
@@ -125,11 +153,18 @@ class Host:
             self.rodando = True
             self.thread = threading.Thread(target=self._laco, daemon=True)
             self.thread.start()
-        self.motor.enfileirar(self._ligar_motor)
 
     def _ligar_motor(self):
         if not self.motor.definir_modo(M.MODO_ON):
             self.log("(!) a TR-1000 nao ligou - veja a linha acima (App da Roland aberto?)")
+            # ON que falhou solta TUDO, como o OFF: senao o motor ficava vivo
+            # segurando Launchpads e controladoras com a tela dizendo OFF
+            # (revisao do PR #10). Noutra thread: esta e a do proprio motor
+            threading.Thread(target=self._desligar_com_trava, daemon=True).start()
+
+    def _desligar_com_trava(self):
+        with self.lock_modo:
+            self.desligar()
 
     def _laco(self):
         while self.rodando:
@@ -169,12 +204,14 @@ class Host:
         e = dict(e)
         e["servidor_ligado"] = self.motor is not None
         e.setdefault("ligado", False)
+        e.setdefault("modo", "off")
         e["fresco"] = fresco
         e["log"] = self.log.ultimas()
         return e
 
 
 HOST = Host()
+MODOS = ("on", "off") + tuple(M.STANDBY_ESTILOS)
 
 
 # ─────────────────────────────────────────────────────────────
@@ -461,8 +498,15 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return self._erro("json invalido")
         if not isinstance(corpo, dict):
             return self._erro("json invalido")
-        if self.path == "/ligar":
-            HOST.ligar() if corpo.get("ligar") else HOST.desligar()
+        if self.path == "/modo":
+            modo = corpo.get("modo")
+            if modo not in MODOS:
+                return self._erro(f"modo desconhecido: {modo}")
+            try:
+                HOST.definir_modo(modo)
+            except RuntimeError as e:
+                HOST.log(f"(!) {e}")
+                return self._erro(str(e), 409)
             return self._responder(json.dumps({"ok": True}))
         if self.path != "/acao":
             return self._erro("nao encontrado", 404)

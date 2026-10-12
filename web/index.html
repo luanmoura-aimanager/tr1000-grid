@@ -30,7 +30,11 @@
   <div class="lingua" role="group" aria-label="idioma / language">
     <button class="bt bt-peq" type="button" data-lingua="pt">PT</button><button class="bt bt-peq" type="button" data-lingua="en">EN</button>
   </div>
-  <button class="bt bt-ligar" id="b-ligar" type="button" aria-pressed="false">ON</button>
+  <!-- os modos (fase 2c): ON assume a maquina; OFF solta tudo; chuva e
+       ambiente soltam so a serial e fazem ondas nos Launchpads -->
+  <div class="modos" id="modos" role="group">
+    <button class="bt bt-modo" type="button" data-modo="on">ON</button><button class="bt bt-modo" type="button" data-modo="off">OFF</button><button class="bt bt-modo" type="button" data-modo="chuva" data-t="chuva">chuva</button><button class="bt bt-modo" type="button" data-modo="ambiente" data-t="ambiente">ambiente</button>
+  </div>
 </header>
 <p class="aviso-off" id="aviso-off"></p>
 <nav class="abas" id="abas" role="tablist"></nav>

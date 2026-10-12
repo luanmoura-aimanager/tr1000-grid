@@ -53,8 +53,8 @@ button, select, input{ font:inherit; color:inherit; }
 .bt:hover{ border-color:var(--fraco); }
 .bt[aria-pressed="true"]{ background:var(--acento); color:#160a02; border-color:var(--acento); font-weight:700; }
 .bt[disabled]{ opacity:.4; cursor:not-allowed; }
-.lingua + .bt-ligar{ margin-left:0; }
-.bt-ligar{ margin-left:auto; min-width:72px; font-weight:800; letter-spacing:.06em; }
+.modos{ display:flex; gap:2px; }
+.bt-modo{ min-width:56px; font-weight:800; letter-spacing:.06em; }
 .bt-peq{ padding:3px 8px; font-size:12px; }
 .aviso-off{ margin:var(--e3) 0 0; padding:var(--e2) var(--e3); background:var(--painel);
             border:1px solid var(--linha); border-left:3px solid var(--acento); border-radius:var(--r1);

@@ -1780,8 +1780,10 @@ class TesteFase2b(unittest.TestCase):
         threading.Thread(target=srv.serve_forever, daemon=True).start()
         try:
             c = http.client.HTTPConnection("127.0.0.1", srv.server_port, timeout=3)
-            c.request("GET", "/passo", headers={"Host": "evil.com"})
-            self.assertEqual(c.getresponse().status, 403)
+            c.request("GET", "/passo", headers={"Host": "evil.com", "Connection": "close"})
+            r = c.getresponse()
+            r.read()
+            self.assertEqual(r.status, 403)
             c.close()
         finally:
             srv.shutdown()
@@ -1981,6 +1983,118 @@ class TesteFase2b(unittest.TestCase):
             set(re.findall(r"^  '((?:[^'\\]|\\.)*)':", en, re.M)) | \
             set(re.findall(r"^  ([A-Za-zÀ-ú_]+):", en, re.M))
         self.assertEqual(usadas - chaves, set(), "frase sem traducao")
+
+
+class TesteStandby(unittest.TestCase):
+    """Fase 2c: as ondas do tr8s nos Launchpads, com a serial solta."""
+
+    def test_standby_solta_a_serial_e_apaga(self):
+        m = motor_cru()
+        self.assertTrue(m.definir_modo(motor.MODO_STANDBY, "ambiente"))
+        self.assertIsNone(m.conexao)
+        self.assertEqual((m.modo_geral, m.estilo_standby), (motor.MODO_STANDBY, "ambiente"))
+        self.assertEqual(m.estado()["modo"], "ambiente")
+        self.assertFalse(m.estado()["ligado"])
+        self.assertTrue(m.maquina.fechada)
+
+    def test_toque_no_standby_faz_onda_e_nao_escreve(self):
+        import mido
+        m = motor_cru()
+        m.definir_modo(motor.MODO_STANDBY, "chuva")
+        m.lp_in["E"].fila = [mido.Message("note_on", note=m.nota_de("E", 2, 3), velocity=100),
+                             mido.Message("control_change", control=91, value=127)]
+        m._ler_pads()
+        self.assertEqual(len(m.ondas), 1)
+        self.assertEqual((m.ondas[0]["lin"], m.ondas[0]["col"]), (2, 3))
+        self.assertEqual(m.banco, 1)                     # o botao de cima nao age
+
+    def test_onda_acende_o_anel_e_morre(self):
+        m = motor_cru()
+        m.ondas = []
+        m._nova_onda(3, 8, agora=100.0)
+        q = m.quadro_de_ondas(100.0 + 2.0 / motor.ONDA_VEL)   # anel no raio 2
+        cores = dict(q["D"])
+        no_anel = cores[m.nota_de("D", 3, 2)]            # step 10: distancia 2
+        no_centro = cores[m.nota_de("D", 3, 0)]
+        self.assertGreater(sum(no_anel), sum(no_centro))
+        self.assertTrue(all(0 <= c <= 127 and isinstance(c, int) for _, rgb in q["E"] for c in rgb))
+        self.assertIsNone(m.quadro_de_ondas(100.0 + motor.ONDA_ALCANCE / motor.ONDA_VEL + 0.1))
+        self.assertEqual(m.ondas, [])
+
+    def test_semear_respeita_o_intervalo_do_estilo(self):
+        m = motor_cru()
+        m.definir_modo(motor.MODO_STANDBY, "ambiente")
+        m._semear(10.0)
+        m._semear(10.5)                                  # ambiente: >= 2,5 s
+        self.assertEqual(len(m.ondas), 1)
+        self.assertLess(m.ondas[0]["rgb"][0], 128 * motor.STANDBY_ESTILOS["ambiente"]["brilho"])
+
+    def test_animar_manda_quadro_e_apaga_no_fim(self):
+        m = motor_cru()
+        m.definir_modo(motor.MODO_STANDBY, "chuva")
+        for p in m.lp_out.values():
+            p.enviado.clear()
+        m._nova_onda(0, 0, agora=50.0)
+        m._animar(50.1)
+        self.assertTrue(m.lp_out["E"].enviado and m.onda_suja)
+        m._animar(50.0 + motor.ONDA_ALCANCE / motor.ONDA_VEL + 1)
+        self.assertFalse(m.onda_suja)                    # o quadro final apagou
+
+    def test_on_que_falha_solta_a_serial(self):
+        m = motor_cru()
+        m.conexao = None
+        falsa = _MaquinaFalsa(calada=True)
+        orig = conexao_serial.ConexaoTR1000
+
+        class Quebra(orig):
+            def aperto(self):
+                raise conexao_serial.ErroConexao("sem resposta")
+        conexao_serial.ConexaoTR1000 = lambda: Quebra(porta=falsa)
+        try:
+            self.assertFalse(m.definir_modo(motor.MODO_ON))
+        finally:
+            conexao_serial.ConexaoTR1000 = orig
+        self.assertIsNone(m.conexao)
+        self.assertTrue(falsa.fechada)
+
+    def test_standby_esquece_o_step_loop_segurado(self):
+        m = motor_cru()
+        m.maquina.valores[(3, 0, 0, 112 + campos.B3_LOOP)] = 0
+        m.definir_loop(True, 4)
+        m.definir_modo(motor.MODO_STANDBY, "chuva")
+        self.assertEqual((m.loop_antes, m.loop_segurados), (None, frozenset()))
+
+    def test_standby_sem_launchpads_e_recusado(self):
+        import servidor, launchpad
+        h = servidor.Host()
+        orig = launchpad.carregar_layout_resolvido
+        launchpad.carregar_layout_resolvido = lambda: (None, [])
+        try:
+            with self.assertRaises(RuntimeError):
+                h.definir_modo("chuva")
+        finally:
+            launchpad.carregar_layout_resolvido = orig
+        self.assertIsNone(h.motor)                       # nao subiu motor nenhum
+
+    def test_modos_da_tela(self):
+        import servidor
+        self.assertEqual(set(servidor.MODOS), {"on", "off", "chuva", "ambiente"})
+        with self.assertRaises(ValueError):
+            servidor.Host().definir_modo("disco")
+
+    def test_post_modo_recusa_o_desconhecido(self):
+        import http.server, json, threading, urllib.request, urllib.error, servidor
+        srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), servidor.Handler)
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        try:
+            rq = urllib.request.Request(
+                f"http://127.0.0.1:{srv.server_port}/modo", data=json.dumps({"modo": "disco"}).encode(),
+                headers={"Content-Type": "application/json", "X-TR1000-Token": servidor.TOKEN})
+            with self.assertRaises(urllib.error.HTTPError) as e:
+                urllib.request.urlopen(rq)
+            self.assertEqual(e.exception.code, 400)
+        finally:
+            srv.shutdown()
 
 
 class TesteEmbalagem(unittest.TestCase):

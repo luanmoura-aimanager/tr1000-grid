@@ -25,7 +25,7 @@ async function postar(rota, corpo) {
 
 export const acao = (nome, args = {}) =>
   postar("/acao", { acao: nome, ...args });
-export const ligar = (sim) => postar("/ligar", { ligar: !!sim });
+export const modo = (m) => postar("/modo", { modo: m });
 
 export async function estado() {
   const r = await fetch("/estado", {

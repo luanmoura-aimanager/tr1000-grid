@@ -55,6 +55,15 @@ LOOP, o PTN digitado, a foto da sessão e as variações. Faça um passo, me dig
 1. **EN** no topo. **Esperado:** a página recarrega em inglês; os nomes da máquina (BD,
    PROB, SUB...) ficam iguais. Volte para **PT**.
 
+## F4.6b — Standby
+
+1. Aperte **chuva**. **Esperado:** os Launchpads ganham ondas coloridas nascendo sozinhas,
+   e o rodapé diz que a serial está livre. Toque um pad: sai mais uma onda dali.
+2. Com a chuva rodando, abra o **App da Roland**. **Esperado:** ele conecta, e as ondas
+   continuam. Feche o App.
+3. **ambiente**. **Esperado:** ondas maiores, mais lentas e mais fracas.
+4. **ON**. **Esperado:** volta o grid, o PTN e os LEDs. **OFF** apaga tudo.
+
 ## F4.7 — c5d: o TEMPO (para o BPM digitável)
 
 Com **OFF** no Controller (a serial livre):
