@@ -128,12 +128,6 @@ function montar() {
   document
     .querySelectorAll("[data-t]")
     .forEach((el) => texto(el, t(el.dataset.t)));
-  texto(
-    $("#aviso-off"),
-    t(
-      "Desligado: a serial está livre para o TR-1000 App da Roland. Aperte ON para o Controller assumir a máquina, os Launchpads e as controladoras.",
-    ),
-  );
   attr($("#abas"), "aria-label", t("seções"));
   document.querySelectorAll("[data-lingua]").forEach((b) => {
     attr(
@@ -161,19 +155,23 @@ function montar() {
     main.append(a._painel);
     a.montar(a._painel, ctx);
   });
-  $("#b-ligar").addEventListener("click", async () => {
-    const ligar = !E.ligado;
-    msg(
-      ligar
-        ? t("ligando: serial, Launchpads e controladoras...")
-        : t("desligando: soltando a serial..."),
-    );
-    try {
-      await rede.ligar(ligar);
-    } catch (e) {
-      msg(`(!) ${e.message}`);
-    }
-  });
+  attr($("#modos"), "aria-label", t("modo"));
+  document.querySelectorAll("[data-modo]").forEach((b) =>
+    b.addEventListener("click", async () => {
+      const m = b.dataset.modo;
+      msg(
+        {
+          on: t("ligando: serial, Launchpads e controladoras..."),
+          off: t("desligando: soltando a serial..."),
+        }[m] || t("standby: soltando a serial; os Launchpads fazem ondas..."),
+      );
+      try {
+        await rede.modo(m);
+      } catch (e) {
+        msg(`(!) ${e.message}`);
+      }
+    }),
+  );
   montarPtn();
   texto($("#build"), `build ${D.build}`);
   mostrarAba(atual);
@@ -188,9 +186,22 @@ function textoToca() {
 
 function pintarTopo() {
   const ligado = !!E.ligado;
-  attr($("#b-ligar"), "aria-pressed", ligado ? "true" : "false");
-  texto($("#b-ligar"), ligado ? "ON" : "OFF");
+  const modo = E.modo || "off";
+  document
+    .querySelectorAll("[data-modo]")
+    .forEach((b) => attr(b, "aria-pressed", b.dataset.modo === modo ? "true" : "false"));
   $("#aviso-off").hidden = ligado;
+  texto(
+    $("#aviso-off"),
+    modo === "off"
+      ? t(
+          "Desligado: a serial está livre para o TR-1000 App da Roland. Aperte ON para o Controller assumir a máquina, os Launchpads e as controladoras.",
+        )
+      : t(
+          "Standby ({m}): a serial está livre para o TR-1000 App da Roland, e os Launchpads fazem ondas. Toque um pad para soltar mais uma. ON volta ao grid.",
+          { m: t(modo) },
+        ),
+  );
   texto($("#d-ptn"), E.pattern || "—");
   texto($("#d-bpm"), E.tempo ? E.tempo.toFixed(1) : "—");
   texto(

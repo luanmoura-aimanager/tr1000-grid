@@ -29,7 +29,7 @@ O que NAO faz ainda (documentado na REFERENCIA):
   - linhas de ACC e TRG: o accent e pelo painel; o TRG ficou de fora
   - gravar: o WRITE continua no painel (criterio 6 adiado)
 """
-import json, os, queue, threading, time
+import json, math, os, queue, random, threading, time
 
 import campos
 import conexao_serial as cs
@@ -40,7 +40,26 @@ import tr1000
 import tr1000_serial as ts
 from portas import EntradaMIDI, SaidaMIDI, porta_exata
 
-MODO_ON, MODO_OFF = "on", "off"
+MODO_ON, MODO_OFF, MODO_STANDBY = "on", "off", "standby"
+
+# Ondinha (port do lp_tr8s.py, onde ja rodou em hardware): o toque no pad em
+# standby, e as ondas que nascem sozinhas. Cada estilo e uma tabela de faixas
+# (min, max) sorteadas por onda - acertar o gosto e mexer em numero.
+ONDA_VEL     = 9.0    # celulas por segundo
+ONDA_LARGURA = 2.2    # espessura do anel, em celulas
+ONDA_ALCANCE = 15.0   # celulas ate morrer (a diagonal do 16x8 e ~17)
+ONDA_FPS     = 30
+ESTILO_CHUVA, ESTILO_AMBIENTE = "chuva", "ambiente"
+STANDBY_ESTILOS = {
+    # chuva: variacao larga, uma onda a cada meio segundo mais ou menos
+    ESTILO_CHUVA:    {"intervalo": (0.35, 1.10), "vel": (6.0, 13.0),
+                      "larg": (1.4, 3.0), "alc": (9.0, 17.0),
+                      "brilho": 1.00, "fps": 30},
+    # ambiente: grandes, raras, lentas e fracas - respiracao, nao chuva
+    ESTILO_AMBIENTE: {"intervalo": (2.50, 5.00), "vel": (1.6, 3.2),
+                      "larg": (3.5, 6.0), "alc": (14.0, 20.0),
+                      "brilho": 0.45, "fps": 15},
+}
 
 N_TRACKS = len(ts.TRACKS_SERIAL)                    # 10: BD..RC
 TRACKS_LAYER = 4                                    # BD SD LT HT tem layer A/B
@@ -119,6 +138,11 @@ class Motor:
     pps_step = PULSOS_P_STEP                    # pulsos do step atual (a Scale dele)
     n_parado = -1                               # o step do STOP, para o CONTINUE
     tocando = False
+    estilo_standby = ESTILO_CHUVA
+    ondas = ()                                  # as ondas no ar (standby)
+    onda_suja = False                           # ha um quadro de onda para apagar
+    proxima_onda = 0.0
+    ultimo_quadro = 0.0
     ao_passo = None                             # callback da tela (o /passo)
     pc_out = None                               # a porta 'TR-1000' de saida (Program Change)
     loop_antes = None                           # o [150] antes de segurar um step
@@ -213,8 +237,20 @@ class Motor:
                 self.log(f"(!) comando falhou: {exc}")
 
     # ── a maquina: abrir, ler ───────────────────────────────
-    def definir_modo(self, modo):
-        """ON: abre a serial, le o pattern selecionado e pinta. OFF: apaga."""
+    def definir_modo(self, modo, estilo=None):
+        """ON: abre a serial, le o pattern selecionado e pinta. STANDBY: solta a
+        serial (o App da Roland pode abrir) e os Launchpads viram ondas, no
+        estilo pedido. OFF: apaga."""
+        if modo == MODO_STANDBY:
+            self.soltar_maquina()
+            self.modo_geral = MODO_STANDBY
+            self.estilo_standby = estilo if estilo in STANDBY_ESTILOS else self.estilo_standby
+            self.ondas, self.onda_suja, self.proxima_onda = [], False, 0.0
+            self.pintar()
+            self.pintar_botoes()
+            self.log(f"standby ({self.estilo_standby}): a serial esta livre; os "
+                     "Launchpads fazem ondas e o toque solta mais uma")
+            return True
         if modo == MODO_ON:
             try:
                 if self.conexao is None:
@@ -236,6 +272,26 @@ class Motor:
         self.pintar()
         self.pintar_botoes()
         return True
+
+    def soltar_maquina(self):
+        """Fecha a serial e as portas MIDI da TR-1000; os Launchpads e as
+        controladoras ficam (o standby usa os Launchpads)."""
+        if self.conexao is not None:
+            self.conexao.__exit__(None, None, None)
+            self.conexao = None
+        if self.clk is not None:
+            self.clk.close()
+            self.clk = None
+        if self.pc_out is not None:
+            self.pc_out.close()
+            self.pc_out = None
+        self.tocando = False
+        self.passo, self.passos_trk, self.n_steps = -1, None, -1
+        self.x_pattern = self.x_kit = None
+        self.b3 = self.cab = None                    # sem maquina, nada velho na tela
+        self.cache.clear()
+        self.foto_motivo = self.foto_passos = None
+        self._avisar_passo()
 
     def abrir_clock(self):
         """A porta comum 'TR-1000' em modo callback: o rtmidi descarta em
@@ -894,6 +950,8 @@ class Motor:
                 return cab[pos] if pos < len(cab) else padrao
             return {
                 "ligado": self.modo_geral == MODO_ON,
+                "modo": (self.estilo_standby if self.modo_geral == MODO_STANDBY
+                         else self.modo_geral),
                 "pattern": ts.nome_do_pattern(self.x_pattern) if self.x_pattern is not None else None,
                 "x_pattern": self.x_pattern, "x_kit": self.x_kit,
                 "tempo": (self.b3[ts.OFF_TEMPO_ATUAL] / 100) if self.b3 else None,
@@ -941,6 +999,78 @@ class Motor:
             self.pickup.mover(knobs, self.x_pattern, self.x_kit, agora)
         self.pickup.escrever_pendentes(agora)
 
+    # ── a ondinha do standby (port do lp_tr8s.py) ───────────
+    @staticmethod
+    def _cor_aleatoria():
+        h = random.random() * 6.0
+        i, f = int(h), h - int(h)
+        r, g, b = [(1, f, 0), (1 - f, 1, 0), (0, 1, f),
+                   (0, 1 - f, 1), (f, 0, 1), (1, 0, 1 - f)][i % 6]
+        return (r * 127, g * 127, b * 127)
+
+    def _nova_onda(self, lin, col, estilo=None, agora=None):
+        """Uma onda no grid, com os parametros dela: sem estilo, os ONDA_*
+        fixos (o toque); com estilo, sorteados nas faixas dele."""
+        rgb = self._cor_aleatoria()
+        if estilo is None:
+            vel, larg, alc = ONDA_VEL, ONDA_LARGURA, ONDA_ALCANCE
+        else:
+            e = STANDBY_ESTILOS[estilo]
+            vel, larg, alc = (random.uniform(*e["vel"]), random.uniform(*e["larg"]),
+                              random.uniform(*e["alc"]))
+            rgb = tuple(c * e["brilho"] for c in rgb)
+        self.ondas.append({"lin": lin, "col": col, "t0": time.time() if agora is None else agora,
+                           "rgb": rgb, "vel": vel, "larg": larg, "alc": alc})
+
+    def _semear(self, agora):
+        if agora < self.proxima_onda:
+            return
+        e = STANDBY_ESTILOS[self.estilo_standby]
+        self.proxima_onda = agora + random.uniform(*e["intervalo"])
+        self._nova_onda(random.randrange(LINHAS), random.randrange(PASSOS),
+                        self.estilo_standby, agora)
+
+    def quadro_de_ondas(self, agora):
+        """{dev: [(nota, (r, g, b))]} do instante `agora` (os aneis somados), ou
+        None sem onda nenhuma no ar. Tira as ondas que ja morreram."""
+        self.ondas = [o for o in self.ondas if (agora - o["t0"]) * o["vel"] < o["alc"]]
+        if not self.ondas:
+            return None
+        quadro = {}
+        for dev, off in (("E", 0), ("D", 8)):
+            pares = []
+            for l in range(LINHAS):
+                for c in range(8):
+                    step, r, g, b = off + c, 0.0, 0.0, 0.0
+                    for o in self.ondas:
+                        vt = (agora - o["t0"]) * o["vel"]
+                        anel = 1.0 - abs(math.hypot(l - o["lin"], step - o["col"]) - vt) / o["larg"]
+                        if anel <= 0:
+                            continue
+                        k = anel * (1.0 - vt / o["alc"])
+                        r, g, b = r + o["rgb"][0] * k, g + o["rgb"][1] * k, b + o["rgb"][2] * k
+                    pares.append((self.nota_de(dev, l, c),
+                                  (int(min(127, r)), int(min(127, g)), int(min(127, b)))))
+            quadro[dev] = pares
+        return quadro
+
+    def _animar(self, agora):
+        if not self.lp_out:
+            return
+        fps = STANDBY_ESTILOS[self.estilo_standby]["fps"]
+        if agora - self.ultimo_quadro < 1.0 / fps:
+            return
+        self.ultimo_quadro = agora
+        quadro = self.quadro_de_ondas(agora)
+        if quadro is None:
+            if self.onda_suja:                       # um ultimo quadro, para apagar
+                self.pintar()
+                self.onda_suja = False
+            return
+        self.onda_suja = True
+        for dev, pares in quadro.items():
+            lp.enviar_cores(self.lp_out[dev], pares)
+
     # ── pads e o laco ───────────────────────────────────────
     def _ler_pads(self):
         for dev, off in (("E", 0), ("D", 8)):
@@ -957,9 +1087,16 @@ class Motor:
                 if msg.type != "note_on" or msg.velocity == 0:
                     continue
                 pos = self._decodificar(dev, msg.note)
-                if pos is None or self.modo_geral != MODO_ON:
+                if pos is None:
                     continue
                 linha, col = pos
+                if self.modo_geral == MODO_STANDBY:
+                    # o toque entra no estilo da vez (um dedo nao joga chuva
+                    # no meio do ambiente)
+                    self._nova_onda(linha, off + col, self.estilo_standby)
+                    continue
+                if self.modo_geral != MODO_ON:
+                    continue
                 self.alternar(linha, off + col)
                 self.pintar_coluna(off + col)           # so a coluna mudou
 
@@ -969,6 +1106,9 @@ class Motor:
             self._ler_clock()
             self._ler_pads()
             agora = time.time()
+            if self.modo_geral == MODO_STANDBY:
+                self._semear(agora)
+                self._animar(agora)
             self._ler_controladoras(agora)
             if self.modo_geral == MODO_ON and agora >= self.proxima_releitura:
                 self.proxima_releitura = agora + RELER_A_CADA
@@ -991,15 +1131,7 @@ class Motor:
                 self.pintar_botoes()
             except Exception:
                 pass
-            if self.conexao is not None:
-                self.conexao.__exit__(None, None, None)
-                self.conexao = None
-            if self.clk is not None:
-                self.clk.close()
-                self.clk = None
-            if self.pc_out is not None:
-                self.pc_out.close()
-                self.pc_out = None
+            self.soltar_maquina()
             if self.ctl is not None:
                 self.ctl.fechar()
                 self.ctl = None

@@ -916,6 +916,16 @@ O TR-8S Controller, para a TR-1000:
 **O que a tela escreve:** o mesmo portão de sempre, `campos.py` + `parametros.py`. O accent
 é só leitura, porque é feito no painel. O roteiro é o `ROTEIRO-F3.md`.
 
+**Fase 2c (12/10/2026): standby.**
+- `chuva` e `ambiente` soltam **só a serial**: o App da Roland abre, e os Launchpads
+  ficam com as ondas do `lp_tr8s.py` (as mesmas constantes `ONDA_*` e
+  `STANDBY_ESTILOS`, que já rodaram em hardware na TR-8S). Um toque solta mais uma onda,
+  no estilo da vez.
+- **OFF** continua soltando tudo, para outro programa poder usar os Launchpads. Isso é
+  diferente do plano, onde o OFF fazia ondinha.
+- `POST /modo`, com a lista fechada `on / off / chuva / ambiente`, substitui o `/ligar`.
+- Não testado em hardware até o `ROTEIRO-F4.md`.
+
 **Fase 2b (12/10/2026, pedidos do Luan durante o F3; testada só na mesa até o
 `ROTEIRO-F4.md`):**
 - **Playhead:**

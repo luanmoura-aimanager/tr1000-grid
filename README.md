@@ -58,8 +58,11 @@ No Safari, abra `http://127.0.0.1:8734/` e use **Arquivo › Adicionar ao Dock**
 - **Salvar sessão:** uma foto do pattern e do kit em
   `~/Library/Application Support/tr1000-sessoes/`. Ela fica **só no app** e é tirada também
   no ON e quando o pattern muda. O RELOAD é no painel.
-- **O ON** liga a TR-1000, os Launchpads (layout A) e as controladoras num processo só.
-- **O OFF** solta a serial para o TR-1000 App da Roland.
+- **Os modos** (topo):
+  - **ON:** liga a TR-1000, os Launchpads (layout A) e as controladoras num processo só.
+  - **OFF:** solta tudo, a serial e os Launchpads.
+  - **chuva / ambiente:** solta só a serial; os Launchpads fazem ondas, e um toque solta
+    mais uma. As ondas são as do TR-8S Controller.
 - **Roteiros de teste:** `ROTEIRO-F3.md` (passou em 12/10) e `ROTEIRO-F4.md`.
 - **Atualização:** o hook `post-merge` (ligado pelo `instalar_hooks.py`) atualiza sozinho a
   cópia que o LaunchAgent roda, sempre que a `main` recebe um merge ou um pull. Se mudou
