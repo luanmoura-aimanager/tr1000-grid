@@ -2266,6 +2266,42 @@ class TestePaginas(unittest.TestCase):
         self.assertEqual([e[2:4] for e in _escritas(m.maquina)], [(0, 1249), (0, 1250)])
 
 
+class TesteSideChain(unittest.TestCase):
+    """Fase 2e: os presets e o grafico do SIDE CHAIN."""
+
+    def test_presets_dentro_das_faixas(self):
+        for nome, vals in parametros.PRESETS_SC.items():
+            for id, v in vals.items():
+                p = parametros.EXTRAS[id]
+                self.assertTrue(p.minimo <= v <= p.maximo, f"{nome}: {id}={v}")
+
+    def test_preset_vira_um_param_por_valor(self):
+        import servidor
+        servidor.HOST.motor = m = motor_cru()
+        try:
+            with self.assertRaises(ValueError):
+                servidor.ACOES["preset_sc"]({"nome": "os.system"})
+            self.assertTrue(m.fila_cmd.empty())
+            servidor.ACOES["preset_sc"]({"nome": "Gate picotado"})
+            itens = []
+            while not m.fila_cmd.empty():
+                fn, args, _kw = m.fila_cmd.get()
+                self.assertEqual(fn.__name__, "definir_param")
+                itens.append(args)
+            self.assertEqual(dict(itens), parametros.PRESETS_SC["Gate picotado"])
+        finally:
+            servidor.HOST.motor = None
+
+    def test_preset_escreve_no_side_chain(self):
+        m = motor_cru()
+        m.x_kit = 0
+        for id, v in parametros.PRESETS_SC["Pump clássico"].items():
+            m.definir_param(id, v)
+        escritos = {(e[0], e[3]): e[4] for e in _escritas(m.maquina)}
+        self.assertEqual(escritos[(12, 546)], 1)         # SOURCE BD A&B
+        self.assertEqual(escritos[(12, 551)], 600)       # MSTR DEP
+
+
 class TesteEmbalagem(unittest.TestCase):
     def test_post_merge_so_atualiza_o_que_a_copia_leva(self):
         import instalar_agente as ia

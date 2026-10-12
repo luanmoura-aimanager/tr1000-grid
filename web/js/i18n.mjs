@@ -121,6 +121,18 @@ const EN = {
   "Cada som vai para THROUGH, MASTER FX ou ANALOG FX.":
     "Each sound goes to THROUGH, MASTER FX or ANALOG FX.",
   "{f} para {d}": "{f} to {d}",
+  "preset do side chain": "side chain preset",
+  "Pump clássico": "Classic pump",
+  "Pump forte": "Heavy pump",
+  "Dança no CH": "Dancing CH",
+  "Half-time pump": "Half-time pump",
+  "Respiro na caixa": "Snare breath",
+  "Reverb limpo": "Clean reverb",
+  "Delay que respira": "Breathing delay",
+  "Gate picotado": "Chopped gate",
+  Desligado: "Off",
+  "Arraste os pontos: o de baixo é o HOLD e o MSTR DEP, o de cima o RELEASE, o do meio a CURVE. Os presets são palpites crus, a acertar de ouvido.":
+    "Drag the points: the bottom one is HOLD and MSTR DEP, the top one RELEASE, the middle one CURVE. The presets are raw guesses, to be tuned by ear.",
 };
 
 /** t("texto em portugues", {variaveis}) -> na lingua atual. Sem traducao,

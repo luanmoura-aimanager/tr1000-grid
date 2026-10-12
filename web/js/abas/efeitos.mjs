@@ -4,7 +4,10 @@
 import { h, attr, texto } from "../dom.mjs";
 import { t } from "../i18n.mjs";
 import { paramSlider, paramSeletor, fmt } from "../params.mjs";
+import { envelope, presetAtual } from "../envelope.mjs";
 
+let env = null,
+  presetSel = null;
 let itens = [],
   matriz = [],
   lfoSync = null;
@@ -107,10 +110,33 @@ export default {
       h("p.nota", {}, t("O botão ON do MASTER FX fica no painel da TR-1000.")),
     );
 
+    env = envelope(ctx);
+    const nomesPreset = Object.keys(D.presets_sc);
+    presetSel = h(
+      "select",
+      { "aria-label": t("preset do side chain") },
+      h("option", { value: "" }, "—"),
+      nomesPreset.map((n) => h("option", { value: n }, t(n))),
+    );
+    presetSel.addEventListener("change", () => {
+      if (presetSel.value) ctx.acao("preset_sc", { nome: presetSel.value });
+      // sem foco, o select volta a mostrar o que o kit tem de verdade (um
+      // valor recusado ou mexido depois aparece como "—")
+      presetSel.blur();
+    });
     const sc = h(
-      "div.secao",
+      "div.secao.secao-larga",
       {},
       h("h2", {}, t("side chain")),
+      h("div.fila", {}, h("span.fraco", {}, "PRESET"), presetSel),
+      env.el,
+      h(
+        "p.nota",
+        {},
+        t(
+          "Arraste os pontos: o de baixo é o HOLD e o MSTR DEP, o de cima o RELEASE, o do meio a CURVE. Os presets são palpites crus, a acertar de ouvido.",
+        ),
+      ),
       h(
         "div.fila",
         {},
@@ -164,6 +190,9 @@ export default {
 
   atualizar(E, ctx) {
     itens.forEach((s) => s.atualizar(E));
+    env.atualizar(E);
+    if (document.activeElement !== presetSel)
+      presetSel.value = presetAtual(ctx.D.presets_sc, E.kit) || "";
     const sync = E.kit ? E.kit["lfo.sync"] : undefined;
     texto(lfoSync, sync === undefined ? "—" : ctx.D.lfo_syncs[sync]);
     FONTES.forEach((f, i) => {

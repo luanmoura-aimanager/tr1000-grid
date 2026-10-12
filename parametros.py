@@ -288,6 +288,31 @@ ROTAS = ["THROUGH", "MASTER FX", "ANALOG FX"]
 SC_FONTES = ["OFF", "BD A&B", "BD A", "BD B", "SD A&B", "SD A", "SD B", "LT A&B", "LT A",
              "LT B", "HT A&B", "HT A", "HT B", "RS", "HC", "CH", "OH", "CC", "RC"]
 
+# Os presets do SIDE CHAIN (pedido do Luan, 12/10/2026, depois do F3.3.4). Os
+# numeros sao CRUS (as faixas dos EXTRAS): as unidades do RELEASE e da CURVE nao
+# foram medidas, entao os valores sao palpite para acertar de ouvido no F4.
+# Cada preset escreve tudo o que define, pelo mesmo definir_param da tela.
+_SC_BASE = {"sc.polarity": 0, "sc.hld_mode": 0, "sc.hld_time": 20, "sc.curve": 500,
+            "sc.depth.rvb": 0, "sc.depth.dly": 0}
+PRESETS_SC = {
+    "Pump clássico":     {**_SC_BASE, "sc.source": 1, "sc.mstr_dep": 600, "sc.release": 450},
+    "Pump forte":        {**_SC_BASE, "sc.source": 1, "sc.mstr_dep": 1000, "sc.release": 800,
+                          "sc.curve": 800},
+    # o BD dispara (SOURCE BD A&B) e o CH e quem "danca" (o que o Luan ouviu
+    # no F3.3.4 com MSTR DEP alto e RELEASE curto)
+    "Dança no CH":       {**_SC_BASE, "sc.source": 1, "sc.mstr_dep": 900, "sc.release": 80},
+    "Half-time pump":    {**_SC_BASE, "sc.source": 1, "sc.mstr_dep": 700, "sc.release": 350,
+                          "sc.hld_mode": 1, "sc.hld_step": 2},
+    "Respiro na caixa":  {**_SC_BASE, "sc.source": 4, "sc.mstr_dep": 400, "sc.release": 350},
+    "Reverb limpo":      {**_SC_BASE, "sc.source": 1, "sc.mstr_dep": 0, "sc.release": 350,
+                          "sc.depth.rvb": 800},
+    "Delay que respira": {**_SC_BASE, "sc.source": 1, "sc.mstr_dep": 0, "sc.release": 800,
+                          "sc.depth.dly": 800},
+    "Gate picotado":     {**_SC_BASE, "sc.source": 15, "sc.polarity": 1, "sc.mstr_dep": 900,
+                          "sc.release": 80, "sc.curve": 150},
+    "Desligado":         {**_SC_BASE, "sc.source": 0, "sc.mstr_dep": 0, "sc.release": 350},
+}
+
 
 def todas_as_entradas():
     """A tabela fixa, as dependentes de type e os extras da tela, para o portao."""
