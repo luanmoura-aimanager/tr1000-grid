@@ -658,6 +658,25 @@ class Motor:
         self.hist = {n: self.seq}
         self.n_extremos = n
 
+    def _colunas_tocadas(self):
+        """A coluna que cada track toca agora: a posicao (da variacao, ou a
+        propria do track) passada pelo DIRECTION dele (R-L toca 2 1 4 3...).
+        -1 quando nao da para saber (RND, DNK, P-P): sem playhead naquela
+        linha, em vez de um no lugar errado."""
+        v, pos = self.seq
+        out = []
+        for t, c in enumerate(self.seq_trk or [None] * N_TRACKS):
+            e = self._extremos_trk(t)
+            first, last = e if e else self._extremos()[v]
+            base = pos if c is None else c
+            col = toc.coluna_tocada(toc.direcao_de(self.cache.get((v, t))), base, first, last)
+            out.append(-1 if col is None else col)
+        return out
+
+    def direcoes(self):
+        """O DIRECTION de cada track na variacao mostrada (0 = FWD)."""
+        return [toc.direcao_de(self.cache.get((self.variacao, t))) for t in range(N_TRACKS)]
+
     def _avancar_seq(self):
         """Um step: a variacao/coluna e as colunas proprias dos tracks."""
         if self.seq is None:
@@ -694,8 +713,7 @@ class Motor:
             self.passo, self.passos_trk = -1, None    # sem fase: nada, nao um chute
         else:
             self.passo = self.seq[1]
-            self.passos_trk = [self.passo if c is None else c
-                               for c in (self.seq_trk or [None] * N_TRACKS)]
+            self.passos_trk = self._colunas_tocadas()
         depois = {self.passo} | set(self.passos_trk or [])
         if antes != depois and self.pagina == "steps":
             for c in sorted((antes | depois) - {-1}):
@@ -1498,6 +1516,7 @@ class Motor:
                 "variacao": v, "velocidade_idx": self.vel_idx, "modo_layer": self.modo_layer,
                 "banco": self.banco, "passo": self.passo, "tocando": self.tocando,
                 "pagina": self.pagina,
+                "direcoes": self.direcoes(),
                 "tocando_var": self.tocando_var, "fase_incerta": self.fase_incerta,
                 "passos_trk": list(self.passos_trk) if self.passos_trk else None,
                 "loop_segurados": sorted(self.loop_segurados),

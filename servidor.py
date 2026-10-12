@@ -343,7 +343,7 @@ def dados_estaticos():
         "tracks": ts.TRACKS_SERIAL, "variacoes": ts.VARIACOES_SERIAL,
         "velocidades": M.VELOCIDADES, "bancos": {k: v for k, v in M.BANCOS.items()},
         "sub_nomes": campos.SUB_NOMES, "cycle_nomes": campos.CYCLE_NOMES,
-        "scales": campos.SCALES, "params": params,
+        "scales": campos.SCALES, "params": params, "direcoes": campos.DIRECOES,
         "nomes": P.NOMES, "mfx_tipos": P.MFX_TIPOS, "delay_tipos": P.DELAY_TIPOS,
         "lfo_syncs": P.LFO_SYNCS, "rotas": P.ROTAS, "sc_fontes": P.SC_FONTES,
         "seletores": {id: P.seletor_de(id) for id in P.POR_TIPO},

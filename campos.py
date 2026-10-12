@@ -32,6 +32,11 @@ CAMPOS_STEP = {
     "cycle": (98,    0,   37),                # c5c: o mapa inteiro
     "start": (114, -100, 100),                # c5c: -100..+100, u32 com sinal
 }
+# O DIRECTION do track (TRACK SETTING, [C1]; manual RM p.18): no bloco de
+# steps de CADA variacao, o mesmo valor nas 12 (medido 12/10/2026, foto/diff:
+# o SD do 1-01 de R-L para FWD = 3 -> 0). A ordem dos nomes e a do manual.
+STEP_DIRECAO = 96
+DIRECOES = ["FWD", "BWD", "P-P", "R-L", "L-R", "RND", "DNK", "DNK2"]
 SUB_NOMES = ["OFF", "1/2", "1/3", "1/4", "Flam", "Triplet 1", "Triplet 2", "Triplet 3",
              "Triplet 4", "Quad 1", "Quad 2", "Quad 3", "Quad 4", "Quad 5"]
 CYCLE_NOMES = ([f"{a}/{b}" for b in range(1, 9) for a in range(1, b + 1)]
