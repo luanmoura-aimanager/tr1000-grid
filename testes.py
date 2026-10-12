@@ -2097,6 +2097,175 @@ class TesteStandby(unittest.TestCase):
             srv.shutdown()
 
 
+class TestePaginas(unittest.TestCase):
+    """Fase 2d: as paginas PAR / PERF / ROUT do layout A, com pads falsos."""
+
+    def _m(self):
+        m = motor_cru()
+        m.cab = [0] * 248
+        for v in range(campos.N_VARS):
+            m.cab[campos.CAB_LAST_VAR + v] = 15
+        m.cab[campos.CAB_SCALE], m.cab[campos.CAB_VARIACOES] = 2, 1
+        m.b3, m.x_kit = [0] * 292, 0
+        return m
+
+    def _pad(self, m, linha, step, solta=False):
+        import mido
+        dev, col = ("E", step) if step < 8 else ("D", step - 8)
+        m.lp_in[dev].fila = [mido.Message("note_on", note=m.nota_de(dev, linha, col),
+                                          velocity=0 if solta else 100)]
+        m._ler_pads()
+
+    def test_o_mesmo_botao_volta_aos_steps(self):
+        m = self._m()
+        m.executar("pagina", "par")
+        self.assertEqual(m.pagina, "par")
+        m.executar("pagina", "perf")
+        self.assertEqual(m.pagina, "perf")
+        m.executar("pagina", "perf")
+        self.assertEqual(m.pagina, "steps")
+        self.assertEqual(motor.BOTOES[("D", 96)], ("pagina", "par"))
+        self.assertEqual(motor.BOTOES[("D", 98)], ("pagina", "rout"))
+
+    def test_par_escolhe_track_e_parametro_e_escreve_o_nivel(self):
+        m = self._m()
+        m.executar("pagina", "par")
+        m.executar("mudo", 1)                            # a lateral: SD (nao muta)
+        m.executar("velocidade", 0)                      # a borda: PROB
+        self.assertEqual((m.par_track, m.par_param), (1, 0))
+        self.assertEqual(_escritas(m.maquina), [])
+        self._pad(m, 0, 3)                               # linha de cima: 100 %
+        self._pad(m, 7, 4)                               # de baixo: 0 %
+        self.assertEqual(_escritas(m.maquina), [(118, 0, 1, 1249 + 64 + 3, 100),
+                                                (118, 0, 1, 1249 + 64 + 4, 0)])
+        m.maquina.recebido.clear()
+        m.executar("velocidade", 3)                      # START
+        self._pad(m, 7, 5)                               # -100
+        self._pad(m, 4, 5)                               # o 0, no 4o nivel
+        self.assertEqual([e[4] for e in _escritas(m.maquina)], [campos.u32(-100), 0])
+
+    def test_par_velocity_reescreve_so_o_que_toca(self):
+        m = self._m()
+        n80 = tr1000_serial.nota(80)
+        m.cache[(0, 0)][4 * 2 + 1] = n80                 # BD step 3, so o layer B
+        m.executar("pagina", "par")
+        m.executar("velocidade", 4)                      # VEL
+        self._pad(m, 0, 2)                               # 127
+        self.assertEqual(_escritas(m.maquina), [(118, 0, 0, 1249 + 9, tr1000_serial.nota(127))])
+
+    def test_par_alt_alterna_no_track_simples(self):
+        m = self._m()
+        m.cache[(0, 4)][0] = tr1000_serial.nota(80)      # RS step 1
+        m.executar("pagina", "par")
+        m.executar("mudo", 4)                            # RS
+        m.executar("velocidade", 5)                      # ALT
+        self._pad(m, 3, 0)
+        self.assertEqual(_escritas(m.maquina)[-1][4], tr1000_serial.nota(80) | campos.BIT_ALT)
+
+    def test_par_mostra_a_barra(self):
+        m = self._m()
+        m.cache[(0, 0)][0] = tr1000_serial.nota(80)
+        m.cache[(0, 0)][64] = 57                         # PROB 57 %: o 5o nivel
+        m.pagina = "par"
+        acesos = [m.cor_par(l, 0) != (0, 0, 0) for l in range(8)]
+        self.assertEqual(acesos, [False, False, False, True, True, True, True, True])
+
+    def test_perf_mute_chain_last_scale(self):
+        m = self._m()
+        m.executar("pagina", "perf")
+        m.maquina.valores[(3, 0, 0, 112 + 12)] = 0
+        self._pad(m, motor.PERF_MUTE, 3)                 # HT
+        self._pad(m, motor.PERF_CHAIN, 1)                # so a B
+        self._pad(m, motor.PERF_CHAIN, 1, solta=True)
+        self._pad(m, motor.PERF_LAST, 11)                # LAST = 12
+        self._pad(m, motor.PERF_SCALE, 3)                # 32nd
+        cab = 988
+        self.assertEqual(_escritas(m.maquina), [
+            (3, 0, 0, 112 + 12, 1 << 3),
+            (116, 0, 0, cab + campos.CAB_VARIACOES, 2),
+            (116, 0, 0, cab + campos.CAB_LAST_VAR, 11),
+            (116, 0, 0, cab + campos.CAB_SCALE, 3)])
+
+    def test_perf_chain_segurando_soma(self):
+        m = self._m()
+        m.executar("pagina", "perf")
+        self._pad(m, motor.PERF_CHAIN, 0)                # segura A (so a A)
+        self._pad(m, motor.PERF_CHAIN, 2)                # e toca C: A+C
+        self.assertEqual(_escritas(m.maquina)[-1][4], 0b101)
+
+    def test_perf_loop_segura_e_solta(self):
+        m = self._m()
+        m.executar("pagina", "perf")
+        modo = 112 + campos.B3_LOOP
+        m.maquina.valores[(3, 0, 0, modo)] = 0
+        self._pad(m, motor.PERF_LOOP, 5)
+        self._pad(m, motor.PERF_LOOP, 5, solta=True)
+        self.assertEqual(_escritas(m.maquina), [(3, 0, 0, modo, 1), (3, 0, 0, 112 + 151 + 5, 1),
+                                                (3, 0, 0, 112 + 151 + 5, 0), (3, 0, 0, modo, 0)])
+
+    def test_trocar_de_pagina_solta_o_loop(self):
+        m = self._m()
+        m.executar("pagina", "perf")
+        m.maquina.valores[(3, 0, 0, 112 + campos.B3_LOOP)] = 0
+        self._pad(m, motor.PERF_LOOP, 2)
+        m.executar("pagina", "perf")                     # volta aos steps segurando
+        self.assertEqual(_escritas(m.maquina)[-2:], [(3, 0, 0, 112 + 151 + 2, 0),
+                                                     (3, 0, 0, 112 + campos.B3_LOOP, 0)])
+        self.assertEqual(m.segurados, frozenset())
+
+    def test_rout_matriz_sc_e_chaves(self):
+        m = self._m()
+        m.executar("pagina", "rout")
+        self._pad(m, 2, 1)                               # SD -> ANALOG
+        self._pad(m, motor.ROUT_SC2, 2)                  # SC SOURCE 18 = RC
+        self._pad(m, motor.ROUT_CHAVES, 1)               # GATE
+        self._pad(m, motor.ROUT_CHAVES, 4)               # HLD MODE STEP
+        self.assertEqual(_escritas(m.maquina), [(13, 0, 1, 559, 2), (12, 0, 0, 546, 18),
+                                                (12, 0, 0, 550, 1), (12, 0, 0, 553, 1)])
+        self.assertEqual(m.cor_rout(2, 1), motor.COR_ROTA[2])
+
+    def test_niveis_de_vel_sao_as_velocidades_da_borda(self):
+        self.assertEqual(campos.NIVEIS_PAR["vel"], tuple(reversed(motor.VELOCIDADES)))
+
+    def test_off_solta_o_loop_segurado_no_launchpad(self):
+        m = self._m()
+        m.executar("pagina", "perf")
+        modo = 112 + campos.B3_LOOP
+        m.maquina.valores[(3, 0, 0, modo)] = 0
+        self._pad(m, motor.PERF_LOOP, 5)
+        m.maquina.recebido.clear()
+        m.soltar_maquina()
+        self.assertEqual(_escritas(m.maquina), [(3, 0, 0, 112 + 151 + 5, 0), (3, 0, 0, modo, 0)])
+
+    def test_last_nao_reescreve_o_first(self):
+        m = self._m()
+        m.executar("pagina", "perf")
+        self._pad(m, motor.PERF_LAST, 9)
+        self.assertEqual(_escritas(m.maquina), [(116, 0, 0, 988 + campos.CAB_LAST_VAR, 9)])
+
+    def test_chain_soma_sobre_a_mascara_fresca(self):
+        m = self._m()
+        m.executar("pagina", "perf")
+        m.maquina.valores[(116, 0, 0, 988 + campos.CAB_VARIACOES)] = 0b111   # o painel: A+B+C
+        self._pad(m, motor.PERF_CHAIN, 0)                # segura A (escreve so A)
+        m.maquina.valores[(116, 0, 0, 988 + campos.CAB_VARIACOES)] = 0b111   # painel de novo
+        self._pad(m, motor.PERF_CHAIN, 3)                # + D
+        self.assertEqual(_escritas(m.maquina)[-1][4], 0b1111)
+
+    def test_rout_le_so_o_que_mostra(self):
+        m = self._m()
+        lidos = []
+        orig = m._ler
+        m._ler = lambda *a: (lidos.append(a), orig(*a))[1]
+        m.ler_kit(motor.IDS_ROUT)
+        self.assertLessEqual(len(lidos), len(motor.IDS_ROUT))
+
+    def test_steps_continua_igual(self):
+        m = self._m()
+        self._pad(m, 0, 0)
+        self.assertEqual([e[2:4] for e in _escritas(m.maquina)], [(0, 1249), (0, 1250)])
+
+
 class TesteEmbalagem(unittest.TestCase):
     def test_post_merge_so_atualiza_o_que_a_copia_leva(self):
         import instalar_agente as ia

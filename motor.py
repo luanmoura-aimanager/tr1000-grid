@@ -23,6 +23,9 @@ O playhead (fase 2b, F3 de 12/10/2026): os pulsos por step vem da Scale do
 cabecalho, e ele da a volta no FIRST/LAST da variacao mostrada; um track com
 FIRST/LAST proprio anda sozinho (polimetria).
 
+As paginas do layout A (fase 2d): PAR (96), PERF (97) e ROUT (98) no topo do
+direito; o mesmo botao volta para os steps.
+
 O que NAO faz ainda (documentado na REFERENCIA):
   - saber qual variacao esta TOCANDO (nao ha de onde ler): o playhead anda
     sobre a variacao mostrada
@@ -108,12 +111,38 @@ for _cc, _acao in ((91, ("banco", 1)),          # ▲ RS·HC
                    (92, ("banco", 2)),          # ▼ CC·RC
                    (93, ("layer", "AB")),
                    (94, ("layer", "A")),
-                   (95, ("layer", "B"))):
+                   (95, ("layer", "B")),
+                   (96, ("pagina", "par")),
+                   (97, ("pagina", "perf")),
+                   (98, ("pagina", "rout"))):
     BOTOES[("D", _cc)] = _acao                  # topo direito
 del _i, _cc, _acao
 
 
 bloco_de_steps = ts.bloco_de_steps
+
+
+# As paginas do layout A (fase 2d; desenho no artefato da REFERENCIA 7.7). O
+# mesmo botao volta para os steps. Tudo o que elas escrevem chama as MESMAS
+# acoes da tela - o mesmo portao.
+PAGINAS = ("steps", "par", "perf", "rout")
+# PERF: a linha de cada coisa
+PERF_MUTE, PERF_CHAIN, PERF_LOOP, PERF_LAST, PERF_SCALE = 0, 1, 2, 3, 4
+PERF_FILLS = (12, 13)                       # colunas do FILL 1 e 2, na linha do mute
+# ROUT: as 13 fontes da Routing Matrix, na ordem da tela
+FONTES_ROTA = ("bd", "sd", "lt", "ht", "rs", "hc", "ch", "oh", "cc", "rc", "rvb", "dly", "ext")
+ROUT_SC1, ROUT_SC2, ROUT_CHAVES = 4, 5, 7   # SC SOURCE em duas linhas; POLARITY e HLD MODE
+ROUT_POLARITY, ROUT_HLD = (0, 1), (3, 4)    # colunas
+# o que a pagina le do kit (e so isso, a cada 2 s: o kit inteiro e ~440 pedidos)
+IDS_ROUT = tuple(f"rota.{f}" for f in FONTES_ROTA) + ("sc.source", "sc.polarity", "sc.hld_mode")
+# as cores das paginas (RGB 0..127)
+COR_PAR = {"prob": (127, 50, 0), "sub": (0, 80, 127), "cycle": (110, 100, 0),
+           "start": (110, 0, 80), "vel": (127, 0, 0), "alt": (80, 0, 127)}
+COR_ROTA = ((60, 60, 60), (127, 50, 0), (0, 90, 110))      # THROUGH, MASTER, ANALOG
+
+
+def _fraca(cor, f=0.12):
+    return tuple(int(c * f) for c in cor)
 
 
 def indice_do_slot(step, slot):
@@ -138,6 +167,10 @@ class Motor:
     pps_step = PULSOS_P_STEP                    # pulsos do step atual (a Scale dele)
     n_parado = -1                               # o step do STOP, para o CONTINUE
     tocando = False
+    pagina = "steps"                            # PAGINAS
+    par_track = 0                               # o track da pagina PAR
+    par_param = 0                               # campos.PAR_PARAMS
+    segurados = frozenset()                     # (linha, step) segurados na pagina
     estilo_standby = ESTILO_CHUVA
     ondas = ()                                  # as ondas no ar (standby)
     onda_suja = False                           # ha um quadro de onda para apagar
@@ -277,7 +310,12 @@ class Motor:
 
     def soltar_maquina(self):
         """Fecha a serial e as portas MIDI da TR-1000; os Launchpads e as
-        controladoras ficam (o standby usa os Launchpads)."""
+        controladoras ficam (o standby usa os Launchpads). Antes, solta os
+        steps de STEP LOOP segurados: o note_off que viria depois e ignorado
+        fora do ON, e a maquina ficaria presa no loop (revisao do PR #11)."""
+        if self.conexao is not None:
+            for step in sorted(self.loop_segurados):
+                self.definir_loop(False, step)
         if self.conexao is not None:
             self.conexao.__exit__(None, None, None)
             self.conexao = None
@@ -296,6 +334,7 @@ class Motor:
         # o STEP LOOP segurado e da sessao que acabou: soltar um dedo depois
         # nao pode devolver um [150] velho a outro pattern (revisao do PR #10)
         self.loop_antes, self.loop_segurados = None, frozenset()
+        self.segurados = frozenset()
         self._avisar_passo()
 
     def abrir_clock(self):
@@ -349,7 +388,7 @@ class Motor:
             self.kit_valores = {}                    # outro kit: lido de novo
             self.proximo_kit = 0.0
         self.x_kit = x_kit
-        mudo_antes = self.mudo_mascara
+        mudo_antes, cab_antes = self.mudo_mascara, self.cab
         self.b3, self.cab, self.acc_mascara = b3, cab, acc
         self.mudo_mascara = b3[campos.B3_MUTE]
         trocou = x != self.x_pattern
@@ -367,6 +406,8 @@ class Motor:
             return True
         if self.mudo_mascara != mudo_antes:
             self.pintar_botoes()                     # o mute mudou no painel
+        if self.pagina == "perf" and (cab != cab_antes or self.mudo_mascara != mudo_antes):
+            self.pintar()                            # chain, LAST, Scale, mute no painel
         return False
 
     # ── o que um step e ─────────────────────────────────────
@@ -444,12 +485,24 @@ class Motor:
                         return
                 self.variacao = arg
         elif tipo == "velocidade":
-            self.vel_idx = arg
+            if self.pagina == "par":                 # a borda direita escolhe o parametro
+                if arg < len(campos.PAR_PARAMS):
+                    self.par_param = arg
+            else:
+                self.vel_idx = arg
         elif tipo == "banco":
             self.banco = arg
+        elif tipo == "pagina":
+            self._soltar_segurados()                 # um step do loop nao fica preso
+            self.pagina = "steps" if self.pagina == arg else arg
+            if self.pagina == "rout":
+                self.proximo_kit = 0.0               # le o kit ja
         elif tipo == "mudo":
-            self.alternar_mudo(self.track_da_linha(arg))
-            return
+            if self.pagina == "par":                 # a coluna lateral escolhe o track
+                self.par_track = self.track_da_linha(arg)
+            else:
+                self.alternar_mudo(self.track_da_linha(arg))
+                return
         elif tipo == "layer":
             self.modo_layer = arg
         self.pintar()
@@ -483,6 +536,30 @@ class Motor:
                               (95, "B", lp.COR_B)):
             self._luz(d, cc, lp.cor_borda(cor, modo == self.modo_layer) if ligado
                       else (0, 0, 0))
+        for cc, pag in ((96, "par"), (97, "perf"), (98, "rout")):
+            self._luz(d, cc, lp.cor_borda(lp.COR_ATIVO, pag == self.pagina) if ligado
+                      else (0, 0, 0))
+        if ligado and self.pagina == "par":
+            # a coluna lateral: o track escolhido; a borda direita: o parametro
+            for linha in range(LINHAS):
+                self._luz(e, lp.FUNC_CCS[-1 - linha],
+                          lp.cor_borda(lp.COR_ATIVO, self.track_da_linha(linha) == self.par_track))
+            for i, cc in enumerate(lp.CENA_CCS):
+                if i < len(campos.PAR_PARAMS):
+                    cor = COR_PAR[campos.PAR_PARAMS[i]]
+                    self._luz(d, cc, cor if i == self.par_param else _fraca(cor, 0.2))
+                else:
+                    self._luz(d, cc, (0, 0, 0))
+
+    def cor_pad(self, linha, step):
+        """A cor de um pad na pagina atual."""
+        if self.pagina == "par":
+            return self.cor_par(linha, step)
+        if self.pagina == "perf":
+            return self.cor_perf(linha, step)
+        if self.pagina == "rout":
+            return self.cor_rout(linha, step)
+        return self.cor_do_step(linha, step)
 
     def pintar_coluna(self, step):
         if step < 0 or self.modo_geral != MODO_ON or not self.lp_out:
@@ -490,7 +567,7 @@ class Motor:
         dev = "E" if step < 8 else "D"
         col = step if step < 8 else step - 8
         lp.enviar_cores(self.lp_out[dev],
-                        [(self.nota_de(dev, l, col), self.cor_do_step(l, step))
+                        [(self.nota_de(dev, l, col), self.cor_pad(l, step))
                          for l in range(LINHAS)])
 
     def pintar(self):
@@ -503,7 +580,7 @@ class Motor:
                 pares = [(self.nota_de(dev, l, c), lp.COR_OFF)
                          for l in range(LINHAS) for c in range(8)]
             else:
-                pares = [(self.nota_de(dev, l, c), self.cor_do_step(l, off + c))
+                pares = [(self.nota_de(dev, l, c), self.cor_pad(l, off + c))
                          for l in range(LINHAS) for c in range(8)]
             lp.enviar_cores(self.lp_out[dev], pares)
 
@@ -547,7 +624,7 @@ class Motor:
         else:
             self.passo, self.passos_trk = self.calcular_passos(n)
         depois = {self.passo} | set(self.passos_trk or [])
-        if antes != depois:
+        if antes != depois and self.pagina == "steps":
             for c in sorted((antes | depois) - {-1}):
                 self.pintar_coluna(c)
         self._avisar_passo()
@@ -611,6 +688,188 @@ class Motor:
         if n != self.n_steps:
             self.mover_playhead(n)
         return 0
+
+    # ── as paginas PAR / PERF / ROUT ────────────────────────
+    def valor_par(self, nome, tr, step):
+        """O valor do parametro `nome` no step, do cache (None sem leitura)."""
+        cache = self.cache.get((self.variacao, tr))
+        if cache is None:
+            return None
+        if nome == "vel":
+            for v in self.slots(tr, step)[:2]:
+                if ts.slot_toca(v):
+                    return ts.velocidade(v & ~campos.BIT_ALT)
+            return None
+        pos, mn, _mx = campos.CAMPOS_STEP[nome]
+        v = cache[pos + step]
+        return campos.com_sinal(v) if mn < 0 else v
+
+    def cor_par(self, linha, step):
+        """16 colunas x 8 niveis: a barra (ou o nivel, nos de escolha) do
+        parametro do track escolhido. Sem nota no step, a cor fraca."""
+        tr = self.par_track
+        nome = campos.PAR_PARAMS[self.par_param]
+        nivel = LINHAS - 1 - linha                       # de baixo para cima
+        s = self.slots(tr, step)
+        toca = ts.slot_toca(s[0]) or ts.slot_toca(s[1])
+        cor = COR_PAR[nome]
+        if nome == "alt":
+            if tr < TRACKS_LAYER:
+                return (0, 0, 0)                         # layer A/B nao tem ALT
+            return cor if campos.eh_alt(s[0]) else (_fraca(cor) if toca else (0, 0, 0))
+        n = campos.nivel_par(nome, self.valor_par(nome, tr, step))
+        aceso = nivel == n if nome in campos.PAR_ESCOLHA else 0 <= nivel <= n
+        if not aceso:
+            return (2, 2, 2) if step % lp.STEPS_TEMPO == 0 and nivel == 0 else (0, 0, 0)
+        return cor if toca else _fraca(cor, 0.3)
+
+    def definir_vel(self, tr, step, vel):
+        """A velocity de um step pela pagina PAR: reescreve os slots que tocam
+        (o ALT fica); num step vazio, liga os slots-alvo com ela."""
+        if self.x_pattern is None:
+            return
+        cache = self.cache.get((self.variacao, tr))
+        s = self.slots(tr, step)
+        alvo = [i for i in (0, 1) if ts.slot_toca(s[i])] or self.slots_alvo(tr)
+        for slot in alvo:
+            alt = s[slot] & campos.BIT_ALT if ts.slot_toca(s[slot]) else 0
+            novo = ts.nota(vel) | alt
+            i = indice_do_slot(step, slot)
+            if not self._escrever(bloco_de_steps(self.variacao), self.x_pattern, tr, i, novo):
+                # o estado do slot na maquina e incerto: rele o track, como o
+                # toque faz (revisao do PR #11)
+                try:
+                    self.cache[(self.variacao, tr)] = self._ler(
+                        bloco_de_steps(self.variacao), self.x_pattern, tr, ts.INDICE_STEPS, N_SLOTS)
+                except ERROS_DE_LEITURA:
+                    pass
+                return
+            if cache is not None:
+                cache[i - ts.INDICE_STEPS] = novo
+
+    def tocar_par(self, linha, step):
+        tr = self.par_track
+        nome = campos.PAR_PARAMS[self.par_param]
+        if nome == "alt":
+            self.definir_alt(tr, step, not campos.eh_alt(self.slots(tr, step)[0]))
+            return                                       # o definir_alt ja repinta
+        else:
+            valor = campos.NIVEIS_PAR[nome][LINHAS - 1 - linha]
+            if nome == "vel":
+                self.definir_vel(tr, step, valor)
+            else:
+                self.definir_campo_step(tr, step, nome, valor)
+        self.pintar_coluna(step)
+
+    def _c_var(self, pos, padrao):
+        return self._c(pos + self.variacao, padrao)
+
+    def cor_perf(self, linha, step):
+        if linha == PERF_MUTE:
+            if step < N_TRACKS:
+                return (lp.COR_MUDO if self.mudo_mascara >> step & 1
+                        else _fraca(lp.COR_SOANDO, 0.25))
+            if step in PERF_FILLS:
+                n = PERF_FILLS.index(step)
+                return (127, 127, 127) if self._c(campos.CAB_FILL, 0) == n else (12, 12, 12)
+            return (0, 0, 0)
+        if linha == PERF_CHAIN and step < 8:
+            na_chain = self._c(campos.CAB_VARIACOES, 1) >> step & 1
+            return (0, 40, 127) if na_chain else (0, 4, 14)
+        if linha == PERF_LOOP:                           # da tela tambem (loop_segurados)
+            return (127, 127, 127) if step in self.loop_segurados else (6, 6, 6)
+        if linha == PERF_LAST:
+            first = self._c_var(campos.CAB_FIRST_VAR, 0)
+            last = self._c_var(campos.CAB_LAST_VAR, PASSOS - 1)
+            if step == last:
+                return (127, 60, 0)
+            return (30, 12, 0) if first <= step < last else (0, 0, 0)
+        if linha == PERF_SCALE and step < len(campos.SCALES):
+            return (127, 127, 127) if self._c(campos.CAB_SCALE, 2) == step else (12, 12, 12)
+        return (0, 0, 0)
+
+    def tocar_perf(self, linha, step):
+        if linha == PERF_MUTE:
+            if step < N_TRACKS:
+                self.alternar_mudo(step)
+            elif step in PERF_FILLS:
+                self.definir_fill(PERF_FILLS.index(step))
+        elif linha == PERF_CHAIN and step < 8:
+            # segurando outra variacao: soma/tira da chain (como no painel);
+            # sozinha: toca so ela
+            outra = any(l == PERF_CHAIN for l, _s in self.segurados)
+            nova = 1 << step
+            if outra:
+                # a mascara FRESCA: o painel pode ter mudado a chain (o mesmo
+                # cuidado do alternar_mudo; revisao do PR #11)
+                try:
+                    nova ^= self._ler(campos.CAB, self.x_pattern, 0,
+                                      campos.INI_CAB + campos.CAB_VARIACOES, 1)[0]
+                except ERROS_DE_LEITURA as e:
+                    self.log(f"(!) nao li a chain: {e}")
+                    nova = 0
+            if nova:
+                self.definir_variacoes(nova)
+            self.segurados = self.segurados | {(linha, step)}
+        elif linha == PERF_LOOP:
+            self.segurados = self.segurados | {(linha, step)}
+            self.definir_loop(True, step)
+        elif linha == PERF_LAST:
+            if step >= self._c_var(campos.CAB_FIRST_VAR, 0):   # FIRST depois do LAST: nao
+                self._cab(campos.CAB_LAST_VAR + self.variacao, step)    # so o LAST (revisao do PR #11)
+        elif linha == PERF_SCALE and step < len(campos.SCALES):
+            self.definir_scale(step)
+        self.pintar()
+
+    def alvo_rout(self, linha, step):
+        """(id do parametro, valor) do pad da pagina ROUT, ou None - um lugar
+        so para o desenho da pagina (revisao do PR #11)."""
+        if linha < len(COR_ROTA) and step < len(FONTES_ROTA):
+            return f"rota.{FONTES_ROTA[step]}", linha
+        if linha in (ROUT_SC1, ROUT_SC2):
+            n = step + (16 if linha == ROUT_SC2 else 0)
+            return ("sc.source", n) if n < len(parametros.SC_FONTES) else None
+        if linha == ROUT_CHAVES:
+            for cols, id in ((ROUT_POLARITY, "sc.polarity"), (ROUT_HLD, "sc.hld_mode")):
+                if step in cols:
+                    return id, cols.index(step)
+        return None
+
+    def cor_rout(self, linha, step):
+        alvo = self.alvo_rout(linha, step)
+        if alvo is None:
+            return (0, 0, 0)
+        id, valor = alvo
+        aceso = self.kit_valores.get(id) == valor
+        if id.startswith("rota."):
+            return COR_ROTA[linha] if aceso else _fraca(COR_ROTA[linha], 0.1)
+        if id == "sc.source":
+            return (127, 127, 127) if aceso else (10, 10, 10)
+        return (127, 60, 0) if aceso else (14, 6, 0)
+
+    def tocar_rout(self, linha, step):
+        alvo = self.alvo_rout(linha, step)
+        if alvo is not None:
+            self.definir_param(*alvo)
+        self.pintar()
+
+    def tocar_pad(self, linha, step):
+        {"par": self.tocar_par, "perf": self.tocar_perf,
+         "rout": self.tocar_rout}[self.pagina](linha, step)
+
+    def _soltar_segurados(self):
+        for linha, step in sorted(self.segurados):
+            if linha == PERF_LOOP and self.pagina == "perf":
+                self.definir_loop(False, step)
+        self.segurados = frozenset()
+
+    def soltar_pad(self, linha, step):
+        if (linha, step) not in self.segurados:
+            return
+        self.segurados = self.segurados - {(linha, step)}
+        if self.pagina == "perf" and linha == PERF_LOOP:
+            self.definir_loop(False, step)
+            self.pintar()
 
     # ── o que a tela (e o layout A) escreve ─────────────────
     # Tudo passa pela conexao e pelo portao (campos.py / parametros.py). Uma
@@ -776,13 +1035,14 @@ class Motor:
         return (list(parametros.TABELA) + list(parametros.POR_TIPO)
                 + list(parametros.EXTRAS))
 
-    def ler_kit(self):
-        """Todos os parametros da tabela, um pedido cada (~0,25 ms cada: uma
-        foto de 439 levou 0,1 s). Os dependentes de type no type atual."""
+    def ler_kit(self, ids=None):
+        """Todos os parametros da tabela (ou so `ids`), um pedido cada (~0,25 ms
+        cada: uma foto de 439 levou 0,1 s). Os dependentes de type no type
+        atual. So `ids`: atualiza esses e mantem o resto."""
         if self.conexao is None or self.x_pattern is None:
             return
-        novos, sels = {}, {}
-        for id in self.ids_do_kit():
+        novos, sels = ({}, {}) if ids is None else (dict(self.kit_valores), {})
+        for id in (self.ids_do_kit() if ids is None else ids):
             try:
                 e = self._resolver(id, sels)
                 if e is not None:
@@ -796,7 +1056,7 @@ class Motor:
                 continue
         # os seletores (o SYNC do LFO, do FLANGER e do PHASER): a tela usa para
         # dar o nome certo ao knob que depende deles
-        if self.x_kit is not None:
+        if self.x_kit is not None and ids is None:
             for sid, p in parametros.SELETORES.items():
                 if sid not in novos:
                     try:
@@ -962,6 +1222,7 @@ class Motor:
                 "tempo": (self.b3[ts.OFF_TEMPO_ATUAL] / 100) if self.b3 else None,
                 "variacao": v, "velocidade_idx": self.vel_idx, "modo_layer": self.modo_layer,
                 "banco": self.banco, "passo": self.passo, "tocando": self.tocando,
+                "pagina": self.pagina,
                 "passos_trk": list(self.passos_trk) if self.passos_trk else None,
                 "loop_segurados": sorted(self.loop_segurados),
                 "ultima_sessao": self.ultima_sessao,
@@ -1087,18 +1348,26 @@ class Motor:
                     if acao and self.modo_geral == MODO_ON:
                         self.executar(*acao)
                     continue
-                if msg.type != "note_on" or msg.velocity == 0:
+                if msg.type not in ("note_on", "note_off"):
                     continue
+                solto = msg.type == "note_off" or msg.velocity == 0
                 pos = self._decodificar(dev, msg.note)
                 if pos is None:
                     continue
                 linha, col = pos
+                if solto:
+                    if self.modo_geral == MODO_ON and self.pagina != "steps":
+                        self.soltar_pad(linha, off + col)
+                    continue
                 if self.modo_geral == MODO_STANDBY:
                     # o toque entra no estilo da vez (um dedo nao joga chuva
                     # no meio do ambiente)
                     self._nova_onda(linha, off + col, self.estilo_standby)
                     continue
                 if self.modo_geral != MODO_ON:
+                    continue
+                if self.pagina != "steps":
+                    self.tocar_pad(linha, off + col)
                     continue
                 self.alternar(linha, off + col)
                 self.pintar_coluna(off + col)           # so a coluna mudou
@@ -1121,10 +1390,13 @@ class Motor:
                     self.log(f"(!) releitura falhou: {e}")
             if self.modo_geral == MODO_ON:
                 self._andar_foto(agora)
-            if (self.modo_geral == MODO_ON and self.quer_kit
+            if (self.modo_geral == MODO_ON and (self.quer_kit or self.pagina == "rout")
                     and agora >= self.proximo_kit):
                 self.proximo_kit = agora + self.LER_KIT_A_CADA
-                self.ler_kit()
+                antes = dict(self.kit_valores)
+                self.ler_kit(None if self.quer_kit else IDS_ROUT)
+                if self.pagina == "rout" and self.kit_valores != antes:
+                    self.pintar()                    # o App/painel mexeu na rota
 
     def fechar(self):
         with self.lock:

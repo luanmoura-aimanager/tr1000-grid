@@ -916,6 +916,36 @@ O TR-8S Controller, para a TR-1000:
 **O que a tela escreve:** o mesmo portão de sempre, `campos.py` + `parametros.py`. O accent
 é só leitura, porque é feito no painel. O roteiro é o `ROTEIRO-F3.md`.
 
+**Fase 2d (12/10/2026): as páginas do Launchpad.** O botão do topo direito abre a página, e
+o mesmo botão volta aos steps. Tudo chama as mesmas ações da tela (o mesmo portão).
+- **PAR (96):**
+  - a coluna lateral escolhe o track (segue o banco); a borda direita escolhe PROB, SUB,
+    CYCLE, START, VEL ou ALT;
+  - os pads são 16 colunas × 8 níveis. O toque põe o valor do nível no step (tabela
+    `campos.NIVEIS_PAR`; o START tem o 0 no 4º nível);
+  - VEL reescreve só os slots que tocam (o ALT fica). ALT alterna, só nos tracks simples.
+- **PERF (97):**
+
+  | linha | o que faz |
+  |---|---|
+  | 1 | MUTE dos 10, e FILL 1/2 nas colunas 13–14 |
+  | 2 | chain A–H: tocar = só ela; segurando outra, soma ou tira |
+  | 3 | STEP LOOP enquanto o pad está segurado |
+  | 4 | LAST da variação |
+  | 5 | Scale |
+
+  Trocar de página solta os steps de loop segurados.
+- **ROUT (98):**
+
+  | linhas | o que faz |
+  |---|---|
+  | 1–3 | THROUGH / MASTER / ANALOG das 13 fontes |
+  | 5–6 | SC SOURCE (19) |
+  | 8 | POLARITY (colunas 1–2) e HLD MODE (colunas 4–5) |
+
+  O kit é relido a cada 2 s com a página aberta.
+- Não testado em hardware até o `ROTEIRO-F4.md`.
+
 **Fase 2c (12/10/2026): standby.**
 - `chuva` e `ambiente` soltam **só a serial**: o App da Roland abre, e os Launchpads
   ficam com as ondas do `lp_tr8s.py` (as mesmas constantes `ONDA_*` e
