@@ -29,7 +29,7 @@ O que NAO faz ainda (documentado na REFERENCIA):
   - linhas de ACC e TRG: o accent e pelo painel; o TRG ficou de fora
   - gravar: o WRITE continua no painel (criterio 6 adiado)
 """
-import json, math, os, queue, random, threading, time
+import colorsys, json, math, os, queue, random, threading, time
 
 import campos
 import conexao_serial as cs
@@ -264,6 +264,8 @@ class Motor:
                 self.reler(forcar=True)
             except (cs.ErroConexao, PermissionError, OSError) as e:
                 self.log(f"(!) nao deu para ligar: {e}")
+                # a serial pode ter aberto antes do erro: solta (revisao do PR #10)
+                self.soltar_maquina()
                 self.modo_geral = MODO_OFF
                 self.pintar()
                 return False
@@ -291,6 +293,9 @@ class Motor:
         self.b3 = self.cab = None                    # sem maquina, nada velho na tela
         self.cache.clear()
         self.foto_motivo = self.foto_passos = None
+        # o STEP LOOP segurado e da sessao que acabou: soltar um dedo depois
+        # nao pode devolver um [150] velho a outro pattern (revisao do PR #10)
+        self.loop_antes, self.loop_segurados = None, frozenset()
         self._avisar_passo()
 
     def abrir_clock(self):
@@ -1002,11 +1007,7 @@ class Motor:
     # ── a ondinha do standby (port do lp_tr8s.py) ───────────
     @staticmethod
     def _cor_aleatoria():
-        h = random.random() * 6.0
-        i, f = int(h), h - int(h)
-        r, g, b = [(1, f, 0), (1 - f, 1, 0), (0, 1, f),
-                   (0, 1 - f, 1), (f, 0, 1), (1, 0, 1 - f)][i % 6]
-        return (r * 127, g * 127, b * 127)
+        return tuple(c * 127 for c in colorsys.hsv_to_rgb(random.random(), 1.0, 1.0))
 
     def _nova_onda(self, lin, col, estilo=None, agora=None):
         """Uma onda no grid, com os parametros dela: sem estilo, os ONDA_*
@@ -1036,18 +1037,20 @@ class Motor:
         self.ondas = [o for o in self.ondas if (agora - o["t0"]) * o["vel"] < o["alc"]]
         if not self.ondas:
             return None
+        # o raio e o desbotamento de cada onda, uma vez por quadro (revisao do PR #10)
+        ondas = [(o, (agora - o["t0"]) * o["vel"]) for o in self.ondas]
+        ondas = [(o, vt, 1.0 - vt / o["alc"]) for o, vt in ondas]
         quadro = {}
         for dev, off in (("E", 0), ("D", 8)):
             pares = []
             for l in range(LINHAS):
                 for c in range(8):
                     step, r, g, b = off + c, 0.0, 0.0, 0.0
-                    for o in self.ondas:
-                        vt = (agora - o["t0"]) * o["vel"]
+                    for o, vt, desbota in ondas:
                         anel = 1.0 - abs(math.hypot(l - o["lin"], step - o["col"]) - vt) / o["larg"]
                         if anel <= 0:
                             continue
-                        k = anel * (1.0 - vt / o["alc"])
+                        k = anel * desbota
                         r, g, b = r + o["rgb"][0] * k, g + o["rgb"][1] * k, b + o["rgb"][2] * k
                     pares.append((self.nota_de(dev, l, c),
                                   (int(min(127, r)), int(min(127, g)), int(min(127, b)))))

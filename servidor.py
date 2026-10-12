@@ -90,6 +90,9 @@ class Host:
         self.thread = None
         self.rodando = False
         self.ultimo = {}
+        # um clique de modo por vez: dois botoes seguidos (OFF e chuva) nao
+        # sobem dois motores nem leem um motor ja derrubado (revisao do PR #10)
+        self.lock_modo = threading.Lock()
         # o playhead para o /passo: o motor avisa a cada step (F3, 12/10/2026:
         # o polling de 250 ms pulava steps a 128 BPM)
         self.cond_passo = threading.Condition()
@@ -114,18 +117,21 @@ class Host:
         (serial, Launchpads, controladoras - outro programa pode usar os
         Launchpads). Chuva/ambiente soltam so a serial: o App da Roland abre,
         e os Launchpads fazem ondas."""
-        if modo == "on":
-            self.ligar()
-        elif modo == "off":
-            self.desligar()
-        elif modo in M.STANDBY_ESTILOS:
-            self._subir_motor()
-            if not self.motor.lp_out:
-                self.log("(!) standby precisa dos Launchpads, e eles nao abriram")
-                return
-            self.motor.enfileirar(self.motor.definir_modo, M.MODO_STANDBY, modo)
-        else:
-            raise ValueError(f"modo {modo!r}")
+        with self.lock_modo:
+            if modo == "on":
+                self.ligar()
+            elif modo == "off":
+                self.desligar()
+            elif modo in M.STANDBY_ESTILOS:
+                if self.motor is None and launchpad.carregar_layout_resolvido()[0] is None:
+                    raise RuntimeError("standby precisa dos Launchpads, e o layout deles nao "
+                                       "resolveu (estao na USB? rode o learn)")
+                self._subir_motor()
+                if not self.motor.lp_out:
+                    raise RuntimeError("standby precisa dos Launchpads, e eles nao abriram")
+                self.motor.enfileirar(self.motor.definir_modo, M.MODO_STANDBY, modo)
+            else:
+                raise ValueError(f"modo {modo!r}")
 
     def ligar(self):
         self._subir_motor()
@@ -151,6 +157,14 @@ class Host:
     def _ligar_motor(self):
         if not self.motor.definir_modo(M.MODO_ON):
             self.log("(!) a TR-1000 nao ligou - veja a linha acima (App da Roland aberto?)")
+            # ON que falhou solta TUDO, como o OFF: senao o motor ficava vivo
+            # segurando Launchpads e controladoras com a tela dizendo OFF
+            # (revisao do PR #10). Noutra thread: esta e a do proprio motor
+            threading.Thread(target=self._desligar_com_trava, daemon=True).start()
+
+    def _desligar_com_trava(self):
+        with self.lock_modo:
+            self.desligar()
 
     def _laco(self):
         while self.rodando:
@@ -488,7 +502,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
             modo = corpo.get("modo")
             if modo not in MODOS:
                 return self._erro(f"modo desconhecido: {modo}")
-            HOST.definir_modo(modo)
+            try:
+                HOST.definir_modo(modo)
+            except RuntimeError as e:
+                HOST.log(f"(!) {e}")
+                return self._erro(str(e), 409)
             return self._responder(json.dumps({"ok": True}))
         if self.path != "/acao":
             return self._erro("nao encontrado", 404)

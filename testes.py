@@ -1780,8 +1780,10 @@ class TesteFase2b(unittest.TestCase):
         threading.Thread(target=srv.serve_forever, daemon=True).start()
         try:
             c = http.client.HTTPConnection("127.0.0.1", srv.server_port, timeout=3)
-            c.request("GET", "/passo", headers={"Host": "evil.com"})
-            self.assertEqual(c.getresponse().status, 403)
+            c.request("GET", "/passo", headers={"Host": "evil.com", "Connection": "close"})
+            r = c.getresponse()
+            r.read()
+            self.assertEqual(r.status, 403)
             c.close()
         finally:
             srv.shutdown()
@@ -2037,6 +2039,42 @@ class TesteStandby(unittest.TestCase):
         self.assertTrue(m.lp_out["E"].enviado and m.onda_suja)
         m._animar(50.0 + motor.ONDA_ALCANCE / motor.ONDA_VEL + 1)
         self.assertFalse(m.onda_suja)                    # o quadro final apagou
+
+    def test_on_que_falha_solta_a_serial(self):
+        m = motor_cru()
+        m.conexao = None
+        falsa = _MaquinaFalsa(calada=True)
+        orig = conexao_serial.ConexaoTR1000
+
+        class Quebra(orig):
+            def aperto(self):
+                raise conexao_serial.ErroConexao("sem resposta")
+        conexao_serial.ConexaoTR1000 = lambda: Quebra(porta=falsa)
+        try:
+            self.assertFalse(m.definir_modo(motor.MODO_ON))
+        finally:
+            conexao_serial.ConexaoTR1000 = orig
+        self.assertIsNone(m.conexao)
+        self.assertTrue(falsa.fechada)
+
+    def test_standby_esquece_o_step_loop_segurado(self):
+        m = motor_cru()
+        m.maquina.valores[(3, 0, 0, 112 + campos.B3_LOOP)] = 0
+        m.definir_loop(True, 4)
+        m.definir_modo(motor.MODO_STANDBY, "chuva")
+        self.assertEqual((m.loop_antes, m.loop_segurados), (None, frozenset()))
+
+    def test_standby_sem_launchpads_e_recusado(self):
+        import servidor, launchpad
+        h = servidor.Host()
+        orig = launchpad.carregar_layout_resolvido
+        launchpad.carregar_layout_resolvido = lambda: (None, [])
+        try:
+            with self.assertRaises(RuntimeError):
+                h.definir_modo("chuva")
+        finally:
+            launchpad.carregar_layout_resolvido = orig
+        self.assertIsNone(h.motor)                       # nao subiu motor nenhum
 
     def test_modos_da_tela(self):
         import servidor
