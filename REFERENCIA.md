@@ -784,6 +784,10 @@ qualquer um destes é ampliar a regra: **decisão do Luan, por grupo**.
 | step segurado no loop | `[151 + s]` | segurar o STEP 5 acendeu o `[155]` (também mudaram `[172]` = 84 e `[177]` = 1) |
 | tela/modo do painel | `[131]` | 0, 4, 7 conforme a tela; não é dado |
 
+**Abrir a Routing Matrix no App não lê nada novo** (captura `routin`, 10/10/2026, apagada em
+12/10 depois de conferida): nenhuma escrita, só o polling do bloco 3 e um `(13, 0, 9) [558]`
+(o DLY SND do RC), que o boot já lê. A página usa o que o App leu no boot.
+
 **Side chain e routing** (App escrevendo; `sidechain` e `routing-2`, 10/10/2026). O App foi
 visto escrevendo neles, então cabem na regra de hoje; mas nenhum knob nem página os usa
 ainda (PR D).

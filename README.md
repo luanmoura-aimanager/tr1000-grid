@@ -61,8 +61,11 @@ No Safari, abra `http://127.0.0.1:8734/` e use **Arquivo › Adicionar ao Dock**
 - **O ON** liga a TR-1000, os Launchpads (layout A) e as controladoras num processo só.
 - **O OFF** solta a serial para o TR-1000 App da Roland.
 - **Roteiros de teste:** `ROTEIRO-F3.md` (passou em 12/10) e `ROTEIRO-F4.md`.
-- **Depois de editar o código:** rode `instalar_agente.py` e `criar_app.py` de novo. Os dois
-  rodam uma cópia, porque o macOS não deixa ler `~/Documents`.
+- **Atualização:** o hook `post-merge` (ligado pelo `instalar_hooks.py`) atualiza sozinho a
+  cópia que o LaunchAgent roda, sempre que a `main` recebe um merge ou um pull. Se mudou
+  só `web/`, basta um Cmd+R. Se mudou um `.py`, o agente reinicia, e é preciso apertar ON
+  de novo. O `criar_app.py` só precisa rodar de novo para o `.app` do Desktop **sem** o
+  agente. Os dois rodam uma cópia, porque o macOS não deixa ler `~/Documents`.
 
 ## Uso (fase 1, o grid)
 

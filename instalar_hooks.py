@@ -14,6 +14,7 @@ por isso ele nao pode ser um hook.
 O que fica ligado:
   pre-commit  recusa commit direto na main
   pre-push    roda `python3 testes.py`; falhou, nao empurra
+  post-merge  atualiza o Controller instalado (o LaunchAgent), se o merge mexeu nele
 """
 import os
 import subprocess
@@ -21,7 +22,7 @@ import sys
 
 AQUI = os.path.dirname(os.path.abspath(__file__))
 PASTA = ".githooks"
-HOOKS = ("pre-commit", "pre-push")
+HOOKS = ("pre-commit", "pre-push", "post-merge")
 
 
 def _git(*args):
@@ -78,6 +79,7 @@ def instalar():
     print(f"hooks ligados: {PASTA}/{', '.join(HOOKS)}")
     print("  pre-commit  recusa commit direto na main")
     print("  pre-push    roda os testes de mesa")
+    print("  post-merge  atualiza o Controller instalado depois de um pull na main")
     print("Escapar de um deles, quando voce sabe: --no-verify")
     return 0
 

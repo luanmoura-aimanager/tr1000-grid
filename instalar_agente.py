@@ -7,6 +7,9 @@ o app do Dock abrir sozinho. Port do instalar_agente.py do tr8s-grid.
     python3 instalar_agente.py --so-web   so copia web/ (Cmd+R na pagina basta)
     python3 instalar_agente.py --remover  desliga e desinstala
     python3 instalar_agente.py --estado   diz se esta rodando
+    python3 instalar_agente.py --se-mudou ORIG HEAD
+                                          o hook post-merge: atualiza a copia so
+                                          se o merge mexeu no que ela leva
 
 POR QUE E SEGURO DEIXAR NO AR: o servidor NAO abre porta nenhuma sozinho. O
 Motor (serial, Launchpads, controladoras) so nasce quando alguem aperta ON na
@@ -18,7 +21,8 @@ um LaunchAgent ler nada de la ("Operation not permitted", medido no tr8s).
 Entao os scripts, a pagina, o mapa das controladoras e as CAPTURAS DE
 REFERENCIA do portao de leitura (sem elas nenhuma leitura e permitida) vao
 para ~/Library/Application Support/tr1000-grid/. Depois de editar o codigo,
-rodar este script de novo.
+rodar este script de novo - o hook post-merge (.githooks) faz isso sozinho
+quando a main recebe um merge ou um pull, se o agente estiver instalado.
 """
 import os
 import shutil
@@ -57,6 +61,39 @@ def copiar_projeto(destino, so_web=False):
     shutil.rmtree(web, ignore_errors=True)
     shutil.copytree(os.path.join(AQUI, "web"), web)
     return os.path.join(destino, "servidor.py")
+
+
+def o_que_atualizar(mudados):
+    """Os caminhos que um merge mudou -> "tudo" (algum .py da copia, o mapa,
+    uma captura de referencia: o agente reinicia), "web" (so a pagina: Cmd+R
+    basta, o motor continua ligado) ou None (nada que a copia leve)."""
+    import conexao_serial as cs
+    copia = set(ARQUIVOS) | {"mapas/controladoras.json"} | {
+        os.path.relpath(c, AQUI) for c in cs.CAPTURAS_DE_REFERENCIA}
+    mudados = [m.strip() for m in mudados if m.strip()]
+    if any(m in copia for m in mudados):
+        return "tudo"
+    if any(m.startswith("web/") for m in mudados):
+        return "web"
+    return None
+
+
+def depois_do_merge(orig, head):
+    """O post-merge: so com o agente instalado, e so o que precisa."""
+    if not os.path.exists(PLIST):
+        return 0
+    r = subprocess.run(["git", "-C", AQUI, "diff", "--name-only", orig, head],
+                       capture_output=True, text=True)
+    if r.returncode:
+        return 0                                 # sem ORIG_HEAD (primeiro pull): nada
+    oque = o_que_atualizar(r.stdout.splitlines())
+    if oque is None:
+        return 0
+    print(f"[post-merge] atualizando o TR-1000 Controller instalado ({oque})")
+    if oque == "tudo":
+        print("[post-merge] o agente reinicia: se o Controller estava em ON, aperte ON "
+              "de novo e recarregue a pagina (Cmd+R)")
+    return instalar(reiniciar=oque == "tudo")
 
 
 def _comando_python():
@@ -152,4 +189,7 @@ if __name__ == "__main__":
         sys.exit(remover())
     if "--estado" in sys.argv:
         sys.exit(estado())
+    if "--se-mudou" in sys.argv:
+        i = sys.argv.index("--se-mudou")
+        sys.exit(depois_do_merge(*sys.argv[i + 1:i + 3]))
     sys.exit(instalar(reiniciar="--so-web" not in sys.argv))

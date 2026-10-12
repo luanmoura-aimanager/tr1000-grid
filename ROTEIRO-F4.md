@@ -5,12 +5,8 @@ LOOP, o PTN digitado, a foto da sessão e as variações. Faça um passo, me dig
 **ouviu e viu**, siga para o próximo.
 
 **Antes:**
-1. Reinstale o servidor e o app com o código novo:
-   ```bash
-   cd ~/Documents/Claude/Projects/tr1000-grid
-   python3 instalar_agente.py
-   python3 criar_app.py
-   ```
+1. O servidor já se atualiza sozinho depois de cada merge (o hook `post-merge`). Confira
+   com `python3 instalar_agente.py --estado`.
 2. Feche o TR-1000 App da Roland e aperte **ON** no Controller. No painel: **1-01**, var
    **A**.
 3. Recarregue a página do Controller (Cmd+R), para ela pegar os módulos novos.
