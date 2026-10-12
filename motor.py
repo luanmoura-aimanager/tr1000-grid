@@ -117,6 +117,7 @@ class Motor:
     pulsos = 0                                  # pulsos dentro do step atual
     n_steps = -1                                # steps desde o START
     pps_step = PULSOS_P_STEP                    # pulsos do step atual (a Scale dele)
+    n_parado = -1                               # o step do STOP, para o CONTINUE
     tocando = False
     ao_passo = None                             # callback da tela (o /passo)
     pc_out = None                               # a porta 'TR-1000' de saida (Program Change)
@@ -134,7 +135,10 @@ class Motor:
     quer_kit = False                            # a tela de Mixer/Efeitos esta aberta
     proximo_kit = 0.0
     LER_KIT_A_CADA = 2.0                        # s
-    quer_foto = False                           # tirar a foto da sessao no proximo tick
+    foto_motivo = None                          # a foto da sessao pedida (ON/pattern/botao)
+    foto_em = 0.0                               # quando comecar
+    foto_passos = None                          # o gerador, andando um pedaco por tick
+    ESPERA_FOTO_PATTERN = 3.0                   # s parado no pattern antes da foto
     ultima_sessao = None                        # o arquivo da ultima foto
 
     def __init__(self, cfg, log=print):
@@ -292,7 +296,8 @@ class Motor:
             self.log(f"pattern {ts.nome_do_pattern(x)} (x {x})")
             self.x_pattern = x
             self.cache.clear()
-            self.quer_foto = True                    # a foto da sessao, no proximo tick
+            self.pedir_foto("ON" if self.ultima_sessao is None else "pattern",
+                            0.0 if self.ultima_sessao is None else self.ESPERA_FOTO_PATTERN)
         antes = [self.cache.get(k) for k in novo]
         self.cache.update(novo)
         if forcar or trocou or antes != list(novo.values()):
@@ -518,10 +523,13 @@ class Motor:
                 self.pps_step = self.pulsos_por_step()
                 self.mover_playhead(0)
             elif t == "continue":
+                # retoma de onde parou: os pulsos do step ficaram guardados
+                # (revisao do PR #8)
                 self.tocando = True
-                self._avisar_passo()
+                self.mover_playhead(max(self.n_parado, 0))
             elif t == "stop":
                 self.tocando = False
+                self.n_parado = self.n_steps
                 self.mover_playhead(-1)
         self._aplicar_pulsos(lote)
 
@@ -661,7 +669,8 @@ class Motor:
             if self._escrever(campos.B3, 0, 0, i, 1):
                 self.loop_segurados = self.loop_segurados | {step}
         else:
-            self._escrever(campos.B3, 0, 0, i, 0)
+            if not self._escrever(campos.B3, 0, 0, i, 0):
+                return                               # segue segurado: o modo fica (revisao do PR #8)
             self.loop_segurados = self.loop_segurados - {step}
             if not self.loop_segurados and self.loop_antes is not None:
                 if not self.loop_antes:
@@ -738,18 +747,51 @@ class Motor:
 
     # ── a foto da sessao (so no app) ────────────────────────
     def foto_sessao(self, motivo):
+        """A foto inteira de uma vez (os testes e quem precisar dela ja). No
+        motor ao vivo ela anda aos pedacos: pedir_foto + o tick."""
+        nome = None
+        for nome in self._passos_da_foto(motivo):
+            pass
+        return nome
+
+    def pedir_foto(self, motivo, atraso=0.0):
+        """A foto aos pedacos, uma variacao por tick (revisao do PR #8: de uma
+        vez so, ~130 leituras travavam pads e knobs). A da troca de pattern
+        espera o pattern parar de mudar (folhear nao enfileira uma foto por
+        pattern)."""
+        self.foto_em = time.time() + atraso
+        self.foto_motivo = motivo
+        self.foto_passos = None
+
+    def _andar_foto(self, agora):
+        if self.foto_motivo is None or agora < self.foto_em:
+            return
+        if self.foto_passos is None:
+            self.foto_passos = self._passos_da_foto(self.foto_motivo)
+        try:
+            nome = next(self.foto_passos)
+        except StopIteration:
+            nome = ""
+        if nome is not None:                         # acabou (bem ou mal)
+            self.foto_motivo = self.foto_passos = None
+
+    def _passos_da_foto(self, motivo):
         """Tudo o que o Controller sabe ler do pattern e do kit, num JSON em
         DIR_SESSOES (pedido do Luan, 12/10/2026: 'salvar sessao' fica SO no
         app; o reload e no painel). So LEITURAS, dentro das faixas do portao.
         Os valores vao CRUS (u32), com o indice do primeiro de cada lista: e o
-        que uma restauracao futura (decisao do Luan) precisaria. -> o nome
-        do arquivo, ou None."""
+        que uma restauracao futura (decisao do Luan) precisaria. Gerador: None
+        a cada variacao lida; no fim, o nome do arquivo ("" se falhou)."""
         if self.conexao is None or self.x_pattern is None:
-            return None
+            yield ""
+            return
         x = self.x_pattern
         steps, acentos = {}, {}
         try:
             for v, nome_v in enumerate(ts.VARIACOES_SERIAL):
+                if self.x_pattern != x:              # trocou no meio: foto velha
+                    yield ""
+                    return
                 lido = self._ler_variacao(x, v)
                 steps[nome_v] = {ts.TRACKS_SERIAL[tr]: lido[(v, tr)] for tr in range(N_TRACKS)}
                 try:
@@ -757,11 +799,13 @@ class Motor:
                                                 campos.INI_ACC, 1)[0]
                 except PermissionError:
                     pass                             # fora das faixas: fica sem
+                yield None
             if not self.kit_valores:
                 self.ler_kit()
         except ERROS_DE_LEITURA as e:
             self.log(f"(!) a foto da sessao falhou: {e}")
-            return None
+            yield ""
+            return
         foto = {
             "versao": 1, "quando": time.strftime("%Y-%m-%dT%H:%M:%S"), "motivo": motivo,
             "pattern": ts.nome_do_pattern(x), "x_pattern": x, "x_kit": self.x_kit,
@@ -772,20 +816,33 @@ class Motor:
             "acentos": {"indice": campos.INI_ACC, "por_variacao": acentos},
             "kit": dict(self.kit_valores),
         }
-        nome = f"{time.strftime('%Y-%m-%d-%H%M%S')}-{foto['pattern']}.json"
+        # o motivo no nome: as do botao nunca saem na limpeza, e duas fotos no
+        # mesmo segundo nao se sobrescrevem (revisao do PR #8)
+        # milissegundos no nome, somando 1 se ja existe: a ordem alfabetica
+        # continua a do tempo (a limpeza apaga as primeiras)
+        agora = time.time()
+        ms = int(agora * 1000) % 1000
         try:
             os.makedirs(DIR_SESSOES, exist_ok=True)
+            while True:
+                nome = (f"{time.strftime('%Y-%m-%d-%H%M%S', time.localtime(agora))}{ms:03d}"
+                        f"-{foto['pattern']}-{motivo}.json")
+                if not os.path.exists(os.path.join(DIR_SESSOES, nome)) or ms >= 999:
+                    break
+                ms += 1
             with open(os.path.join(DIR_SESSOES, nome), "w", encoding="utf-8") as f:
                 json.dump(foto, f)
-            antigas = sorted(n for n in os.listdir(DIR_SESSOES) if n.endswith(".json"))
-            for n in antigas[:-MAX_SESSOES]:
-                os.remove(os.path.join(DIR_SESSOES, n))
+            autos = sorted(a for a in os.listdir(DIR_SESSOES)
+                           if a.endswith(".json") and "-botao" not in a)
+            for a in autos[:-MAX_SESSOES]:
+                os.remove(os.path.join(DIR_SESSOES, a))
         except OSError as e:
             self.log(f"(!) nao gravei a foto da sessao: {e}")
-            return None
+            yield ""
+            return
         self.ultima_sessao = nome
         self.log(f"sessao salva no app: {nome} ({motivo})")
-        return nome
+        yield nome
 
     # ── trocar de pattern (Program Change) ──────────────────
     def trocar_pattern(self, x):
@@ -919,9 +976,8 @@ class Motor:
                     self.reler()
                 except ERROS_DE_LEITURA as e:
                     self.log(f"(!) releitura falhou: {e}")
-            if self.modo_geral == MODO_ON and self.quer_foto:
-                self.quer_foto = False
-                self.foto_sessao("ON" if self.ultima_sessao is None else "pattern")
+            if self.modo_geral == MODO_ON:
+                self._andar_foto(agora)
             if (self.modo_geral == MODO_ON and self.quer_kit
                     and agora >= self.proximo_kit):
                 self.proximo_kit = agora + self.LER_KIT_A_CADA

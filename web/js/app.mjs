@@ -213,7 +213,7 @@ function pintarTopo() {
 }
 
 // o playhead: um evento por step. O EventSource reconecta sozinho se o
-// servidor reiniciar.
+// servidor reiniciar (o /passo nao pede cookie, como o /estado).
 function ouvirPasso() {
   let fonte;
   try {

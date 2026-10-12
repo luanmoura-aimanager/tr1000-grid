@@ -40,6 +40,13 @@ function kind(c) {
   return "";
 }
 
+// sem "proprio", o FIRST/LAST do track nao vale: os selects ficam desligados
+// (revisao do PR #8 - mexer neles mandava null e o valor sumia)
+function habilitarTrk(sim) {
+  attr(tk.first, "disabled", !sim);
+  attr(tk.last, "disabled", !sim);
+}
+
 function selectSteps(aoMudar, rot) {
   const s = h(
     "select",
@@ -294,7 +301,10 @@ export default {
       );
     tk.titulo = h("h2");
     tk.sw = h("input", { type: "checkbox" });
-    tk.sw.addEventListener("change", mandaTrk);
+    tk.sw.addEventListener("change", () => {
+      habilitarTrk(tk.sw.checked);
+      mandaTrk();
+    });
     tk.first = selectSteps(mandaTrk, "FIRST");
     tk.last = selectSteps(mandaTrk, "LAST");
     tk.secao = h(
@@ -351,6 +361,8 @@ export default {
         n,
       );
       b.addEventListener("pointerdown", (ev) => {
+        // so o botao principal, e com a maquina ligada (revisao do PR #8)
+        if (ev.button !== 0 || !ctx.E.ligado) return;
         b.setPointerCapture?.(ev.pointerId);
         pressionado(b, true);
         ctx.acao("loop", { ligado: true, step: s });
@@ -541,6 +553,7 @@ export default {
     if (trkSel !== null) {
       texto(tk.titulo, t("FIRST/LAST do {t}", { t: D.tracks[trkSel] }));
       if (document.activeElement !== tk.sw) tk.sw.checked = !!E.trk_sw[trkSel];
+      habilitarTrk(tk.sw.checked);
       valor(tk.first, E.first_trk[trkSel]);
       valor(tk.last, E.last_trk[trkSel]);
     }

@@ -102,7 +102,7 @@ class Host:
             self.versao_passo += 1
             self.cond_passo.notify_all()
 
-    def esperar_passo(self, versao, timeout=15.0):
+    def esperar_passo(self, versao, timeout=5.0):
         """-> (versao, info) quando o passo mudar depois de `versao`, ou o
         mesmo par no timeout (o /passo manda um comentario para manter viva)."""
         with self.cond_passo:
@@ -233,10 +233,18 @@ def _campo_step(a):
                     _faixa(a, "valor", mn, mx))
 
 
+def _ordem(first, last):
+    """FIRST depois do LAST nao foi visto no painel: recusa (revisao do PR #8)."""
+    if first is not None and first > last:
+        raise ValueError(f"FIRST {first + 1} depois do LAST {last + 1}")
+    return first, last
+
+
 def _extremos_track(a):
     first, last = _passo_ou_none(a, "first"), _passo_ou_none(a, "last")
     if (first is None) != (last is None):
         raise ValueError("first e last vao juntos (ou os dois nulos, para limpar)")
+    _ordem(first, last)
     HOST.enfileirar(HOST.motor.definir_extremos_track, _track(a), first, last)
 
 
@@ -259,14 +267,14 @@ ACOES = {
     "fill": lambda a: HOST.enfileirar(HOST.motor.definir_fill, _faixa(a, "n", 0, 1)),
     "extremos_var": lambda a: HOST.enfileirar(HOST.motor.definir_extremos_var,
                                               _faixa(a, "v", 0, campos.N_VARS - 1),
-                                              _step(a, "first"), _step(a, "last")),
+                                              *_ordem(_step(a, "first"), _step(a, "last"))),
     "extremos_track": _extremos_track,
     "loop": lambda a: HOST.enfileirar(HOST.motor.definir_loop, bool(a["ligado"]), _passo_ou_none(a, "step")),
     "param": _param,
     # o pattern por Program Change (pedido do Luan, 12/10/2026; nao medido ate o F4)
     "ptn": lambda a: HOST.enfileirar(HOST.motor.trocar_pattern, _faixa(a, "x", 0, 127)),
     # a foto da sessao: so no app, nunca na maquina
-    "sessao": lambda a: HOST.enfileirar(HOST.motor.foto_sessao, "botao"),
+    "sessao": lambda a: HOST.enfileirar(HOST.motor.pedir_foto, "botao"),
     "quer_kit": lambda a: setattr(HOST.motor, "quer_kit", bool(a["sim"])),
     "reler": lambda a: HOST.enfileirar(HOST.motor.reler, True),
 }
@@ -401,8 +409,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if rota == "/dados":
             return self._responder(json.dumps(dados_estaticos(), default=str))
         if rota == "/passo":
-            if not self._tem_cookie():
-                return self._erro("sem cookie de sessao", 403)
+            # sem cookie, como o /estado (so le): com o cookie, o EventSource
+            # morria no 403 depois de o servidor reiniciar (revisao do PR #8)
             return self._servir_passo()
         return self._erro("nao encontrado", 404)
 

@@ -15,7 +15,7 @@ Na fase 0 o que se prova de mesa e pouco e e de proposito:
   - o portao da fase 0: cada comando do lp_tr1000.py roda contra portas
     falsas, e o unico SysEx que pode sair e o Identity Request
 """
-import contextlib, io, os, py_compile, sys, tempfile, unittest
+import contextlib, io, os, py_compile, sys, tempfile, time, unittest
 
 AQUI = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, AQUI)
@@ -1774,16 +1774,93 @@ class TesteFase2b(unittest.TestCase):
         self.assertIn("text/event-stream", corpo)
         self.assertIn('data: {"tocando": true, "passo": 5, "passos_trk": null}', corpo)
 
-    def test_passo_exige_o_cookie(self):
-        import http.server, threading, urllib.request, urllib.error, servidor
+    def test_passo_recusa_host_de_fora(self):
+        import http.client, http.server, threading, servidor
         srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), servidor.Handler)
         threading.Thread(target=srv.serve_forever, daemon=True).start()
         try:
-            with self.assertRaises(urllib.error.HTTPError) as e:
-                urllib.request.urlopen(f"http://127.0.0.1:{srv.server_port}/passo")
-            self.assertEqual(e.exception.code, 403)
+            c = http.client.HTTPConnection("127.0.0.1", srv.server_port, timeout=3)
+            c.request("GET", "/passo", headers={"Host": "evil.com"})
+            self.assertEqual(c.getresponse().status, 403)
+            c.close()
         finally:
             srv.shutdown()
+
+    def test_continue_retoma_de_onde_parou(self):
+        import mido
+        m = motor_cru()
+        m.cab = self._cab()
+        self._tocar(m, 6 * 9 + 3)                        # step 9, 3 pulsos dentro
+        m.clk.fila = [mido.Message("stop")]
+        m._ler_clock()
+        self.assertEqual(m.passo, -1)
+        m.clk.fila = [mido.Message("continue")] + [mido.Message("clock")] * 3
+        m._ler_clock()
+        self.assertEqual(m.passo, 9)
+        m.clk.fila = [mido.Message("clock")]
+        m._ler_clock()
+        self.assertEqual(m.passo, 10)
+
+    def test_soltar_com_erro_nao_devolve_o_modo(self):
+        m = motor_cru()
+        modo = 112 + campos.B3_LOOP
+        m.maquina.valores[(3, 0, 0, modo)] = 0
+        m.definir_loop(True, 4)
+        m.maquina.calada = True                          # a escrita de soltar falha
+        m.conexao.relogio = _relogio_rapido()
+        m.definir_loop(False, 4)
+        self.assertEqual(m.loop_segurados, {4})
+        self.assertEqual(m.loop_antes, 0)
+
+    def test_first_depois_do_last_e_recusado(self):
+        import servidor
+        servidor.HOST.motor = m = motor_cru()
+        try:
+            with self.assertRaises(ValueError):
+                servidor.ACOES["extremos_var"]({"v": 0, "first": 11, "last": 3})
+            with self.assertRaises(ValueError):
+                servidor.ACOES["extremos_track"]({"track": 0, "first": 11, "last": 3})
+            self.assertTrue(m.fila_cmd.empty())
+        finally:
+            servidor.HOST.motor = None
+
+    def test_foto_anda_aos_pedacos_e_espera_o_pattern_parar(self):
+        m = motor_cru()
+        m.cab, m.b3, m.kit_valores = self._cab(), [0] * 292, {"x": 1}
+        with tempfile.TemporaryDirectory() as tmp:
+            antes = motor.DIR_SESSOES
+            motor.DIR_SESSOES = tmp
+            try:
+                m.pedir_foto("pattern", atraso=10.0)
+                m._andar_foto(time.time())
+                self.assertIsNone(m.foto_passos)         # ainda esperando
+                m.pedir_foto("botao")
+                for _ in range(len(tr1000_serial.VARIACOES_SERIAL)):
+                    m._andar_foto(time.time())
+                    self.assertIsNotNone(m.foto_motivo)  # uma variacao por tick
+                m._andar_foto(time.time())
+                self.assertIsNone(m.foto_motivo)
+                self.assertTrue(m.ultima_sessao.endswith("-botao.json"))
+                self.assertEqual(os.listdir(tmp), [m.ultima_sessao])
+            finally:
+                motor.DIR_SESSOES = antes
+
+    def test_fotos_do_botao_nao_saem_na_limpeza(self):
+        m = motor_cru()
+        m.cab, m.b3, m.kit_valores = self._cab(), [0] * 292, {"x": 1}
+        with tempfile.TemporaryDirectory() as tmp:
+            open(os.path.join(tmp, "2000-01-01-000000-1-01-botao.json"), "w").close()
+            antes, maxi = motor.DIR_SESSOES, motor.MAX_SESSOES
+            motor.DIR_SESSOES, motor.MAX_SESSOES = tmp, 1
+            try:
+                a = m.foto_sessao("pattern")
+                b = m.foto_sessao("pattern")             # mesmo segundo: outro nome
+            finally:
+                motor.DIR_SESSOES, motor.MAX_SESSOES = antes, maxi
+            ficaram = sorted(os.listdir(tmp))
+        self.assertNotEqual(a, b)
+        self.assertLess(a, b)                            # a ordem e a do tempo
+        self.assertEqual(ficaram, sorted(["2000-01-01-000000-1-01-botao.json", b]))
 
     def test_segurar_step_liga_o_modo_e_devolve(self):
         # F3.4.6: com o [150] em 0, segurar um step deixava a maquina muda
@@ -1839,7 +1916,7 @@ class TesteFase2b(unittest.TestCase):
             antes, maxi = motor.DIR_SESSOES, motor.MAX_SESSOES
             motor.DIR_SESSOES, motor.MAX_SESSOES = tmp, 3
             try:
-                nome = m.foto_sessao("botao")
+                nome = m.foto_sessao("pattern")
             finally:
                 motor.DIR_SESSOES, motor.MAX_SESSOES = antes, maxi
             ficaram = sorted(os.listdir(tmp))

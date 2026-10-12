@@ -931,7 +931,9 @@ O TR-8S Controller, para a TR-1000:
   do Luan.
 - **Salvar sessão:** foto **só no app**: os steps das 12 variações, o accent, o
   cabeçalho, o bloco 3 e o kit, todos crus com o índice inicial. É tirada no ON, quando o
-  pattern muda e pelo botão. Guarda as 200 últimas. Restaurar é decisão futura do Luan.
+  pattern muda (depois de 3 s parado nele) e pelo botão, uma variação por tick, para não
+  travar pads e knobs. As automáticas guardam as 200 últimas; as do botão nunca saem.
+  Restaurar é decisão futura do Luan.
 - **A tela:**
   - PT | EN;
   - as variações em três fileiras: **edita** (o que a grade mostra), **toca** (a chain;
