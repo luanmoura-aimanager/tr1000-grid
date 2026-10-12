@@ -64,6 +64,22 @@ LOOP, o PTN digitado, a foto da sessão e as variações. Faça um passo, me dig
 3. **ambiente**. **Esperado:** ondas maiores, mais lentas e mais fracas.
 4. **ON**. **Esperado:** volta o grid, o PTN e os LEDs. **OFF** apaga tudo.
 
+## F4.6c — As páginas do Launchpad
+
+Com **ON**, nos botões do topo do Launchpad direito:
+1. **PAR** (o 6º botão). A coluna lateral esquerda escolhe o track (escolha o SD); a borda
+   direita, o parâmetro (o 1º = PROB). Toque a **linha de cima** no step 4 do SD: PROB
+   100 %. Toque a **4ª linha de baixo**: uns 43 %. **Esperado:** a barra muda e o painel,
+   segurando o step, mostra o valor.
+2. Na PAR, o **5º da borda (VEL)**: a linha de cima num step aceso → velocity 127 (a cor
+   fica forte no grid).
+3. **PERF** (o 7º). Linha 1: toque o **HT** (mute). Linha 2: toque **B** (só a B); segure
+   **A** e toque **B** (A+B). Linha 3: **segure** o 5 (loop) e solte. Linha 4: toque o 12
+   (LAST = 12). Linha 5: o 4º (32nd), depois o 3º (16th).
+4. **ROUT** (o 8º). Linha 3, coluna 2: o SD vai para ANALOG FX. Linhas 5–6: SC SOURCE.
+   Linha 8: DUCK/GATE e TIME/STEP. **Esperado:** a aba Efeitos mostra o mesmo.
+5. O mesmo botão volta para os steps.
+
 ## F4.7 — c5d: o TEMPO (para o BPM digitável)
 
 Com **OFF** no Controller (a serial livre):

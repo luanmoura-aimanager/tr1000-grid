@@ -140,3 +140,34 @@ def escrita_permitida(bloco, x, y, indice, valor):
     if bloco in {ts.bloco_de_steps(v) for v in range(N_VARS)} and 0 <= y < N_TRACKS:
         return bool(_no_step(indice, valor, y))
     return False
+
+
+# ─────────────────────────────────────────────────────────────
+# A pagina PAR do Launchpad (layout A, fase 2d): 8 niveis por coluna, de
+# baixo (0) para cima (7). Um toque na linha poe o valor daquele nivel no
+# step. As listas inteiras ficam na tela; aqui, as 8 mais usadas de cada.
+# ─────────────────────────────────────────────────────────────
+PAR_PARAMS = ("prob", "sub", "cycle", "start", "vel", "alt")
+NIVEIS_PAR = {
+    "prob":  (0, 14, 28, 43, 57, 71, 86, 100),
+    # OFF, 1/2, 1/3, 1/4, Flam, Triplet 1, Triplet 2, Quad 1 (SUB_NOMES)
+    "sub":   (0, 1, 2, 3, 4, 5, 6, 9),
+    # 1/1, 1/2, 2/2, 1/3, 1/4, 1/8, 1st Only, Except 1st (CYCLE_NOMES)
+    "cycle": (0, 1, 2, 3, 6, 28, 36, 37),
+    # o 0 no 4o nivel: tres para tras, quatro para frente
+    "start": (-100, -67, -33, 0, 25, 50, 75, 100),
+    "vel":   (10, 30, 50, 66, 80, 100, 110, 127),
+}
+# os que sao escolha (nao quantidade): so o nivel exato acende, sem barra
+PAR_ESCOLHA = ("sub", "cycle")
+
+
+def nivel_par(nome, valor):
+    """O nivel (0..7) que mostra `valor`: o exato nos de escolha (-1 se nao
+    esta entre os 8); nos de quantidade, o mais proximo."""
+    niveis = NIVEIS_PAR[nome]
+    if valor is None:
+        return -1
+    if nome in PAR_ESCOLHA:
+        return niveis.index(valor) if valor in niveis else -1
+    return min(range(len(niveis)), key=lambda i: abs(niveis[i] - valor))
