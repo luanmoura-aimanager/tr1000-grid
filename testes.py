@@ -2322,7 +2322,8 @@ class TesteTocando(unittest.TestCase):
 
     # A: BD nos tempos; B: BD em todo step par e SD no 4 e no 14
     A = {0: (0, 4, 8, 12)}
-    B = {0: (0, 2, 4, 6, 8, 10, 12, 14), 1: (3, 13)}   # sem periodo menor que 16
+    B = {0: (0, 2, 4, 6, 8, 10, 12, 14), 1: (3, 13),   # sem periodo menor que 16
+         6: (0, 1, 2, 5, 7, 10, 11, 14), 7: (6, 15)}
 
     def _ouvido(self, var, coluna):
         return frozenset(tr for tr, cols in var.items() if coluna in cols)
@@ -2381,6 +2382,19 @@ class TesteTocando(unittest.TestCase):
         janela = [(n, self._ouvido(self.A, (n + 1) % 16)) for n in range(8)]
         self.assertIsNone(tocando.achar_estado(janela, so_a, [0], {0: (0, 15)}))
 
+    def test_um_track_fora_da_grade_nao_derruba(self):
+        # F4.1b: o SD do 1-01 soava deslocado; os outros tracks decidem
+        import tocando
+        vs = {1: self._var(self.B)}
+        ext = {1: (0, 15)}
+        janela = []
+        for n in range(8):
+            ouvido = set(self._ouvido(self.B, 5 + n)) - {1}
+            if n % 3 == 0:
+                ouvido.add(1)                            # o SD em outro lugar
+            janela.append((n, frozenset(ouvido)))
+        self.assertEqual(tocando.achar_estado(janela, vs, [1], ext), (1, 12))
+
     def test_estado_numa_variacao_de_8_steps(self):
         import tocando
         curta = {0: (0, 1, 5), 1: (6,)}
@@ -2401,7 +2415,7 @@ class TesteTocando(unittest.TestCase):
 
     def _tocar(self, m, var, colunas, start=False):
         import mido
-        notas = {0: 36, 1: 38}
+        notas = {0: 36, 1: 38, 6: 42, 7: 46}
         msgs = []
         for i, c in enumerate(colunas):
             msgs += [mido.Message("note_on", channel=9, note=notas[tr], velocity=80)
@@ -2425,7 +2439,7 @@ class TesteTocando(unittest.TestCase):
         import mido
         msgs = []
         for c in range(6):
-            msgs += [mido.Message("note_on", channel=9, note={0: 36, 1: 38}[tr], velocity=80)
+            msgs += [mido.Message("note_on", channel=9, note={0: 36, 1: 38, 6: 42, 7: 46}[tr], velocity=80)
                      for tr, cols in self.B.items() if c in cols]
             msgs += [mido.Message("clock")] * 6
         m.clk.fila = msgs

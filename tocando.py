@@ -42,6 +42,7 @@ del _t, _nome, _n
 
 JANELA = 8            # steps ouvidos que a decisao olha (os mais recentes)
 MIN_STEPS_FASE = 8    # steps ouvidos para achar o estado sem START
+MARGEM = 2            # erros a menos que o segundo melhor, para decidir
 
 
 def track_da_nota(nota):
@@ -70,8 +71,16 @@ def esperado(steps_da_var, coluna):
 
 def bate(ouvido, certos, talvez, mudos=frozenset()):
     """O step ouvido e o esperado concordam? Mutados e 'talvez' nao contam."""
+    return erros_step(ouvido, certos, talvez, mudos) == 0
+
+
+def erros_step(ouvido, certos, talvez, mudos=frozenset()):
+    """Quantos TRACKS discordam no step (soou sem esperar, ou o contrario).
+    Contar por track, e nao "o step bateu ou nao", e o que deixa um track
+    fora do lugar sem derrubar a conta toda: no F4.1b (12/10/2026) o SD do
+    1-01 soava deslocado da grade enquanto os outros 8 batiam certinho."""
     fora = set(mudos) | set(talvez)
-    return set(ouvido) - fora == set(certos) - fora
+    return len((set(ouvido) - fora) ^ (set(certos) - fora))
 
 
 def volta(n, first, last, passos=16):
@@ -135,34 +144,49 @@ def estados(chain, extremos):
 
 
 def confere(ouvidos_e_estados, vars_steps, mudos=frozenset()):
-    """[(tracks ouvidos, (v, col))] -> quantos steps NAO batem."""
-    erros = 0
+    """[(tracks ouvidos, (v, col))] -> os erros somados, SEM o track que mais
+    errou: um track fora da grade (o SD do F4.1b, deslocado por algo que nao
+    lemos) nao decide nada sozinho; os outros nove decidem."""
+    por_track = {}
     for ouvido, (v, col) in ouvidos_e_estados:
         if v not in vars_steps:
             continue
         certos, talvez = esperado(vars_steps[v], col)
-        if not bate(ouvido, certos, talvez, mudos):
-            erros += 1
-    return erros
+        fora = set(mudos) | set(talvez)
+        for tr in (set(ouvido) - fora) ^ (set(certos) - fora):
+            por_track[tr] = por_track.get(tr, 0) + 1
+    return sum(por_track.values()) - max(por_track.values(), default=0)
 
 
 def achar_estado(janela, vars_steps, chain, extremos, mudos=frozenset()):
-    """O estado da sequencia no ULTIMO step da janela, se um so ponto de
-    partida explica todos os steps ouvidos; senao None (nao chuta). Serve
-    para adotar a maquina ja tocando e para ressincronizar."""
+    """O estado da sequencia no ULTIMO step da janela, se um ponto de partida
+    explica os steps ouvidos CLARAMENTE melhor que todos os outros: poucos
+    erros (um track fora do lugar cabe) e pelo menos MARGEM erros a menos que
+    o segundo melhor. Empate ou dois parecidos: None (nao chuta). Serve para
+    adotar a maquina ja tocando e para ressincronizar."""
     if len(janela) < MIN_STEPS_FASE or sum(1 for _n, o in janela if o) < 2:
         return None
     if any(v not in vars_steps for v in chain):
         return None
-    achado = None
+    notas = {}                                   # ultimo estado -> menos erros
     for s0 in estados(chain, extremos):
         estado, seq = s0, []
         for _n, ouvido in janela:
             seq.append((ouvido, estado))
             ultimo = estado
             estado = proximo(estado, chain, extremos)
-        if confere(seq, vars_steps, mudos) == 0:
-            if achado is not None and achado != ultimo:
-                return None
-            achado = ultimo
-    return achado
+        e = confere(seq, vars_steps, mudos)
+        notas[ultimo] = min(e, notas.get(ultimo, e))
+    ordem = sorted((e, est) for est, e in notas.items())
+    melhor_e, melhor = ordem[0]
+    segundo = ordem[1][0] if len(ordem) > 1 else None
+    if melhor_e > max_erros(len(janela)):
+        return None
+    if segundo is not None and segundo - melhor_e < MARGEM:
+        return None
+    return melhor
+
+
+def max_erros(n_steps):
+    """Erros (sem o pior track) que ainda contam como "bate"."""
+    return max(1, n_steps // 4)

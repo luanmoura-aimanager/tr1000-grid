@@ -826,7 +826,9 @@ class Motor:
             return
         pares = [(o, self.hist[k]) for k, o in janela if self.hist and k in self.hist]
         nova = self.seq[0]
-        if toc.confere(pares, vars_steps, mudos) >= 2:
+        # erros de TRACK somados na janela: um track fora da grade (o SD do
+        # F4.1b) nao derruba a sequencia; muitos, sim
+        if toc.confere(pares, vars_steps, mudos) > toc.max_erros(len(pares)):
             # so os steps tocados com os extremos de agora; e no maximo uma
             # busca a cada 4 steps (a mesma janela da a mesma resposta)
             recente = [(k, o) for k, o in janela if k >= self.n_extremos]
