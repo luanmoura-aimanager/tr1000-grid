@@ -317,7 +317,7 @@ ACOES = {
     "loop": lambda a: HOST.enfileirar(HOST.motor.definir_loop, bool(a["ligado"]), _passo_ou_none(a, "step")),
     "param": _param,
     # um preset do SIDE CHAIN: cada valor pelo definir_param (o portao e a faixa)
-    "preset_sc": lambda a: _preset_sc(a),
+    "preset_sc": _preset_sc,
     # o pattern por Program Change (pedido do Luan, 12/10/2026; nao medido ate o F4)
     "ptn": lambda a: HOST.enfileirar(HOST.motor.trocar_pattern, _faixa(a, "x", 0, 127)),
     # a foto da sessao: so no app, nunca na maquina

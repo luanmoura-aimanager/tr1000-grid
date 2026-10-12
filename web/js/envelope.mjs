@@ -31,7 +31,7 @@ export function envelope(ctx) {
   const svg = el("svg", {
     viewBox: `0 0 ${L} ${A}`,
     class: "envelope",
-    role: "img",
+    role: "group",
     "aria-label": "side chain",
   });
   const fundo = el("rect", {
@@ -73,6 +73,7 @@ export function envelope(ctx) {
   };
   const manda = {};
   const mandar = (id, valor) => {
+    if (v[id] === valor) return; // so o que mudou vai para a maquina
     v[id] = valor;
     (manda[id] =
       manda[id] || ctx.espacado((x) => ctx.acao("param", { id, valor: x })))(
@@ -87,7 +88,7 @@ export function envelope(ctx) {
     const yAbaixo = gate ? BASE - (fundoY - TOPO) : fundoY;
     const yCheio = gate ? BASE : TOPO;
     const xHold = X0 + norm(idHold()) * LARG_HOLD;
-    const xRel = xHold + Math.max(4, norm("sc.release") * LARG_REL);
+    const xRel = xHold + norm("sc.release") * LARG_REL;
     // a curva: 0 = reta; 1000 = a volta demora e sobe no fim
     const c = norm("sc.curve");
     const meio = [(xHold + xRel) / 2, (yAbaixo + yCheio) / 2];
@@ -150,10 +151,33 @@ export function envelope(ctx) {
     } else if (alvo === "topo") {
       mandar("sc.release", deNorm("sc.release", (x - p.xHold) / LARG_REL));
     } else {
-      // a CURVE: o quanto o dedo saiu da reta, em direcao ao canto
+      // a CURVE: o ponto do meio fica na metade do caminho ate o canto (a
+      // bezier em t = 0,5), entao o dedo a uma distancia d pede 2d. Sem
+      // altura (MSTR DEP 0) nao ha curva para arrastar
       const meioY = (p.yAbaixo + p.yCheio) / 2;
-      const n = (y - meioY) / (p.yAbaixo - meioY || 1);
-      mandar("sc.curve", deNorm("sc.curve", n));
+      const altura = p.yAbaixo - meioY;
+      if (Math.abs(altura) < 2) return;
+      mandar("sc.curve", deNorm("sc.curve", (2 * (y - meioY)) / altura));
+    }
+    desenhar();
+  }
+
+  // o teclado: as setas movem o ponto focado (1/50 da faixa por toque)
+  function teclar(nome, ev) {
+    if (!v) return;
+    const dx = { ArrowLeft: -1, ArrowRight: 1 }[ev.key] || 0;
+    const dy = { ArrowUp: -1, ArrowDown: 1 }[ev.key] || 0;
+    if (!dx && !dy) return;
+    ev.preventDefault();
+    const passo = (id, d) => mandar(id, deNorm(id, norm(id) + d / 50));
+    const gate = v["sc.polarity"] === 1;
+    if (nome === "base") {
+      if (dx) passo(idHold(), dx);
+      if (dy) passo("sc.mstr_dep", gate ? -dy : dy);
+    } else if (nome === "topo") {
+      if (dx) passo("sc.release", dx);
+    } else if (dy) {
+      passo("sc.curve", gate ? -dy : dy);
     }
     desenhar();
   }
@@ -163,6 +187,7 @@ export function envelope(ctx) {
     [pTopo, "topo"],
     [pMeio, "meio"],
   ]) {
+    ponto.addEventListener("keydown", (ev) => teclar(nome, ev));
     ponto.addEventListener("pointerdown", (ev) => {
       if (ev.button !== 0) return;
       ponto.setPointerCapture(ev.pointerId);

@@ -116,10 +116,13 @@ export default {
       "select",
       { "aria-label": t("preset do side chain") },
       h("option", { value: "" }, "—"),
-      nomesPreset.map((n) => h("option", { value: n }, n)),
+      nomesPreset.map((n) => h("option", { value: n }, t(n))),
     );
     presetSel.addEventListener("change", () => {
       if (presetSel.value) ctx.acao("preset_sc", { nome: presetSel.value });
+      // sem foco, o select volta a mostrar o que o kit tem de verdade (um
+      // valor recusado ou mexido depois aparece como "—")
+      presetSel.blur();
     });
     const sc = h(
       "div.secao.secao-larga",

@@ -298,6 +298,8 @@ PRESETS_SC = {
     "Pump clássico":     {**_SC_BASE, "sc.source": 1, "sc.mstr_dep": 600, "sc.release": 450},
     "Pump forte":        {**_SC_BASE, "sc.source": 1, "sc.mstr_dep": 1000, "sc.release": 800,
                           "sc.curve": 800},
+    # o BD dispara (SOURCE BD A&B) e o CH e quem "danca" (o que o Luan ouviu
+    # no F3.3.4 com MSTR DEP alto e RELEASE curto)
     "Dança no CH":       {**_SC_BASE, "sc.source": 1, "sc.mstr_dep": 900, "sc.release": 80},
     "Half-time pump":    {**_SC_BASE, "sc.source": 1, "sc.mstr_dep": 700, "sc.release": 350,
                           "sc.hld_mode": 1, "sc.hld_step": 2},
