@@ -954,6 +954,7 @@ tocados depois da última troca de FIRST/LAST.
 | F4.6d | gráfico do SIDE CHAIN e presets | ✅ (os números dos presets ficam como estão) |
 | F4.6e | ON com a máquina já tocando | ✅ "fase achada pelas notas" no mesmo segundo |
 | F4.7 | c5d (o TEMPO) | ✅ ver abaixo |
+| F4.8 | BPM digitado (fase 2j) | ✅ 124.5 e de volta a 128 |
 
 As mudanças de chain e de LAST feitas com a máquina tocando aparecem no log como
 "ressincronizei pelas notas", e o modelo se corrige sozinho.
@@ -967,7 +968,8 @@ As mudanças de chain e de LAST feitas com a máquina tocando aparecem no log co
 
 **BPM digitável (fase 2j, liberado pelo Luan em 12/10/2026):** o campo BPM do topo escreve
 os dois, como o painel. A faixa é 40.00..300.00, a da TR-8S, não medida aqui.
-**Não testado em hardware** até a próxima sessão.
+**F4.8 ✅ (12/10/2026):** digitar 124.5 levou o painel e o som a 124.5, e a volta a 128
+também. As pontas da faixa não foram testadas.
 
 **Fase 2h (12/10/2026, F4.1b): a conferência tolera um track fora da grade.**
 - **O que foi medido:** com o `?` aparecendo mesmo depois de STOP/START, uma escuta só de
