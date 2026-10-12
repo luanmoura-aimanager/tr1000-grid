@@ -50,10 +50,17 @@ python3 criar_app.py            # "TR-1000 Controller.app" no Desktop
 
 No Safari, abra `http://127.0.0.1:8734/` e use **Arquivo › Adicionar ao Dock**.
 
-- **Quatro abas:** Pattern, Mixer, Efeitos e Performance.
+- **Três abas:** Pattern (com o que era a Performance: variações edita / toca / fill,
+  STEP LOOP, Scale e FIRST/LAST), Mixer e Efeitos.
+- **PT | EN** no topo troca a língua da tela.
+- **PTN:** clique e digite outro pattern (`1-05`). Vai por Program Change, e só foi testado
+  no `ROTEIRO-F4.md`.
+- **Salvar sessão:** uma foto do pattern e do kit em
+  `~/Library/Application Support/tr1000-sessoes/`. Ela fica **só no app** e é tirada também
+  no ON e quando o pattern muda. O RELOAD é no painel.
 - **O ON** liga a TR-1000, os Launchpads (layout A) e as controladoras num processo só.
 - **O OFF** solta a serial para o TR-1000 App da Roland.
-- **Roteiro de teste:** `ROTEIRO-F3.md`.
+- **Roteiros de teste:** `ROTEIRO-F3.md` (passou em 12/10) e `ROTEIRO-F4.md`.
 - **Depois de editar o código:** rode `instalar_agente.py` e `criar_app.py` de novo. Os dois
   rodam uma cópia, porque o macOS não deixa ler `~/Documents`.
 

@@ -839,7 +839,7 @@ https://claude.ai/artifact/G8Zu9Zd3rDyRfEgK4DfMun; etiquetas em `adesivo.pdf`, g
   **números dos steps** são novos: 8 × 6,5 mm, pretos com letra branca, colados no bezel
   embaixo de cada coluna.
 
-### 7.8 O TR-1000 Controller (10/10/2026; LEITURA testada em hardware, escrita pendente do F3)
+### 7.8 O TR-1000 Controller (10/10/2026; leitura testada em 10/10, ESCRITA no F3 em 12/10)
 
 **Testado na máquina em 10/10/2026, 23:07, só com leituras** (o agente não escreve):
 
@@ -852,14 +852,53 @@ https://claude.ai/artifact/G8Zu9Zd3rDyRfEgK4DfMun; etiquetas em `adesivo.pdf`, g
 | tela | ✅ as 4 abas com os valores lidos; os nomes dos knobs mudam com o TYPE |
 | OFF | ✅ uma conexão nova faz o aperto e lê o pattern na hora: a serial ficou livre |
 
-**Falta o `ROTEIRO-F3.md`:** toda **escrita** pela tela (step, campos, mute, chain, fill,
-scale, FIRST/LAST, step loop, parâmetros), feita pelo Luan.
+**Resultado do `ROTEIRO-F3.md` (12/10/2026, o Luan na frente da máquina):** a primeira
+escrita dos campos aprendidos pelo **painel**.
+
+| passo | o quê | resultado |
+|---|---|---|
+| F3.1 | ON com o App da Roland aberto / fechado | ✅ recusa ("App esta aberto") / liga os 4 |
+| F3.2.1 | step do BD pela tela | ✅ tela, Launchpad e painel concordam, liga e desliga |
+| F3.2.2 | PROB 50 % no SD step 4 | ✅ de ouvido e no painel |
+| F3.2.3 | SUB 1/2, START +50 | ✅ dois toques; atrasado; o painel mostra o mesmo |
+| F3.2.4 | ALT no RS step 2 | ✅ roxo na tela, no Launchpad e no painel; o som ALT |
+| F3.2.5 | bancos ▼/▲ no Launchpad | ✅ linhas 5–6 viram CC e RC; o toque cai no CC |
+| F3.3.1 | PAN do SD pela tela, depois o knob | ✅ a caixa anda; o knob pega no caminho |
+| F3.3.2 | MASTER FX TYPE = ISOLATOR, LOW | ✅ |
+| F3.3.3 | Routing: SD em THROUGH | ✅ só o SD escapa do efeito |
+| F3.3.4 | SIDE CHAIN: SOURCE, MSTR DEP, RELEASE, **POLARITY** | ✅ de ouvido. O **MSTR DEP** (551, vindo do painel) provado |
+| F3.4.1 | MUTE do HT, pela tela e pela tecla lateral | ✅ os dois caminhos |
+| F3.4.2 | chain A+B | ✅ alterna A → B |
+| F3.4.3 | FILL 2 | ✅ o FILL IN TRIG toca a 2 |
+| F3.4.4 | Scale 32nd | ✅ dobro da velocidade e volta |
+| F3.4.5 | LAST da variação = 12 | ✅ a máquina volta no 12 |
+| F3.4.6 | STEP LOOP | ⚠️ ver abaixo |
+| F3.5 | OFF, depois o App da Roland | ✅ o App conecta |
+
+**STEP LOOP:**
+- **O `[150]` age:** com ele em 1, segurar o step 5 na tela repete o 5. Com ele em 0,
+  segurar o 5 deixa a máquina **em silêncio**.
+- **O LED do painel não acende,** e a tecla do painel não enxerga o nosso estado. O
+  contrário funciona: ligar no painel aparece na tela.
+- Por isso, segurar um step pela tela agora liga o `[150]` e devolve o valor dele ao
+  soltar (fase 2b).
+
+**O que a tela mostrou de errado:**
+- **O playhead da tela pulava steps:** o polling era de 250 ms.
+- **O playhead ignorava a Scale e o LAST:** corria até o 16 com o LAST em 12, e a máquina
+  volta no 12.
+
+Os dois foram corrigidos na fase 2b.
+
+**Ainda não escritos por nós:** FILL 3 e 4, CYCLE e o FIRST/LAST por track (escritos pela
+tela, mas não conferidos no F3).
 
 
 O TR-8S Controller, para a TR-1000:
 - **`servidor.py`:** stdlib, 127.0.0.1:**8734**, cookie HttpOnly + token em header + Host +
   Origin + CSP, e ações numa lista fechada.
-- **`web/`:** ES modules sem build; abas Pattern, Mixer, Efeitos e Performance.
+- **`web/`:** ES modules sem build; abas Pattern, Mixer e Efeitos (a Performance entrou no
+  Pattern na fase 2b).
 - **`instalar_agente.py`:** o LaunchAgent, rodando uma cópia em `~/Library/Application
   Support/tr1000-grid`, com as capturas de referência do portão.
 - **`criar_app.py`:** o `.app` no Desktop.
@@ -872,6 +911,35 @@ O TR-8S Controller, para a TR-1000:
 
 **O que a tela escreve:** o mesmo portão de sempre, `campos.py` + `parametros.py`. O accent
 é só leitura, porque é feito no painel. O roteiro é o `ROTEIRO-F3.md`.
+
+**Fase 2b (12/10/2026, pedidos do Luan durante o F3; testada só na mesa até o
+`ROTEIRO-F4.md`):**
+- **Playhead:**
+  - **`/passo`** (Server-Sent Events): um evento por step, do motor para a tela. O
+    `/estado` continua a cada 250 ms para o resto.
+  - Os pulsos por step vêm da **Scale** do cabeçalho: 8th(T) = 8, 16th(T) = 4, 16th = 6,
+    32nd = 3, contados step a step (a Scale trocada tocando vale do step seguinte).
+  - Ele **dá a volta no FIRST/LAST** da variação mostrada, e um track com FIRST/LAST
+    próprio anda sozinho.
+- **STEP LOOP:** segurar um step liga o `[150]` antes e devolve o valor dele quando o
+  último dedo solta (vale com vários segurados).
+- **PTN digitável:** **Program Change** no Pattern Ch. 10, pela porta `TR-1000`. É uma
+  escrita **fora da serial**, pedida pelo Luan. Que o PC `x` = o pattern `x` (sem Bank
+  Select) é palpite da MIDI chart, a medir no F4.
+- **BPM:** ainda só leitura (`[36]`). A sessão `sessao_c4.py c5d` aprende o TEMPO pelo
+  painel (série) e a troca de pattern; o BPM só fica escrevível depois dela, por decisão
+  do Luan.
+- **Salvar sessão:** foto **só no app**: os steps das 12 variações, o accent, o
+  cabeçalho, o bloco 3 e o kit, todos crus com o índice inicial. É tirada no ON, quando o
+  pattern muda (depois de 3 s parado nele) e pelo botão, uma variação por tick, para não
+  travar pads e knobs. As automáticas guardam as 200 últimas; as do botão nunca saem.
+  Restaurar é decisão futura do Luan.
+- **A tela:**
+  - PT | EN;
+  - as variações em três fileiras: **edita** (o que a grade mostra), **toca** (a chain;
+    Shift-clique soma) e **fill**;
+  - o mostrador **TOCA** mostra a chain;
+  - o FIRST/LAST do track abre clicando no nome dele.
 
 ### 7.5 Fase 1b — as controladoras de knobs (09–10/10/2026; F2 PASSOU no hardware em 10/10)
 

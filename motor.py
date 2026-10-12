@@ -19,14 +19,17 @@ O que o grid mostra (fase 1): os 10 tracks BD..RC (8 por vez, com rolagem) x 16
 steps de UMA variacao do pattern selecionado no painel. Le de novo a cada
 ~0,5 s, entao edicao no painel e troca de pattern aparecem sozinhas.
 
+O playhead (fase 2b, F3 de 12/10/2026): os pulsos por step vem da Scale do
+cabecalho, e ele da a volta no FIRST/LAST da variacao mostrada; um track com
+FIRST/LAST proprio anda sozinho (polimetria).
+
 O que NAO faz ainda (documentado na REFERENCIA):
   - saber qual variacao esta TOCANDO (nao ha de onde ler): o playhead anda
     sobre a variacao mostrada
-  - scale e last step: assume 16th e 16 steps
-  - linhas de ACC e TRG: os enderecos nao foram decifrados
+  - linhas de ACC e TRG: o accent e pelo painel; o TRG ficou de fora
   - gravar: o WRITE continua no painel (criterio 6 adiado)
 """
-import queue, threading, time
+import json, os, queue, threading, time
 
 import campos
 import conexao_serial as cs
@@ -47,8 +50,15 @@ LINHAS = 8
 # Linha -> track. Sem linha de accent: o accent e pelo painel.
 BANCOS = {1: [0, 1, 2, 3, 4, 5, 6, 7],              # BD SD LT HT RS HC CH OH
           2: [0, 1, 2, 3, 8, 9, 6, 7]}              # BD SD LT HT CC RC CH OH
-PULSOS_P_STEP = 6                                   # 24 ppqn, scale 16th (assumido)
-PASSOS = 16                                         # last step (assumido)
+PULSOS_P_STEP = 6                                   # 24 ppqn, scale 16th
+# pulsos de clock (24 ppqn) por step, pela Scale do cabecalho (campos.SCALES):
+# 8th(T) = 1/12 de compasso, 16th(T) = 1/24, 16th = 1/16, 32nd = 1/32. A 32nd
+# correu no dobro no F3.4.4 (12/10/2026)
+PULSOS_POR_SCALE = (8, 4, 6, 3)
+PASSOS = 16
+# a foto da sessao (pedido do Luan, 12/10/2026): fica SO no app, nunca na maquina
+DIR_SESSOES = os.path.expanduser("~/Library/Application Support/tr1000-sessoes")
+MAX_SESSOES = 200
 RELER_A_CADA = 0.5                                  # s
 # O x do KIT: nas capturas do App, bloco 3 [2] (pattern), [3] e [4] vieram
 # sempre iguais - e o x dos blocos de kit foi o mesmo. Qual deles e o kit e
@@ -103,8 +113,16 @@ class Motor:
     modo_layer = "AB"
     banco = 1                                   # BANCOS: 1 = RS HC, 2 = CC RC
     passo = -1
-    pulsos = 0
+    passos_trk = None                           # [step] por track, ou None parado
+    pulsos = 0                                  # pulsos dentro do step atual
+    n_steps = -1                                # steps desde o START
+    pps_step = PULSOS_P_STEP                    # pulsos do step atual (a Scale dele)
+    n_parado = -1                               # o step do STOP, para o CONTINUE
     tocando = False
+    ao_passo = None                             # callback da tela (o /passo)
+    pc_out = None                               # a porta 'TR-1000' de saida (Program Change)
+    loop_antes = None                           # o [150] antes de segurar um step
+    loop_segurados = frozenset()                # os steps segurados agora
     proxima_releitura = 0.0
     x_kit = None
     ctl = None                                  # controladoras.Controladoras
@@ -117,6 +135,11 @@ class Motor:
     quer_kit = False                            # a tela de Mixer/Efeitos esta aberta
     proximo_kit = 0.0
     LER_KIT_A_CADA = 2.0                        # s
+    foto_motivo = None                          # a foto da sessao pedida (ON/pattern/botao)
+    foto_em = 0.0                               # quando comecar
+    foto_passos = None                          # o gerador, andando um pedaco por tick
+    ESPERA_FOTO_PATTERN = 3.0                   # s parado no pattern antes da foto
+    ultima_sessao = None                        # o arquivo da ultima foto
 
     def __init__(self, cfg, log=print):
         """cfg = o layout do learn, ou None: sem Launchpads (o Controller roda
@@ -273,6 +296,8 @@ class Motor:
             self.log(f"pattern {ts.nome_do_pattern(x)} (x {x})")
             self.x_pattern = x
             self.cache.clear()
+            self.pedir_foto("ON" if self.ultima_sessao is None else "pattern",
+                            0.0 if self.ultima_sessao is None else self.ESPERA_FOTO_PATTERN)
         antes = [self.cache.get(k) for k in novo]
         self.cache.update(novo)
         if forcar or trocou or antes != list(novo.values()):
@@ -299,7 +324,7 @@ class Motor:
         tr = self.track_da_linha(linha)
         s = self.slots(tr, step)
         a, b = ts.slot_toca(s[0]), ts.slot_toca(s[1])
-        no_playhead = self.tocando and step == self.passo
+        no_playhead = self.tocando and step == self.passo_do_track(tr)
         if no_playhead:
             return lp.COR_PLAY_HIT if (a or b) else lp.COR_PLAY
         if a and campos.eh_alt(s[0]):                 # o ALT: roxo, como o painel
@@ -421,12 +446,61 @@ class Motor:
                          for l in range(LINHAS) for c in range(8)]
             lp.enviar_cores(self.lp_out[dev], pares)
 
-    def mover_playhead(self, novo):
-        if novo == self.passo:
-            return
-        antigo, self.passo = self.passo, novo
-        self.pintar_coluna(antigo)
-        self.pintar_coluna(novo)
+    # ── o playhead ──────────────────────────────────────────
+    def _c(self, pos, padrao):
+        cab = self.cab
+        return cab[pos] if cab is not None and pos < len(cab) else padrao
+
+    def pulsos_por_step(self):
+        n = self._c(campos.CAB_SCALE, 2)
+        return PULSOS_POR_SCALE[n] if 0 <= n < len(PULSOS_POR_SCALE) else PULSOS_P_STEP
+
+    def _volta(self, n, first, last):
+        """O step n (desde o START) dentro de FIRST..LAST. LAST antes do FIRST
+        (nao visto no painel) vira 1..16, em vez de um playhead perdido."""
+        if not (0 <= first <= last < PASSOS):
+            first, last = 0, PASSOS - 1
+        return first + n % (last - first + 1)
+
+    def calcular_passos(self, n):
+        """(passo da variacao mostrada, [passo de cada track]) no step n."""
+        v = self.variacao                       # as Fill tem FIRST/LAST tambem
+        pv = self._volta(n, self._c(campos.CAB_FIRST_VAR + v, 0),
+                         self._c(campos.CAB_LAST_VAR + v, PASSOS - 1))
+        trk = [self._volta(n, self._c(campos.CAB_FIRST_TRK + t, 0),
+                           self._c(campos.CAB_LAST_TRK + t, PASSOS - 1))
+               if self._c(campos.CAB_TRK_SW + t, 0) else pv
+               for t in range(N_TRACKS)]
+        return pv, trk
+
+    def passo_do_track(self, tr):
+        return self.passos_trk[tr] if self.passos_trk else self.passo
+
+    def mover_playhead(self, n):
+        """Vai para o step n desde o START (-1 = parado) e repinta so as
+        colunas que mudaram, em qualquer linha (polimetria)."""
+        self.n_steps = n
+        antes = {self.passo} | set(self.passos_trk or [])
+        if n < 0:
+            self.passo, self.passos_trk = -1, None
+        else:
+            self.passo, self.passos_trk = self.calcular_passos(n)
+        depois = {self.passo} | set(self.passos_trk or [])
+        if antes != depois:
+            for c in sorted((antes | depois) - {-1}):
+                self.pintar_coluna(c)
+        self._avisar_passo()
+
+    def _avisar_passo(self):
+        if self.ao_passo is not None:
+            try:
+                self.ao_passo(self.info_passo())
+            except Exception:
+                pass
+
+    def info_passo(self):
+        return {"tocando": self.tocando, "passo": self.passo,
+                "passos_trk": list(self.passos_trk) if self.passos_trk else None}
 
     # ── clock (a porta MIDI comum) ──────────────────────────
     def _ler_clock(self):
@@ -443,28 +517,38 @@ class Motor:
                 continue
             lote = self._aplicar_pulsos(lote)  # transporte fecha o lote
             if t == "start":
-                # start sem stop antes (recomeco): a coluna velha precisa ser
-                # repintada, senao o branco fica preso nela (revisao do PR #4)
-                antigo = self.passo
+                # start sem stop antes (recomeco): as colunas velhas sao
+                # repintadas pelo mover_playhead (revisao do PR #4)
                 self.pulsos, self.tocando = 0, True
-                self.passo = -1
+                self.pps_step = self.pulsos_por_step()
                 self.mover_playhead(0)
-                self.pintar_coluna(antigo)
             elif t == "continue":
+                # retoma de onde parou: os pulsos do step ficaram guardados
+                # (revisao do PR #8)
                 self.tocando = True
+                self.mover_playhead(max(self.n_parado, 0))
             elif t == "stop":
-                antigo = self.passo
-                self.tocando, self.passo = False, -1
-                self.pintar_coluna(antigo)
+                self.tocando = False
+                self.n_parado = self.n_steps
+                self.mover_playhead(-1)
         self._aplicar_pulsos(lote)
 
     def _aplicar_pulsos(self, lote):
-        if lote and self.tocando:
-            self.pulsos += lote
-            # os pulsos 1..6 depois do start sao o step 0: o 6o ainda e dele,
-            # o 7o abre o step 1 (pulsos // 6 adiantava um pulso a cada step -
-            # revisao do PR #4)
-            self.mover_playhead(((self.pulsos - 1) // PULSOS_P_STEP) % PASSOS)
+        """Os pulsos 1..p depois do start sao o step 0: o p-esimo ainda e dele,
+        o p+1 abre o step 1 (revisao do PR #4). Contado step a step, e nao do
+        total desde o start: a Scale trocada tocando vale a partir do proximo
+        step, sem o playhead pular para um lugar calculado com a Scale nova."""
+        if not (lote and self.tocando):
+            return 0
+        n = self.n_steps
+        for _ in range(lote):
+            self.pulsos += 1
+            if self.pulsos > self.pps_step:
+                self.pulsos = 1
+                n += 1
+                self.pps_step = self.pulsos_por_step()    # a Scale do step que abre
+        if n != self.n_steps:
+            self.mover_playhead(n)
         return 0
 
     # ── o que a tela (e o layout A) escreve ─────────────────
@@ -558,12 +642,40 @@ class Motor:
         self._cab(campos.CAB_TRK_SW + track, 1)
 
     def definir_loop(self, ligado, step=None):
-        """STEP LOOP: o modo, e um step 'segurado' (a tela segura por clique)."""
+        """STEP LOOP: o modo, e um step 'segurado' (a tela segura por clique).
+
+        F3.4.6 (12/10/2026): o [150] AGE - com ele em 0, segurar um step deixa a
+        maquina em silencio -, mas o LED do painel nao acende. Entao segurar
+        um step liga o modo antes, e soltar devolve o [150] de antes."""
+        modo = campos.INI_B3 + campos.B3_LOOP
         if step is None:
-            self._escrever(campos.B3, 0, 0, campos.INI_B3 + campos.B3_LOOP, int(bool(ligado)))
+            self._escrever(campos.B3, 0, 0, modo, int(bool(ligado)))
+            self.loop_antes = None                   # o modo e do Luan agora
+            return
+        i = campos.INI_B3 + campos.B3_LOOP_STEP + step
+        if ligado:
+            if self.conexao is None:
+                self.log("(!) ligue (ON) antes")
+                return
+            if not self.loop_segurados:
+                try:
+                    atual = self._ler(campos.B3, 0, 0, modo, 1)[0]
+                except ERROS_DE_LEITURA as e:
+                    self.log(f"(!) nao li o STEP LOOP: {e}")
+                    return
+                if not atual and not self._escrever(campos.B3, 0, 0, modo, 1):
+                    return
+                self.loop_antes = atual
+            if self._escrever(campos.B3, 0, 0, i, 1):
+                self.loop_segurados = self.loop_segurados | {step}
         else:
-            self._escrever(campos.B3, 0, 0, campos.INI_B3 + campos.B3_LOOP_STEP + step,
-                           int(bool(ligado)))
+            if not self._escrever(campos.B3, 0, 0, i, 0):
+                return                               # segue segurado: o modo fica (revisao do PR #8)
+            self.loop_segurados = self.loop_segurados - {step}
+            if not self.loop_segurados and self.loop_antes is not None:
+                if not self.loop_antes:
+                    self._escrever(campos.B3, 0, 0, modo, 0)
+                self.loop_antes = None
 
     def _resolver(self, id, seletores=None):
         """(Parametro, endereco) de um parametro agora (type/sync lidos), ou None.
@@ -633,6 +745,125 @@ class Motor:
                         pass
         self.kit_valores = novos
 
+    # ── a foto da sessao (so no app) ────────────────────────
+    def foto_sessao(self, motivo):
+        """A foto inteira de uma vez (os testes e quem precisar dela ja). No
+        motor ao vivo ela anda aos pedacos: pedir_foto + o tick."""
+        nome = None
+        for nome in self._passos_da_foto(motivo):
+            pass
+        return nome
+
+    def pedir_foto(self, motivo, atraso=0.0):
+        """A foto aos pedacos, uma variacao por tick (revisao do PR #8: de uma
+        vez so, ~130 leituras travavam pads e knobs). A da troca de pattern
+        espera o pattern parar de mudar (folhear nao enfileira uma foto por
+        pattern)."""
+        self.foto_em = time.time() + atraso
+        self.foto_motivo = motivo
+        self.foto_passos = None
+
+    def _andar_foto(self, agora):
+        if self.foto_motivo is None or agora < self.foto_em:
+            return
+        if self.foto_passos is None:
+            self.foto_passos = self._passos_da_foto(self.foto_motivo)
+        try:
+            nome = next(self.foto_passos)
+        except StopIteration:
+            nome = ""
+        if nome is not None:                         # acabou (bem ou mal)
+            self.foto_motivo = self.foto_passos = None
+
+    def _passos_da_foto(self, motivo):
+        """Tudo o que o Controller sabe ler do pattern e do kit, num JSON em
+        DIR_SESSOES (pedido do Luan, 12/10/2026: 'salvar sessao' fica SO no
+        app; o reload e no painel). So LEITURAS, dentro das faixas do portao.
+        Os valores vao CRUS (u32), com o indice do primeiro de cada lista: e o
+        que uma restauracao futura (decisao do Luan) precisaria. Gerador: None
+        a cada variacao lida; no fim, o nome do arquivo ("" se falhou)."""
+        if self.conexao is None or self.x_pattern is None:
+            yield ""
+            return
+        x = self.x_pattern
+        steps, acentos = {}, {}
+        try:
+            for v, nome_v in enumerate(ts.VARIACOES_SERIAL):
+                if self.x_pattern != x:              # trocou no meio: foto velha
+                    yield ""
+                    return
+                lido = self._ler_variacao(x, v)
+                steps[nome_v] = {ts.TRACKS_SERIAL[tr]: lido[(v, tr)] for tr in range(N_TRACKS)}
+                try:
+                    acentos[nome_v] = self._ler(ts.BLOCO_VAR0 + ts.BLOCOS_POR_VAR * v, x, 0,
+                                                campos.INI_ACC, 1)[0]
+                except PermissionError:
+                    pass                             # fora das faixas: fica sem
+                yield None
+            if not self.kit_valores:
+                self.ler_kit()
+        except ERROS_DE_LEITURA as e:
+            self.log(f"(!) a foto da sessao falhou: {e}")
+            yield ""
+            return
+        foto = {
+            "versao": 1, "quando": time.strftime("%Y-%m-%dT%H:%M:%S"), "motivo": motivo,
+            "pattern": ts.nome_do_pattern(x), "x_pattern": x, "x_kit": self.x_kit,
+            "tempo": (self.b3[ts.OFF_TEMPO_ATUAL] / 100) if self.b3 else None,
+            "cabecalho": {"bloco": campos.CAB, "indice": campos.INI_CAB, "valores": list(self.cab or [])},
+            "bloco3": {"bloco": campos.B3, "indice": campos.INI_B3, "valores": list(self.b3 or [])},
+            "steps": {"indice": ts.INDICE_STEPS, "por_variacao": steps},
+            "acentos": {"indice": campos.INI_ACC, "por_variacao": acentos},
+            "kit": dict(self.kit_valores),
+        }
+        # o motivo no nome: as do botao nunca saem na limpeza, e duas fotos no
+        # mesmo segundo nao se sobrescrevem (revisao do PR #8)
+        # milissegundos no nome, somando 1 se ja existe: a ordem alfabetica
+        # continua a do tempo (a limpeza apaga as primeiras)
+        agora = time.time()
+        ms = int(agora * 1000) % 1000
+        try:
+            os.makedirs(DIR_SESSOES, exist_ok=True)
+            while True:
+                nome = (f"{time.strftime('%Y-%m-%d-%H%M%S', time.localtime(agora))}{ms:03d}"
+                        f"-{foto['pattern']}-{motivo}.json")
+                if not os.path.exists(os.path.join(DIR_SESSOES, nome)) or ms >= 999:
+                    break
+                ms += 1
+            with open(os.path.join(DIR_SESSOES, nome), "w", encoding="utf-8") as f:
+                json.dump(foto, f)
+            autos = sorted(a for a in os.listdir(DIR_SESSOES)
+                           if a.endswith(".json") and "-botao" not in a)
+            for a in autos[:-MAX_SESSOES]:
+                os.remove(os.path.join(DIR_SESSOES, a))
+        except OSError as e:
+            self.log(f"(!) nao gravei a foto da sessao: {e}")
+            yield ""
+            return
+        self.ultima_sessao = nome
+        self.log(f"sessao salva no app: {nome} ({motivo})")
+        yield nome
+
+    # ── trocar de pattern (Program Change) ──────────────────
+    def trocar_pattern(self, x):
+        """Pede o pattern x a maquina por Program Change no Pattern Ch., na
+        porta 'TR-1000' (MIDI chart, REFERENCIA 2.3 - nao medido ate o F4).
+        Nao passa pela serial: e o pedido do Luan de 12/10/2026. O motor
+        segue o pattern sozinho, pelo bloco 3 [2] (a releitura)."""
+        if not 0 <= x < cs.N_PATTERNS:
+            return
+        if self.pc_out is None:
+            p = porta_exata(tr1000.PORTA_COMUM, entradas=False)
+            if not p:
+                self.log("(!) porta MIDI 'TR-1000' de saida nao achada - sem troca de pattern")
+                return
+            self.pc_out = SaidaMIDI(*p)
+        canal = tr1000.CANAL_PATTERN_PADRAO - 1
+        self.pc_out.send_bytes([0xC0 | canal, x])
+        self.log(f"pattern {ts.nome_do_pattern(x)} pedido (Program Change {x}, "
+                 f"canal {canal + 1})")
+        self.proxima_releitura = 0.0
+
     # ── o espelho para a tela ───────────────────────────────
     def estado(self):
         """Uma foto do motor para a tela, so com tipos de JSON. None se o motor
@@ -668,6 +899,9 @@ class Motor:
                 "tempo": (self.b3[ts.OFF_TEMPO_ATUAL] / 100) if self.b3 else None,
                 "variacao": v, "velocidade_idx": self.vel_idx, "modo_layer": self.modo_layer,
                 "banco": self.banco, "passo": self.passo, "tocando": self.tocando,
+                "passos_trk": list(self.passos_trk) if self.passos_trk else None,
+                "loop_segurados": sorted(self.loop_segurados),
+                "ultima_sessao": self.ultima_sessao,
                 "grade": grade,
                 "acentos": campos.acentos(self.acc_mascara),
                 "mudos": campos.mudos(self.mudo_mascara),
@@ -742,6 +976,8 @@ class Motor:
                     self.reler()
                 except ERROS_DE_LEITURA as e:
                     self.log(f"(!) releitura falhou: {e}")
+            if self.modo_geral == MODO_ON:
+                self._andar_foto(agora)
             if (self.modo_geral == MODO_ON and self.quer_kit
                     and agora >= self.proximo_kit):
                 self.proximo_kit = agora + self.LER_KIT_A_CADA
@@ -761,6 +997,9 @@ class Motor:
             if self.clk is not None:
                 self.clk.close()
                 self.clk = None
+            if self.pc_out is not None:
+                self.pc_out.close()
+                self.pc_out = None
             if self.ctl is not None:
                 self.ctl.fechar()
                 self.ctl = None
