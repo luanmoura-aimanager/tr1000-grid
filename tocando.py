@@ -17,6 +17,8 @@ O que fica de fora da comparacao, porque o grid nao sabe se ia soar:
   - track mutado (a maquina nao manda a nota? - nao medido; ignorar e seguro)
   - step com PROB < 100 ou CYCLE (soa as vezes)
 O SUB, o START e o FLAM nao mudam QUAIS tracks soam no step - ficam dentro.
+Limite: uma nota empurrada para o fim do step (START perto de +100) chega
+depois do ultimo pulso dele e conta no step seguinte; aquele trecho fica "?".
 
 A mesma comparacao, deslizando o deslocamento, da a FASE quando o Controller
 liga com a maquina ja tocando (sem o START, o playhead nao sabe em que step
@@ -125,9 +127,14 @@ def achar_fase(janela, vars_steps, extremos, mudos=frozenset(), passos=16):
     if len(janela) < MIN_STEPS_FASE or sum(1 for _n, o in janela if o) < 2:
         return None
     achados = []
-    for d in range(passos):
-        for v in candidatos(janela, vars_steps, extremos, mudos, deslocamento=d):
-            achados.append((v, d))
-            if len(achados) > 1:
-                return None
+    for v in vars_steps:
+        # so os deslocamentos de UMA volta da variacao: d e d + comprimento dao
+        # as mesmas colunas (revisao do PR #13 - 8 steps davam sempre empate)
+        first, last = extremos.get(v, (0, passos - 1))
+        comprimento = (last - first + 1) if 0 <= first <= last < passos else passos
+        for d in range(comprimento):
+            if candidatos(janela, {v: vars_steps[v]}, extremos, mudos, deslocamento=d):
+                achados.append((v, d))
+                if len(achados) > 1:
+                    return None
     return achados[0] if achados else None

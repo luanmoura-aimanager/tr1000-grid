@@ -182,6 +182,9 @@ class Motor:
     ultimo_quadro = 0.0
     ao_passo = None                             # callback da tela (o /passo)
     tocando_var = None                          # a variacao que toca (None = "?")
+    adotado = False                             # tocando sem ter visto o START
+    sem_adocao = False                          # desistiu da fase: espera START/STOP
+    sem_nota_n = 0                              # steps seguidos sem nota (adotado)
     fase_incerta = False                        # tocando, mas sem saber o step (adotado)
     ouvidos = None                              # {n: {tracks}} o que soou em cada step
     adocao = None                               # notas sem START: contando para adotar
@@ -337,6 +340,9 @@ class Motor:
             self.pc_out = None
         self.tocando = False
         self.passo, self.passos_trk, self.n_steps = -1, None, -1
+        # o detector tambem (revisao do PR #13: sobrevivia ate o proximo ON)
+        self.adocao, self.ouvidos, self.tocando_var, self.n_parado = None, None, None, -1
+        self.fase_incerta = self.adotado = self.sem_adocao = False
         self.x_pattern = self.x_kit = None
         self.b3 = self.cab = None                    # sem maquina, nada velho na tela
         self.cache.clear()
@@ -611,11 +617,9 @@ class Motor:
         return PULSOS_POR_SCALE[n] if 0 <= n < len(PULSOS_POR_SCALE) else PULSOS_P_STEP
 
     def _volta(self, n, first, last):
-        """O step n (desde o START) dentro de FIRST..LAST. LAST antes do FIRST
-        (nao visto no painel) vira 1..16, em vez de um playhead perdido."""
-        if not (0 <= first <= last < PASSOS):
-            first, last = 0, PASSOS - 1
-        return first + n % (last - first + 1)
+        """O step n (desde o START) dentro de FIRST..LAST: a MESMA regra do
+        detector (tocando.volta), para o playhead e a comparacao concordarem."""
+        return toc.volta(n, first, last, PASSOS)
 
     def calcular_passos(self, n):
         """(passo da variacao mostrada, [passo de cada track]) no step n."""
@@ -669,10 +673,18 @@ class Motor:
         if not self.tocando:
             # sem START: conta para adotar (o Controller ligou com a maquina
             # ja tocando - ou alguem tocou um pad parado; a adocao decide)
+            if self.sem_adocao:
+                return                               # desistiu: so o START/STOP volta
             if self.adocao is None:
                 self.adocao = {"pulsos": 0, "n": 0, "pps": self.pulsos_por_step(),
-                               "ouvidos": {}, "sem_nota": 0}
+                               "ouvidos": {}, "sem_nota": 0, "fora": 0}
             a = self.adocao
+            # so nota na virada do step conta: a maquina tocando manda tudo
+            # junto do pulso que abre o step; um pad tocado com ela parada cai
+            # em qualquer lugar (revisao do PR #13: dois pads viravam "tocando")
+            if 0 < a["pulsos"] < a["pps"]:
+                a["fora"] += 1
+                return
             n = a["n"] + (1 if a["pulsos"] >= a["pps"] else 0)
             a["ouvidos"].setdefault(n, set()).add(tr)
             a["sem_nota"] = 0
@@ -697,10 +709,14 @@ class Motor:
             self.adocao = None
             return
         com_notas = [k for k in a["ouvidos"] if k < a["n"]]
-        if len(com_notas) >= 2:
+        if 2 * a["fora"] > len(com_notas):           # nota fora da grade demais: pad, nao a maquina
+            self.adocao = None
+            return
+        if len(com_notas) >= 3:
             self.ouvidos = dict(a["ouvidos"])
             self.n_steps, self.pulsos, self.pps_step = a["n"], a["pulsos"], a["pps"]
             self.tocando, self.fase_incerta, self.adocao = True, True, None
+            self.adotado, self.sem_nota_n = True, 0
             self.log("a TR-1000 ja estava tocando: procurando a fase pelas notas")
             self._avisar_passo()
 
@@ -734,9 +750,11 @@ class Motor:
             achado = toc.achar_fase(janela, vars_steps, extremos, mudos)
             if achado is None:
                 if n > 64:                           # 4 compassos sem fase unica
+                    # desiste de vez ate um START/STOP (revisao do PR #13: sem
+                    # isso adotava e desistia de novo a cada ~8 s)
                     self.log("(!) nao achei a fase pelas notas - de STOP e START na maquina")
-                    self.tocando = self.fase_incerta = False
-                    self.ouvidos = None
+                    self.tocando = self.fase_incerta = self.adotado = False
+                    self.ouvidos, self.sem_adocao = None, True
                     self._avisar_passo()
                 return
             v, d = achado
@@ -746,6 +764,16 @@ class Motor:
             self.mover_playhead(n + d)
             self.pintar_botoes()
             return
+        if self.adotado:
+            # adotado sem START: 32 steps sem nota = a maquina parou (ou nunca
+            # tocou) - o playhead nao segue andando sozinho
+            self.sem_nota_n = 0 if ouvidos.get(n - 1) else self.sem_nota_n + 1
+            if self.sem_nota_n > 32:
+                self.tocando = self.adotado = False
+                self.tocando_var, self.ouvidos = None, None
+                self.mover_playhead(-1)
+                self.pintar_botoes()
+                return
         nova = toc.qual_toca(janela, vars_steps, extremos, mudos, self.tocando_var)
         if nova != self.tocando_var:
             self.tocando_var = nova
@@ -753,8 +781,9 @@ class Motor:
 
     def _ler_chain(self):
         """Uma variacao da chain por vez (a mais velha no cache), a cada
-        releitura: o detector precisa dos steps de todas."""
-        if self.x_pattern is None:
+        releitura: o detector precisa dos steps de todas. Parada, nao le
+        (revisao do PR #13: 14 leituras/s a toa com a chain inteira)."""
+        if self.x_pattern is None or not (self.tocando or self.adocao is not None):
             return
         if self.lido_em is None:
             self.lido_em = {}
@@ -799,19 +828,26 @@ class Motor:
                 ultimo = max(antes) if antes else None
                 pre = antes.get(ultimo, set()) if (self.adocao or {}).get("pulsos") == 0 else set()
                 self.adocao, self.fase_incerta = None, False
+                self.adotado = self.sem_adocao = False
                 self.ouvidos = {0: set(pre)}
                 self.pulsos, self.tocando = 0, True
                 self.pps_step = self.pulsos_por_step()
                 self.mover_playhead(0)
             elif t == "continue":
                 # retoma de onde parou: os pulsos do step ficaram guardados
-                # (revisao do PR #8)
+                # (revisao do PR #8). Sem saber onde parou (parou procurando a
+                # fase): procura de novo, em vez de por no step 1 (PR #13)
                 self.tocando = True
-                self.mover_playhead(max(self.n_parado, 0))
+                if self.n_parado < 0:
+                    self.fase_incerta, self.adotado, self.ouvidos = True, True, {}
+                    self.mover_playhead(0)
+                else:
+                    self.mover_playhead(self.n_parado)
             elif t == "stop":
                 self.tocando = False
                 self.n_parado = -1 if self.fase_incerta else self.n_steps
                 self.fase_incerta, self.adocao, self.tocando_var = False, None, None
+                self.adotado = self.sem_adocao = False
                 self.mover_playhead(-1)
                 self.pintar_botoes()
         self._aplicar_pulsos(lote)
@@ -823,14 +859,19 @@ class Motor:
         step, sem o playhead pular para um lugar calculado com a Scale nova."""
         if not (lote and self.tocando):
             return 0
+        andou = False
         for _ in range(lote):
             self.pulsos += 1
             if self.pulsos > self.pps_step:
                 self.pulsos = 1
                 self.pps_step = self.pulsos_por_step()    # a Scale do step que abre
-                # step a step, mesmo num lote grande: o detector olha cada um
-                self.mover_playhead(self.n_steps + 1)
+                # o detector olha cada step, mesmo num lote grande; a pintura e
+                # o /passo, so o ultimo (revisao do PR #13)
+                self.n_steps += 1
+                andou = True
                 self._avaliar_tocando()
+        if andou:
+            self.mover_playhead(self.n_steps)
         return 0
 
     # ── as paginas PAR / PERF / ROUT ────────────────────────

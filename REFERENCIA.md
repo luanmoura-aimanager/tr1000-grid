@@ -927,13 +927,17 @@ Pela serial não há de onde ler isso (7.3). Mas a máquina manda uma `note_on` 
   troca A → B aparecer logo, vale o maior final da janela que dá resposta única. Em empate,
   fica na de antes, se ela ainda bate, ou mostra `?`. Não chuta.
 - **A máquina já tocando quando o Controller liga (sem START):**
-  - duas viradas de step com notas fazem o motor "adotar" a máquina;
+  - **três steps com notas na virada do step** fazem o motor "adotar" a máquina. Notas
+    fora da grade de 16as contam contra: um pad tocado com a máquina parada não vira
+    playhead. Desistindo da fase, só um START/STOP liga a busca de novo;
   - o deslocamento único que põe os 8 últimos steps ouvidos no lugar dá a fase;
   - enquanto não acha, o playhead não aparece. Um pattern que se repete a cada 4 steps
     não tem fase única, e aí o playhead fica escondido;
   - 32 steps sem nota desistem (era um pad tocado com a máquina parada).
 - **Notas e steps:** a nota que chega depois do último pulso de um step é do step seguinte
-  (as do step 1 chegam ~3 ms antes do START).
+  (as do step 1 chegam ~3 ms antes do START). Uma nota empurrada para o fim do step
+  (START perto de +100) conta no seguinte, e aquele trecho fica `?`.
+- **Parada:** as variações da chain não são relidas.
 - **As outras variações da chain** são relidas uma por vez, a cada releitura (5 s cada).
 - **Mostrado em:**
   - a tela: o mostrador TOCA e a borda branca na fileira "toca";

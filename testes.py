@@ -2427,6 +2427,33 @@ class TesteTocando(unittest.TestCase):
         # o playhead esta na coluna da maquina (o ultimo step tocado foi o 16 = 5+11)
         self.assertEqual(m.passo, (5 + 11) % 16)
 
+    def test_fase_numa_variacao_de_8_steps(self):
+        import tocando
+        curta = {0: (0, 1, 5), 1: (6,)}                  # 8 steps, sem periodo menor
+        vs = {0: self._var(curta)}
+        ext = {0: (0, 7)}
+        janela = [(n, self._ouvido(curta, (n + 3) % 8)) for n in range(8)]
+        self.assertEqual(tocando.achar_fase(janela, vs, ext), (0, 3))
+
+    def test_pads_fora_do_tempo_nao_adotam(self):
+        import mido
+        m = self._motor()
+        msgs = []
+        for espaco in (9, 4, 11, 7, 10, 5, 8, 13, 9, 4):   # batidas fora da grade de 16as
+            msgs.append(mido.Message("note_on", channel=9, note=36, velocity=80))
+            msgs += [mido.Message("clock")] * espaco
+        m.clk = _PortaLP(msgs)
+        m._ler_clock()
+        self.assertFalse(m.tocando)
+
+    def test_off_zera_o_detector(self):
+        m = self._motor(chain=0b10)
+        self._tocar(m, self.B, [(c + 5) % 16 for c in range(12)])
+        self.assertTrue(m.adotado)
+        m.soltar_maquina()
+        self.assertEqual((m.adocao, m.ouvidos, m.tocando_var, m.fase_incerta, m.adotado),
+                         (None, None, None, False, False))
+
     def test_pad_tocado_parado_nao_vira_playhead(self):
         import mido
         m = self._motor()
