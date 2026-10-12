@@ -2523,6 +2523,51 @@ class TesteTocando(unittest.TestCase):
         self.assertIsNone(m.adocao)
 
 
+class TesteBpm(unittest.TestCase):
+    """O TEMPO, liberado pelo Luan depois da c5d (12/10/2026)."""
+
+    def test_portao_do_tempo(self):
+        cab, b3 = 988 + campos.CAB_TEMPO, 112 + campos.B3_TEMPO
+        self.assertTrue(campos.escrita_permitida(116, 0, 0, cab, 12450))
+        self.assertTrue(campos.escrita_permitida(3, 0, 0, b3, 12450))
+        for v in (3999, 30001):
+            self.assertFalse(campos.escrita_permitida(116, 0, 0, cab, v))
+            self.assertFalse(campos.escrita_permitida(3, 0, 0, b3, v))
+        self.assertFalse(campos.escrita_permitida(3, 1, 0, b3, 12450))   # bloco 3 so x 0
+
+    def test_motor_escreve_os_dois(self):
+        m = motor_cru()
+        m.cab, m.b3 = [0] * 248, [0] * 292
+        m.definir_tempo(12450)
+        self.assertEqual(_escritas(m.maquina), [(116, 0, 0, 988 + 16, 12450), (3, 0, 0, 112 + 36, 12450)])
+        self.assertEqual(m.estado()["tempo"], 124.5)
+
+    def test_acao_confere_a_faixa(self):
+        import servidor
+        servidor.HOST.motor = m = motor_cru()
+        try:
+            with self.assertRaises(ValueError):
+                servidor.ACOES["tempo"]({"x100": 30001})
+            self.assertTrue(m.fila_cmd.empty())
+            servidor.ACOES["tempo"]({"x100": 12000})
+            self.assertFalse(m.fila_cmd.empty())
+        finally:
+            servidor.HOST.motor = None
+
+    def test_bpm_digitado(self):
+        import shutil, subprocess, json
+        node = shutil.which("node")
+        if not node:
+            self.skipTest("sem node")
+        casos = ["124.5", "124,5", "128", "40", "300", "39.99", "300.01", "1245", "abc", ""]
+        js = ('import {x100DoBpm as f} from "./web/js/ptn.mjs";'
+              f'console.log(JSON.stringify({json.dumps(casos)}.map(f)))')
+        r = subprocess.run([node, "--input-type=module", "-e", js], cwd=AQUI,
+                           capture_output=True, text=True)
+        self.assertEqual(json.loads(r.stdout),
+                         [12450, 12450, 12800, 4000, 30000, None, None, None, None, None])
+
+
 class TesteEmbalagem(unittest.TestCase):
     def test_post_merge_so_atualiza_o_que_a_copia_leva(self):
         import instalar_agente as ia

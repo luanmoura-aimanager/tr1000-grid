@@ -117,3 +117,8 @@ fino e a troca de pattern pelo painel. **Só lê.** Me cole a saída inteira.
 
 **Não testado até este roteiro:** tudo acima. Os testes de mesa (185) só dizem que nada
 quebrou o que já estava provado.
+
+## F4.8 — BPM digitado (depois da c5d)
+
+Com **ON**, clique no **BPM** do topo, digite `124.5` e Enter. **Esperado:** o painel mostra
+124.5, o som acelera ou desacelera, e o BPM do Controller segue. Volte para `128`.

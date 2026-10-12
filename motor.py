@@ -1209,6 +1209,14 @@ class Motor:
         """A chain: a mascara de variacoes do cabecalho (A = 1, B = 2...)."""
         self._cab(campos.CAB_VARIACOES, mascara)
 
+    def definir_tempo(self, x100):
+        """O BPM x 100 (12450 = 124,50): o tempo do pattern (cabecalho [16]) e
+        o atual (bloco 3 [36]), os dois que o knob TEMPO muda (c5d)."""
+        self._cab(campos.CAB_TEMPO, x100)
+        if self._escrever(campos.B3, 0, 0, campos.INI_B3 + campos.B3_TEMPO, x100):
+            if self.b3 is not None:
+                self.b3[campos.B3_TEMPO] = x100
+
     def definir_scale(self, n):
         self._cab(campos.CAB_SCALE, n)
 
