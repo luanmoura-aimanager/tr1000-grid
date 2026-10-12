@@ -916,6 +916,28 @@ O TR-8S Controller, para a TR-1000:
 **O que a tela escreve:** o mesmo portão de sempre, `campos.py` + `parametros.py`. O accent
 é só leitura, porque é feito no painel. O roteiro é o `ROTEIRO-F3.md`.
 
+**Fase 2g (12/10/2026, F4.1b): o playhead anda como a máquina.**
+
+No F4.1b, a chain A (LAST 12) + B (16) deixou o playhead perdido, e o LAST trocado tocando
+o deixou atrasado. A causa era a conta: "steps desde o START" dividido pelo comprimento de
+**uma** variação. Agora o motor anda a **sequência**:
+- o estado é (variação, coluna);
+- a coluna sobe até o LAST e passa para a próxima variação da chain, no FIRST dela;
+- os extremos são lidos a cada step.
+
+As notas **conferem** essa sequência. Se dois steps da janela não batem, o motor procura o
+ponto de partida único que explica o que soou e ressincroniza; se não acha, mostra `?`.
+Isso vale também para adotar sem START. A busca de ressincronização só olha os steps
+tocados depois da última troca de FIRST/LAST.
+
+**Deduções, nenhuma medida ainda:**
+- a chain toca na ordem A → H;
+- um LAST trocado tocando vale quando a coluna chega nele, e a coluna já além dele volta
+  na hora;
+- um FIRST subido acima da coluna não interrompe a volta;
+- um track com FIRST/LAST próprio anda sozinho e não recomeça quando a chain troca de
+  variação.
+
 **Fase 2f (12/10/2026): a variação que TOCA, pelas notas** (`tocando.py`).
 
 Pela serial não há de onde ler isso (7.3). Mas a máquina manda uma `note_on` por disparo

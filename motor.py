@@ -182,6 +182,12 @@ class Motor:
     ultimo_quadro = 0.0
     ao_passo = None                             # callback da tela (o /passo)
     tocando_var = None                          # a variacao que toca (None = "?")
+    seq = None                                  # (variacao, coluna) do step atual
+    n_extremos = 0                              # step em que os FIRST/LAST mudaram por ultimo
+    ultimo_extremos = None                      # os FIRST/LAST do step anterior
+    resync_tentado = -99                        # step da ultima busca sem resposta
+    seq_trk = None                              # coluna propria de cada track (ou None)
+    hist = None                                 # {n: (variacao, coluna)} para conferir
     adotado = False                             # tocando sem ter visto o START
     sem_adocao = False                          # desistiu da fase: espera START/STOP
     sem_nota_n = 0                              # steps seguidos sem nota (adotado)
@@ -343,6 +349,7 @@ class Motor:
         # o detector tambem (revisao do PR #13: sobrevivia ate o proximo ON)
         self.adocao, self.ouvidos, self.tocando_var, self.n_parado = None, None, None, -1
         self.fase_incerta = self.adotado = self.sem_adocao = False
+        self.seq = self.seq_trk = self.hist = None
         self.x_pattern = self.x_kit = None
         self.b3 = self.cab = None                    # sem maquina, nada velho na tela
         self.cache.clear()
@@ -616,22 +623,61 @@ class Motor:
         n = self._c(campos.CAB_SCALE, 2)
         return PULSOS_POR_SCALE[n] if 0 <= n < len(PULSOS_POR_SCALE) else PULSOS_P_STEP
 
-    def _volta(self, n, first, last):
-        """O step n (desde o START) dentro de FIRST..LAST: a MESMA regra do
-        detector (tocando.volta), para o playhead e a comparacao concordarem."""
-        return toc.volta(n, first, last, PASSOS)
+    def _extremos(self):
+        """{variacao: (FIRST, LAST)} do cabecalho, lidos agora (a regra de
+        quando um LAST trocado tocando vale esta em tocando.proximo)."""
+        return {v: (self._c(campos.CAB_FIRST_VAR + v, 0),
+                    self._c(campos.CAB_LAST_VAR + v, PASSOS - 1))
+                for v in range(campos.N_VARS)}
 
-    def calcular_passos(self, n):
-        """(passo da variacao mostrada, [passo de cada track]) no step n."""
-        # a que toca, se ja se sabe; senao a mostrada (as Fill tem FIRST/LAST tambem)
-        v = self.tocando_var if self.tocando_var is not None else self.variacao
-        pv = self._volta(n, self._c(campos.CAB_FIRST_VAR + v, 0),
-                         self._c(campos.CAB_LAST_VAR + v, PASSOS - 1))
-        trk = [self._volta(n, self._c(campos.CAB_FIRST_TRK + t, 0),
-                           self._c(campos.CAB_LAST_TRK + t, PASSOS - 1))
-               if self._c(campos.CAB_TRK_SW + t, 0) else pv
-               for t in range(N_TRACKS)]
-        return pv, trk
+    def _chain(self):
+        return toc.chain_de(self._c(campos.CAB_VARIACOES, 1))
+
+    def _extremos_trk(self, t):
+        """(FIRST, LAST) proprios do track, ou None se ele segue a variacao."""
+        if not self._c(campos.CAB_TRK_SW + t, 0):
+            return None
+        return self._c(campos.CAB_FIRST_TRK + t, 0), self._c(campos.CAB_LAST_TRK + t, PASSOS - 1)
+
+    def _iniciar_seq(self, estado=None, n=0, manter_trk=False):
+        """O primeiro step (START), ou um estado achado pelas notas. Numa
+        ressincronizacao, as colunas proprias dos tracks continuam (andaram
+        certas desde o START; revisao do PR #14)."""
+        self.seq = estado or toc.inicio(self._chain(), self._extremos())
+        if not (manter_trk and self.seq_trk):
+            trk = []
+            for t in range(N_TRACKS):
+                e = self._extremos_trk(t)
+                # START: o FIRST; adotado no meio: uma estimativa
+                trk.append(None if e is None else
+                           (e[0] if estado is None else toc.volta(n, *e, PASSOS)))
+            self.seq_trk = trk
+        self.hist = {n: self.seq}
+        self.n_extremos = n
+
+    def _avancar_seq(self):
+        """Um step: a variacao/coluna e as colunas proprias dos tracks."""
+        if self.seq is None:
+            return
+        extremos = self._extremos()
+        if extremos != self.ultimo_extremos:
+            # os steps de antes foram tocados com outros extremos: a busca de
+            # ressincronizacao so olha dai em diante (revisao do PR #14)
+            if self.ultimo_extremos is not None:
+                self.n_extremos = self.n_steps
+            self.ultimo_extremos = extremos
+        self.seq = toc.proximo(self.seq, self._chain(), extremos)
+        trk = []
+        for t, c in enumerate(self.seq_trk or [None] * N_TRACKS):
+            e = self._extremos_trk(t)
+            trk.append(None if e is None else
+                       toc.proximo_trk(e[0] - 1 if c is None else c, *e, PASSOS))
+        self.seq_trk = trk
+        if self.hist is None:
+            self.hist = {}
+        self.hist[self.n_steps] = self.seq
+        for k in [k for k in self.hist if k < self.n_steps - 64]:
+            del self.hist[k]
 
     def passo_do_track(self, tr):
         return self.passos_trk[tr] if self.passos_trk else self.passo
@@ -641,10 +687,12 @@ class Motor:
         colunas que mudaram, em qualquer linha (polimetria)."""
         self.n_steps = n
         antes = {self.passo} | set(self.passos_trk or [])
-        if n < 0 or self.fase_incerta:
+        if n < 0 or self.fase_incerta or self.seq is None:
             self.passo, self.passos_trk = -1, None    # sem fase: nada, nao um chute
         else:
-            self.passo, self.passos_trk = self.calcular_passos(n)
+            self.passo = self.seq[1]
+            self.passos_trk = [self.passo if c is None else c
+                               for c in (self.seq_trk or [None] * N_TRACKS)]
         depois = {self.passo} | set(self.passos_trk or [])
         if antes != depois and self.pagina == "steps":
             for c in sorted((antes | depois) - {-1}):
@@ -717,23 +765,25 @@ class Motor:
             self.n_steps, self.pulsos, self.pps_step = a["n"], a["pulsos"], a["pps"]
             self.tocando, self.fase_incerta, self.adocao = True, True, None
             self.adotado, self.sem_nota_n = True, 0
+            self.seq = self.seq_trk = self.hist = None   # nada da sessao de antes
             self.log("a TR-1000 ja estava tocando: procurando a fase pelas notas")
             self._avisar_passo()
 
     def _vars_da_chain(self):
         """{v: {track: [131]}} das variacoes da chain que o cache ja tem."""
-        mascara = self._c(campos.CAB_VARIACOES, 1)
         out = {}
-        for v in range(8):
-            if mascara >> v & 1:
-                steps = {tr: self.cache.get((v, tr)) for tr in range(N_TRACKS)}
-                if all(x is not None for x in steps.values()):
-                    out[v] = steps
+        for v in self._chain():
+            steps = {tr: self.cache.get((v, tr)) for tr in range(N_TRACKS)}
+            if all(x is not None for x in steps.values()):
+                out[v] = steps
         return out
 
     def _avaliar_tocando(self):
-        """Depois de cada step: a variacao que toca, ou a fase (adotado)."""
-        if not self.tocando or not self.ouvidos and not self.fase_incerta:
+        """Depois de cada step. Com a sequencia conhecida (START), as notas
+        CONFEREM: dois steps que nao batem na janela -> procura o estado que
+        explica o que soou; achou um so, ressincroniza; senao mostra "?" e
+        segue a sequencia. Sem START (adotado), procura o estado ate achar."""
+        if not self.tocando:
             return
         n = self.n_steps
         ouvidos = self.ouvidos or {}
@@ -741,40 +791,60 @@ class Motor:
             del ouvidos[k]
         janela = [(k, frozenset(ouvidos.get(k, ()))) for k in range(max(0, n - toc.JANELA), n)]
         vars_steps = self._vars_da_chain()
-        if not vars_steps:
-            return
-        extremos = {v: (self._c(campos.CAB_FIRST_VAR + v, 0),
-                        self._c(campos.CAB_LAST_VAR + v, PASSOS - 1)) for v in vars_steps}
+        chain, extremos = self._chain(), self._extremos()
         mudos = {t for t in range(N_TRACKS) if self.mudo_mascara >> t & 1}
-        if self.fase_incerta:
-            achado = toc.achar_fase(janela, vars_steps, extremos, mudos)
-            if achado is None:
-                if n > 64:                           # 4 compassos sem fase unica
-                    # desiste de vez ate um START/STOP (revisao do PR #13: sem
-                    # isso adotava e desistia de novo a cada ~8 s)
-                    self.log("(!) nao achei a fase pelas notas - de STOP e START na maquina")
-                    self.tocando = self.fase_incerta = self.adotado = False
-                    self.ouvidos, self.sem_adocao = None, True
-                    self._avisar_passo()
-                return
-            v, d = achado
-            self.ouvidos = {k + d: s for k, s in ouvidos.items()}
-            self.fase_incerta, self.tocando_var = False, v
-            self.log(f"fase achada pelas notas: variacao {ts.VARIACOES_SERIAL[v]}")
-            self.mover_playhead(n + d)
-            self.pintar_botoes()
-            return
         if self.adotado:
             # adotado sem START: 32 steps sem nota = a maquina parou (ou nunca
             # tocou) - o playhead nao segue andando sozinho
             self.sem_nota_n = 0 if ouvidos.get(n - 1) else self.sem_nota_n + 1
             if self.sem_nota_n > 32:
-                self.tocando = self.adotado = False
-                self.tocando_var, self.ouvidos = None, None
+                self.tocando = self.adotado = self.fase_incerta = False
+                self.tocando_var, self.ouvidos, self.seq = None, None, None
                 self.mover_playhead(-1)
                 self.pintar_botoes()
                 return
-        nova = toc.qual_toca(janela, vars_steps, extremos, mudos, self.tocando_var)
+        if any(v not in vars_steps for v in chain):
+            return                                   # a chain ainda nao foi lida toda
+        if self.fase_incerta:
+            achado = toc.achar_estado(janela, vars_steps, chain, extremos, mudos)
+            if achado is None:
+                if n > 64:                           # 4 compassos sem estado unico
+                    # desiste de vez ate um START/STOP (revisao do PR #13)
+                    self.log("(!) nao achei a fase pelas notas - de STOP e START na maquina")
+                    self.tocando = self.fase_incerta = self.adotado = False
+                    self.ouvidos, self.sem_adocao, self.seq = None, True, None
+                    self._avisar_passo()
+                return
+            self._iniciar_seq(toc.proximo(achado, chain, extremos), n)
+            self.fase_incerta, self.tocando_var = False, self.seq[0]
+            self.log(f"fase achada pelas notas: variacao {ts.VARIACOES_SERIAL[self.seq[0]]}, "
+                     f"step {self.seq[1] + 1}")
+            self.mover_playhead(n)
+            self.pintar_botoes()
+            return
+        if self.seq is None:
+            return
+        pares = [(o, self.hist[k]) for k, o in janela if self.hist and k in self.hist]
+        nova = self.seq[0]
+        if toc.confere(pares, vars_steps, mudos) >= 2:
+            # so os steps tocados com os extremos de agora; e no maximo uma
+            # busca a cada 4 steps (a mesma janela da a mesma resposta)
+            recente = [(k, o) for k, o in janela if k >= self.n_extremos]
+            achado = None
+            if n - self.resync_tentado >= 4:
+                achado = toc.achar_estado(recente, vars_steps, chain, extremos, mudos)
+                if achado is None:
+                    self.resync_tentado = n
+            if achado is not None:
+                estado = toc.proximo(achado, chain, extremos)
+                if estado != self.seq:
+                    self.log(f"ressincronizei pelas notas: variacao "
+                             f"{ts.VARIACOES_SERIAL[estado[0]]}, step {estado[1] + 1}")
+                    self._iniciar_seq(estado, n, manter_trk=True)
+                    self.mover_playhead(n)
+                nova = self.seq[0]
+            else:
+                nova = None                          # nao bate e nao da para saber: "?"
         if nova != self.tocando_var:
             self.tocando_var = nova
             self.pintar_botoes()
@@ -832,13 +902,16 @@ class Motor:
                 self.ouvidos = {0: set(pre)}
                 self.pulsos, self.tocando = 0, True
                 self.pps_step = self.pulsos_por_step()
+                self._iniciar_seq()
+                self.tocando_var = self.seq[0]
                 self.mover_playhead(0)
+                self.pintar_botoes()
             elif t == "continue":
                 # retoma de onde parou: os pulsos do step ficaram guardados
                 # (revisao do PR #8). Sem saber onde parou (parou procurando a
                 # fase): procura de novo, em vez de por no step 1 (PR #13)
                 self.tocando = True
-                if self.n_parado < 0:
+                if self.n_parado < 0 or self.seq is None:
                     self.fase_incerta, self.adotado, self.ouvidos = True, True, {}
                     self.mover_playhead(0)
                 else:
@@ -869,6 +942,7 @@ class Motor:
                 # o /passo, so o ultimo (revisao do PR #13)
                 self.n_steps += 1
                 andou = True
+                self._avancar_seq()
                 self._avaliar_tocando()
         if andou:
             self.mover_playhead(self.n_steps)
