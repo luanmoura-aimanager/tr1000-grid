@@ -174,7 +174,7 @@ export default {
         tn,
         h("small.dir"),
       );
-      rotulos.push(rot);
+      rotulos[tr] = rot; // por indice, como as celulas (revisao do PR #19)
       grade.append(rot, m);
       celulas[tr] = [];
       for (let s = 0; s < 16; s++) {
