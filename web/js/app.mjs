@@ -4,7 +4,7 @@
 import { $, h, texto, attr } from "./dom.mjs";
 import * as rede from "./rede.mjs";
 import { t, tLog, linguaAtual, trocarLingua } from "./i18n.mjs";
-import { xDoPattern } from "./ptn.mjs";
+import { xDoPattern, x100DoBpm } from "./ptn.mjs";
 import pattern from "./abas/pattern.mjs";
 import mixer from "./abas/mixer.mjs";
 import efeitos from "./abas/efeitos.mjs";
@@ -72,23 +72,21 @@ function pedirKit(forcar = false) {
   acao("quer_kit", { sim });
 }
 
-function montarPtn() {
-  const bt = $("#b-ptn"),
-    campo = $("#c-ptn");
-  attr(bt, "title", t("trocar o pattern"));
-  attr(campo, "aria-label", t("trocar o pattern"));
-  attr(
-    campo,
-    "title",
-    t("Digite o pattern (1-05, ou 1..128) e Enter. Esc cancela."),
-  );
+// um mostrador do topo que vira campo no clique (o PTN e o BPM): Enter manda,
+// Esc ou sair do campo cancela
+function campoDoTopo(btId, campoId, { titulo, ajuda, atual, ler, invalido, mandar }) {
+  const bt = $(btId),
+    campo = $(campoId);
+  attr(bt, "title", titulo);
+  attr(campo, "aria-label", titulo);
+  attr(campo, "title", ajuda);
   const fechar = () => {
     campo.hidden = true;
     bt.hidden = false;
   };
   bt.addEventListener("click", () => {
     if (!E.ligado) return;
-    campo.value = E.pattern || "";
+    campo.value = atual();
     bt.hidden = true;
     campo.hidden = false;
     campo.focus();
@@ -97,25 +95,38 @@ function montarPtn() {
   campo.addEventListener("keydown", (ev) => {
     if (ev.key === "Escape") fechar();
     if (ev.key !== "Enter") return;
-    const x = xDoPattern(campo.value);
-    if (x === null) {
-      msg(t("pattern inválido: use banco-número (1-05) ou 1..128"));
+    const v = ler(campo.value);
+    if (v === null) {
+      msg(invalido);
       return;
     }
-    msg(
-      t("pedindo o pattern {p} (Program Change)...", { p: campo.value.trim() }),
-    );
-    acao("ptn", { x });
+    mandar(v, campo.value.trim());
     fechar();
   });
   campo.addEventListener("blur", fechar);
-  attr(
-    $("#s-bpm"),
-    "title",
-    t(
-      "Digitar o BPM depende da sessão c5d (o endereço do TEMPO ainda não foi aprendido).",
-    ),
-  );
+}
+
+function montarCampos() {
+  campoDoTopo("#b-ptn", "#c-ptn", {
+    titulo: t("trocar o pattern"),
+    ajuda: t("Digite o pattern (1-05, ou 1..128) e Enter. Esc cancela."),
+    atual: () => E.pattern || "",
+    ler: xDoPattern,
+    invalido: t("pattern inválido: use banco-número (1-05) ou 1..128"),
+    mandar: (x, texto) => {
+      msg(t("pedindo o pattern {p} (Program Change)...", { p: texto }));
+      acao("ptn", { x });
+    },
+  });
+  // o BPM: o tempo do pattern e o atual, os dois que o knob TEMPO muda (c5d)
+  campoDoTopo("#b-bpm", "#c-bpm", {
+    titulo: t("mudar o BPM"),
+    ajuda: t("Digite o BPM (ex.: 124.5, de 40 a 300) e Enter. Esc cancela."),
+    atual: () => (E.tempo ? E.tempo.toFixed(2) : ""),
+    ler: x100DoBpm,
+    invalido: t("BPM inválido: de 40 a 300, até duas casas (124.5)"),
+    mandar: (x100) => acao("tempo", { x100 }),
+  });
   attr(
     $("#s-toca"),
     "title",
@@ -172,7 +183,7 @@ function montar() {
       }
     }),
   );
-  montarPtn();
+  montarCampos();
   texto($("#build"), `build ${D.build}`);
   mostrarAba(atual);
 }

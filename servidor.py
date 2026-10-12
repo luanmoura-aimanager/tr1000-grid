@@ -308,6 +308,8 @@ ACOES = {
     "mudo": lambda a: HOST.enfileirar(HOST.motor.alternar_mudo, _track(a)),
     "variacoes": lambda a: HOST.enfileirar(HOST.motor.definir_variacoes,
                                            _faixa(a, "mascara", 1, (1 << campos.N_VARS) - 1)),
+    "tempo": lambda a: HOST.enfileirar(HOST.motor.definir_tempo,
+                                       _faixa(a, "x100", campos.TEMPO_MIN, campos.TEMPO_MAX)),
     "scale": lambda a: HOST.enfileirar(HOST.motor.definir_scale, _faixa(a, "n", 0, len(campos.SCALES) - 1)),
     "fill": lambda a: HOST.enfileirar(HOST.motor.definir_fill, _faixa(a, "n", 0, 1)),
     "extremos_var": lambda a: HOST.enfileirar(HOST.motor.definir_extremos_var,

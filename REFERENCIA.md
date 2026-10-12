@@ -938,6 +938,37 @@ tocados depois da última troca de FIRST/LAST.
 - um track com FIRST/LAST próprio anda sozinho e não recomeça quando a chain troca de
   variação.
 
+**Resultado do `ROTEIRO-F4.md` (12/10/2026, o Luan na frente da máquina):**
+
+| passo | o quê | resultado |
+|---|---|---|
+| F4.1 | playhead por SSE, um step por vez | ✅ liso |
+| F4.1b | Scale 32nd; LAST 12; chain A12+B16 | ✅ depois das fases 2g/2h (a 1ª versão errava a chain e ficava em `?`); TOCA alterna A/B |
+| F4.2 | segurar o step 5 com o STEP LOOP apagado | ✅ liga o modo sozinho e devolve ao soltar |
+| F4.3 | fileiras edita / toca (Shift soma) | ✅ |
+| F4.4 | PTN digitado → Program Change | ✅ **só com o Rx Program Change em ON** (estava OFF); PC 1 → 1-02, PC 16 → 2-01 (x = PC, sem Bank Select); tocando, troca no fim do pattern |
+| F4.5 | salvar sessão | ✅ os arquivos do ON, das trocas de pattern e do botão |
+| F4.6 | PT / EN | ✅ |
+| F4.6b | standby chuva / ambiente, com o App da Roland aberto | ✅ |
+| F4.6c | PAR (VEL incluída), PERF (5 linhas), ROUT | ✅; a PAR ficou legível na fase 2i (só os steps que tocam) |
+| F4.6d | gráfico do SIDE CHAIN e presets | ✅ (os números dos presets ficam como estão) |
+| F4.6e | ON com a máquina já tocando | ✅ "fase achada pelas notas" no mesmo segundo |
+| F4.7 | c5d (o TEMPO) | ✅ ver abaixo |
+
+As mudanças de chain e de LAST feitas com a máquina tocando aparecem no log como
+"ressincronizei pelas notas", e o modelo se corrige sozinho.
+
+**c5d (12/10/2026, painel, só leitura):**
+- **O knob TEMPO** muda dois valores, ambos × 100:
+  - o **cabeçalho `[16]`**, o tempo do pattern, com centésimos: 129.01 → `3265`, 128.03 → `3203`;
+  - o **bloco 3 `[36]`**, o tempo atual.
+- **Trocar de pattern pelo painel** muda o bloco 3 `[2]`, `[3]`, `[4]` (pattern/kit), `[21]`
+  (o número) e `[36]` (o tempo do pattern novo), igual ao Program Change.
+
+**BPM digitável (fase 2j, liberado pelo Luan em 12/10/2026):** o campo BPM do topo escreve
+os dois, como o painel. A faixa é 40.00..300.00, a da TR-8S, não medida aqui.
+**Não testado em hardware** até a próxima sessão.
+
 **Fase 2h (12/10/2026, F4.1b): a conferência tolera um track fora da grade.**
 - **O que foi medido:** com o `?` aparecendo mesmo depois de STOP/START, uma escuta só de
   leitura da porta `TR-1000` (3 s, a chain A12+B16 tocando) mostrou:

@@ -18,3 +18,12 @@ export function xDoPattern(s) {
   }
   return null;
 }
+
+// "124.5" ou "124,5" -> 12450 (BPM x 100, como a maquina guarda), ou null
+// fora de 40..300
+export function x100DoBpm(s) {
+  const t = String(s).trim().replace(",", ".");
+  if (!/^\d{2,3}(\.\d{1,2})?$/.test(t)) return null;
+  const v = Math.round(parseFloat(t) * 100);
+  return v >= 4000 && v <= 30000 ? v : null;
+}

@@ -54,8 +54,11 @@ const EN = {
     "invalid pattern: use bank-number (1-05) or 1..128",
   "pedindo o pattern {p} (Program Change)...":
     "asking for pattern {p} (Program Change)...",
-  "Digitar o BPM depende da sessão c5d (o endereço do TEMPO ainda não foi aprendido).":
-    "Typing the BPM needs the c5d session (the TEMPO address is not learned yet).",
+  "mudar o BPM": "change the BPM",
+  "Digite o BPM (ex.: 124.5, de 40 a 300) e Enter. Esc cancela.":
+    "Type the BPM (e.g. 124.5, 40 to 300) and Enter. Esc cancels.",
+  "BPM inválido: de 40 a 300, até duas casas (124.5)":
+    "invalid BPM: 40 to 300, up to two decimals (124.5)",
   "tocando: a variação que as notas da máquina dizem (? = não dá para saber). Parada: a chain.":
     "playing: the variation the machine's notes point to (? = can't tell). Stopped: the chain.",
   // abas

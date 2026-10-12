@@ -45,11 +45,17 @@ CAB_FIRST_VAR, CAB_LAST_VAR = 60, 72           # + v, 0-based (c5c / c5)
 CAB_FIRST_TRK, CAB_LAST_TRK = 84, 95           # + track, 0-based (c5c / c5)
 CAB_TRK_SW = 106                               # + track: o track tem FIRST/LAST proprio
 CAB_FILL = 119                                 # 0 FILL1, 1 FILL2 (c5); 2-3 NAO medidos
+CAB_TEMPO = 16                                 # tempo x 100 do pattern, com centesimos (c5d)
 SCALES = ["8th(T)", "16th(T)", "16th", "32nd"]
 
 # ── no bloco 3 (estado da maquina, x 0) ───────────────────────
 B3_MODO_MUTE, B3_MUTE = 11, 12                 # c5/c5c: o modo, e a mascara por track
 B3_LOOP, B3_LOOP_STEP = 150, 151               # c5b: o modo, e o step segurado (+ s)
+B3_TEMPO = 36                                  # tempo x 100 atual (c4 08/10; c5d 12/10)
+# o TEMPO, liberado pelo Luan em 12/10/2026 depois da c5d (girar o knob muda
+# o cabecalho [16] e o bloco 3 [36], os dois x 100). A faixa 40.00..300.00 e
+# a da TR-8S - nao medida aqui
+TEMPO_MIN, TEMPO_MAX = 4000, 30000
 
 Campo = namedtuple("Campo", "bloco y indice minimo maximo")
 
@@ -96,6 +102,8 @@ def _no_cab(indice):
         return 0, len(SCALES) - 1
     if p == CAB_FILL:
         return 0, 1                             # so o medido (revisao do PR #7)
+    if p == CAB_TEMPO:
+        return TEMPO_MIN, TEMPO_MAX
     if CAB_FIRST_VAR <= p < CAB_FIRST_VAR + N_VARS or CAB_LAST_VAR <= p < CAB_LAST_VAR + N_VARS:
         return 0, N_STEPS - 1
     if CAB_FIRST_TRK <= p < CAB_FIRST_TRK + N_TRACKS or CAB_LAST_TRK <= p < CAB_LAST_TRK + N_TRACKS:
@@ -111,6 +119,8 @@ def _no_b3(indice):
         return 0, (1 << N_TRACKS) - 1
     if p == B3_LOOP or B3_LOOP_STEP <= p < B3_LOOP_STEP + N_STEPS:
         return 0, 1
+    if p == B3_TEMPO:
+        return TEMPO_MIN, TEMPO_MAX
     return None
 
 
