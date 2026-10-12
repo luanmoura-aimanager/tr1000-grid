@@ -40,7 +40,7 @@ PYTHONPATH = os.path.expanduser("~/Library/Python/3.9/lib/python/site-packages")
 # tudo que o servidor.py importa do projeto (conferido no TesteEmbalagem)
 ARQUIVOS = ("servidor.py", "campos.py", "conexao_serial.py", "controladoras.py",
             "espiao.py", "launchpad.py", "motor.py", "parametros.py", "portas.py",
-            "roland.py", "tr1000.py", "tr1000_serial.py")
+            "roland.py", "tocando.py", "tr1000.py", "tr1000_serial.py")
 
 
 def copiar_projeto(destino, so_web=False):

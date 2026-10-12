@@ -56,8 +56,8 @@ const EN = {
     "asking for pattern {p} (Program Change)...",
   "Digitar o BPM depende da sessão c5d (o endereço do TEMPO ainda não foi aprendido).":
     "Typing the BPM needs the c5d session (the TEMPO address is not learned yet).",
-  "a chain (a variação que toca ainda não é detectada)":
-    "the chain (the playing variation is not detected yet)",
+  "tocando: a variação que as notas da máquina dizem (? = não dá para saber). Parada: a chain.":
+    "playing: the variation the machine's notes point to (? = can't tell). Stopped: the chain.",
   // abas
   Pattern: "Pattern",
   Mixer: "Mixer",

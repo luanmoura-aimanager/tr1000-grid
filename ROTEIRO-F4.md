@@ -90,6 +90,18 @@ Com **ON**, nos botões do topo do Launchpad direito:
 3. **PRESET:** passe pelos 9 e diga, para cada um, se soa como o nome promete e o que
    mudar (ex.: "Pump clássico: release mais curto").
 
+## F4.6e — A variação que toca
+
+1. Chain **A+B** (toca A, Shift-clique em B), com A e B **diferentes** (um BD a mais na B
+   basta). Play. **Esperado:** o TOCA alterna A → B → A no compasso certo; no Launchpad o
+   botão da que toca fica **branco**, o da editada **azul**. Diga se a troca chega atrasada
+   (quantos steps).
+2. A e B iguais: **Esperado:** `?` (não dá para saber de ouvido) em vez de um chute.
+3. Com a máquina **tocando**, aperte **OFF** e depois **ON** no Controller. **Esperado:**
+   em até ~1 compasso o rodapé diz "fase achada" e o playhead aparece no step certo, sem
+   STOP/START. Com um pattern muito repetitivo (só BD nos tempos), o playhead pode não
+   aparecer; isso é esperado.
+
 ## F4.7 — c5d: o TEMPO (para o BPM digitável)
 
 Com **OFF** no Controller (a serial livre):

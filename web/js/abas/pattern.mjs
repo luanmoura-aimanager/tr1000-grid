@@ -507,7 +507,10 @@ export default {
     if (!E.grade) return;
     const D = ctx.D;
     botEdita.forEach((b, i) => pressionado(b, i === E.variacao));
-    botToca.forEach((b, i) => pressionado(b, (E.variacoes >> i) & 1));
+    botToca.forEach((b, i) => {
+      pressionado(b, (E.variacoes >> i) & 1);
+      attr(b, "data-tocando", !!E.tocando && E.tocando_var === i); // a que soa agora
+    });
     botFill.forEach((b, n) => pressionado(b, n === E.fill));
     botVel.forEach((b, i) => pressionado(b, i === E.velocidade_idx));
     for (const [m, b] of Object.entries(botLayer))

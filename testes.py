@@ -2302,6 +2302,168 @@ class TesteSideChain(unittest.TestCase):
         self.assertEqual(escritos[(12, 551)], 600)       # MSTR DEP
 
 
+class TesteTocando(unittest.TestCase):
+    """Fase 2f: qual variacao toca, pelas notas (tocando.py e o motor)."""
+
+    N = None
+
+    @staticmethod
+    def _var(colunas_por_track):
+        """{track: [colunas]} -> {track: [131 u32]} (PROB 100 em tudo)."""
+        n = tr1000_serial.nota(80)
+        out = {}
+        for tr in range(10):
+            v = [0] * 131
+            for c in range(16):
+                v[64 + c] = 100
+                v[4 * c] = v[4 * c + 1] = n if c in colunas_por_track.get(tr, ()) else 0xFF
+            out[tr] = v
+        return out
+
+    # A: BD nos tempos; B: BD em todo step par e SD no 4 e no 14
+    A = {0: (0, 4, 8, 12)}
+    B = {0: (0, 2, 4, 6, 8, 10, 12, 14), 1: (3, 13)}   # sem periodo menor que 16
+
+    def _ouvido(self, var, coluna):
+        return frozenset(tr for tr, cols in var.items() if coluna in cols)
+
+    def test_nota_para_track(self):
+        import tocando
+        self.assertEqual([tocando.track_da_nota(n) for n in (36, 35, 99, 37, 56, 51, 84)],
+                         [0, 0, 0, 4, 4, 9, None])
+
+    def test_qual_toca_unica_e_troca_rapida(self):
+        import tocando
+        vs = {0: self._var(self.A), 1: self._var(self.B)}
+        ext = {0: (0, 15), 1: (0, 15)}
+        janela = [(n, self._ouvido(self.A, n)) for n in range(6)]
+        self.assertEqual(tocando.qual_toca(janela, vs, ext), 0)
+        # a chain virou para a B no step 16: dois steps de B ja bastam
+        janela = [(n, self._ouvido(self.A, n % 16)) for n in range(12, 16)] + \
+                 [(n, self._ouvido(self.B, n % 16)) for n in range(16, 19)]
+        self.assertEqual(tocando.qual_toca(janela, vs, ext, antes=0), 1)
+
+    def test_empate_nao_chuta(self):
+        import tocando
+        vs = {0: self._var(self.A), 1: self._var(self.A)}         # iguais
+        ext = {0: (0, 15), 1: (0, 15)}
+        janela = [(n, self._ouvido(self.A, n)) for n in range(6)]
+        self.assertIsNone(tocando.qual_toca(janela, vs, ext))
+        self.assertEqual(tocando.qual_toca(janela, vs, ext, antes=1), 1)
+
+    def test_prob_e_mute_nao_contam(self):
+        import tocando
+        v = self._var({0: (0,), 6: (0,)})
+        v[6][64] = 50                                    # o CH do step 1 com PROB 50
+        certos, talvez = tocando.esperado(v, 0)
+        self.assertEqual((certos, talvez), ({0}, {6}))
+        self.assertTrue(tocando.bate({0}, certos, talvez))
+        self.assertTrue(tocando.bate({0, 6}, certos, talvez))
+        self.assertTrue(tocando.bate(set(), certos, talvez, mudos={0}))
+        self.assertFalse(tocando.bate(set(), certos, talvez))
+
+    def test_fase_unica_e_periodica(self):
+        import tocando
+        vs = {0: self._var(self.B)}
+        ext = {0: (0, 15)}
+        # o motor contou n = 0.. mas a maquina estava na coluna 5
+        janela = [(n, self._ouvido(self.B, (n + 5) % 16)) for n in range(8)]
+        self.assertEqual(tocando.achar_fase(janela, vs, ext), (0, 5))
+        so_tempos = {0: self._var(self.A)}               # repete a cada 4: nao da
+        janela = [(n, self._ouvido(self.A, (n + 1) % 16)) for n in range(8)]
+        self.assertIsNone(tocando.achar_fase(janela, so_tempos, ext))
+
+    def _motor(self, chain=0b11):
+        m = motor_cru()
+        m.cab = [0] * 248
+        for v in range(campos.N_VARS):
+            m.cab[campos.CAB_LAST_VAR + v] = 15
+        m.cab[campos.CAB_SCALE], m.cab[campos.CAB_VARIACOES] = 2, chain
+        for v, var in ((0, self.A), (1, self.B)):
+            for tr, steps in self._var(var).items():
+                m.cache[(v, tr)] = steps
+        return m
+
+    def _tocar(self, m, var, colunas, start=False):
+        import mido
+        notas = {0: 36, 1: 38}
+        msgs = []
+        for i, c in enumerate(colunas):
+            msgs += [mido.Message("note_on", channel=9, note=notas[tr], velocity=80)
+                     for tr, cols in var.items() if c in cols]
+            if start and i == 0:
+                msgs.append(mido.Message("start"))
+            msgs += [mido.Message("clock")] * 6
+        m.clk = _PortaLP(msgs)
+        m._ler_clock()
+
+    def test_motor_acha_a_variacao_que_toca(self):
+        m = self._motor()
+        self._tocar(m, self.A, range(8), start=True)
+        self.assertEqual((m.tocando, m.tocando_var), (True, 0))
+        self.assertEqual(m.estado()["tocando_var"], 0)
+
+    def test_motor_segue_a_chain(self):
+        m = self._motor()
+        self._tocar(m, self.A, range(16), start=True)
+        self.assertEqual(m.tocando_var, 0)
+        import mido
+        msgs = []
+        for c in range(6):
+            msgs += [mido.Message("note_on", channel=9, note={0: 36, 1: 38}[tr], velocity=80)
+                     for tr, cols in self.B.items() if c in cols]
+            msgs += [mido.Message("clock")] * 6
+        m.clk.fila = msgs
+        m._ler_clock()
+        self.assertEqual(m.tocando_var, 1)
+
+    def test_motor_adota_a_maquina_ja_tocando(self):
+        m = self._motor(chain=0b10)                     # so a B
+        self.assertFalse(m.tocando)
+        self._tocar(m, self.B, [(c + 5) % 16 for c in range(12)])
+        self.assertTrue(m.tocando)
+        self.assertFalse(m.fase_incerta)
+        self.assertEqual(m.tocando_var, 1)
+        # o playhead esta na coluna da maquina (o ultimo step tocado foi o 16 = 5+11)
+        self.assertEqual(m.passo, (5 + 11) % 16)
+
+    def test_fase_numa_variacao_de_8_steps(self):
+        import tocando
+        curta = {0: (0, 1, 5), 1: (6,)}                  # 8 steps, sem periodo menor
+        vs = {0: self._var(curta)}
+        ext = {0: (0, 7)}
+        janela = [(n, self._ouvido(curta, (n + 3) % 8)) for n in range(8)]
+        self.assertEqual(tocando.achar_fase(janela, vs, ext), (0, 3))
+
+    def test_pads_fora_do_tempo_nao_adotam(self):
+        import mido
+        m = self._motor()
+        msgs = []
+        for espaco in (9, 4, 11, 7, 10, 5, 8, 13, 9, 4):   # batidas fora da grade de 16as
+            msgs.append(mido.Message("note_on", channel=9, note=36, velocity=80))
+            msgs += [mido.Message("clock")] * espaco
+        m.clk = _PortaLP(msgs)
+        m._ler_clock()
+        self.assertFalse(m.tocando)
+
+    def test_off_zera_o_detector(self):
+        m = self._motor(chain=0b10)
+        self._tocar(m, self.B, [(c + 5) % 16 for c in range(12)])
+        self.assertTrue(m.adotado)
+        m.soltar_maquina()
+        self.assertEqual((m.adocao, m.ouvidos, m.tocando_var, m.fase_incerta, m.adotado),
+                         (None, None, None, False, False))
+
+    def test_pad_tocado_parado_nao_vira_playhead(self):
+        import mido
+        m = self._motor()
+        m.clk = _PortaLP([mido.Message("note_on", channel=9, note=36, velocity=80)]
+                         + [mido.Message("clock")] * (6 * 40))
+        m._ler_clock()
+        self.assertFalse(m.tocando)
+        self.assertIsNone(m.adocao)
+
+
 class TesteEmbalagem(unittest.TestCase):
     def test_post_merge_so_atualiza_o_que_a_copia_leva(self):
         import instalar_agente as ia

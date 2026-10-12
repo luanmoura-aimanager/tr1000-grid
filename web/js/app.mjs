@@ -119,7 +119,7 @@ function montarPtn() {
   attr(
     $("#s-toca"),
     "title",
-    t("a chain (a variação que toca ainda não é detectada)"),
+    t("tocando: a variação que as notas da máquina dizem (? = não dá para saber). Parada: a chain."),
   );
 }
 
@@ -177,8 +177,15 @@ function montar() {
   mostrarAba(atual);
 }
 
-// a chain do cabecalho ("A+B"); a variacao que TOCA e o item 4 do plano
+// tocando: a variacao que o detector achou (tocando.py), "?" se ele nao sabe,
+// "…" procurando a fase; parada: a chain do cabecalho ("A+B")
 function textoToca() {
+  if (E.tocando) {
+    if (E.fase_incerta) return "…";
+    return E.tocando_var === null || E.tocando_var === undefined
+      ? "?"
+      : D.variacoes[E.tocando_var];
+  }
   const m = E.variacoes || 0;
   const v = D.variacoes.slice(0, N_AH).filter((_, i) => (m >> i) & 1);
   return v.length ? v.join("+") : "—";

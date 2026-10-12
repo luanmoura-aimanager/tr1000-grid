@@ -26,9 +26,12 @@ FIRST/LAST proprio anda sozinho (polimetria).
 As paginas do layout A (fase 2d): PAR (96), PERF (97) e ROUT (98) no topo do
 direito; o mesmo botao volta para os steps.
 
+A variacao que TOCA (fase 2f, tocando.py): as notas que a maquina manda na
+porta 'TR-1000' contra os steps de cada variacao da chain. So a que bate, e
+so ela; empate fica "?". As mesmas notas dao a fase quando o Controller liga
+com a maquina ja tocando (sem START).
+
 O que NAO faz ainda (documentado na REFERENCIA):
-  - saber qual variacao esta TOCANDO (nao ha de onde ler): o playhead anda
-    sobre a variacao mostrada
   - linhas de ACC e TRG: o accent e pelo painel; o TRG ficou de fora
   - gravar: o WRITE continua no painel (criterio 6 adiado)
 """
@@ -39,6 +42,7 @@ import conexao_serial as cs
 import controladoras
 import parametros
 import launchpad as lp
+import tocando as toc
 import tr1000
 import tr1000_serial as ts
 from portas import EntradaMIDI, SaidaMIDI, porta_exata
@@ -177,6 +181,15 @@ class Motor:
     proxima_onda = 0.0
     ultimo_quadro = 0.0
     ao_passo = None                             # callback da tela (o /passo)
+    tocando_var = None                          # a variacao que toca (None = "?")
+    adotado = False                             # tocando sem ter visto o START
+    sem_adocao = False                          # desistiu da fase: espera START/STOP
+    sem_nota_n = 0                              # steps seguidos sem nota (adotado)
+    fase_incerta = False                        # tocando, mas sem saber o step (adotado)
+    ouvidos = None                              # {n: {tracks}} o que soou em cada step
+    adocao = None                               # notas sem START: contando para adotar
+    lido_em = None                              # {variacao: hora} das variacoes da chain
+    RELER_CHAIN_A_CADA = 5.0                    # s
     pc_out = None                               # a porta 'TR-1000' de saida (Program Change)
     loop_antes = None                           # o [150] antes de segurar um step
     loop_segurados = frozenset()                # os steps segurados agora
@@ -327,6 +340,9 @@ class Motor:
             self.pc_out = None
         self.tocando = False
         self.passo, self.passos_trk, self.n_steps = -1, None, -1
+        # o detector tambem (revisao do PR #13: sobrevivia ate o proximo ON)
+        self.adocao, self.ouvidos, self.tocando_var, self.n_parado = None, None, None, -1
+        self.fase_incerta = self.adotado = self.sem_adocao = False
         self.x_pattern = self.x_kit = None
         self.b3 = self.cab = None                    # sem maquina, nada velho na tela
         self.cache.clear()
@@ -396,6 +412,7 @@ class Motor:
             self.log(f"pattern {ts.nome_do_pattern(x)} (x {x})")
             self.x_pattern = x
             self.cache.clear()
+            self.lido_em, self.tocando_var = {}, None
             self.pedir_foto("ON" if self.ultima_sessao is None else "pattern",
                             0.0 if self.ultima_sessao is None else self.ESPERA_FOTO_PATTERN)
         antes = [self.cache.get(k) for k in novo]
@@ -518,8 +535,14 @@ class Motor:
         ligado = self.modo_geral == MODO_ON
         e, d = self.lp_out["E"], self.lp_out["D"]
         for i, cc in enumerate(lp.CENA_CCS):
-            self._luz(e, cc, lp.cor_borda(lp.COR_VAR, i == self.variacao) if ligado
-                      else (0, 0, 0))
+            # azul = a editada; branco = a que toca (tocando.py)
+            if ligado and self.tocando and i == self.tocando_var:
+                cor = (127, 127, 127) if i != self.variacao else (60, 100, 127)
+            elif ligado:
+                cor = lp.cor_borda(lp.COR_VAR, i == self.variacao)
+            else:
+                cor = (0, 0, 0)
+            self._luz(e, cc, cor)
             cor_vel = (lp.COR_ATIVO if i == self.vel_idx else lp.COR_VEL_OFF)
             self._luz(d, cc, lp.cor_borda(cor_vel, i == self.vel_idx) if ligado
                       else (0, 0, 0))
@@ -594,15 +617,14 @@ class Motor:
         return PULSOS_POR_SCALE[n] if 0 <= n < len(PULSOS_POR_SCALE) else PULSOS_P_STEP
 
     def _volta(self, n, first, last):
-        """O step n (desde o START) dentro de FIRST..LAST. LAST antes do FIRST
-        (nao visto no painel) vira 1..16, em vez de um playhead perdido."""
-        if not (0 <= first <= last < PASSOS):
-            first, last = 0, PASSOS - 1
-        return first + n % (last - first + 1)
+        """O step n (desde o START) dentro de FIRST..LAST: a MESMA regra do
+        detector (tocando.volta), para o playhead e a comparacao concordarem."""
+        return toc.volta(n, first, last, PASSOS)
 
     def calcular_passos(self, n):
         """(passo da variacao mostrada, [passo de cada track]) no step n."""
-        v = self.variacao                       # as Fill tem FIRST/LAST tambem
+        # a que toca, se ja se sabe; senao a mostrada (as Fill tem FIRST/LAST tambem)
+        v = self.tocando_var if self.tocando_var is not None else self.variacao
         pv = self._volta(n, self._c(campos.CAB_FIRST_VAR + v, 0),
                          self._c(campos.CAB_LAST_VAR + v, PASSOS - 1))
         trk = [self._volta(n, self._c(campos.CAB_FIRST_TRK + t, 0),
@@ -619,8 +641,8 @@ class Motor:
         colunas que mudaram, em qualquer linha (polimetria)."""
         self.n_steps = n
         antes = {self.passo} | set(self.passos_trk or [])
-        if n < 0:
-            self.passo, self.passos_trk = -1, None
+        if n < 0 or self.fase_incerta:
+            self.passo, self.passos_trk = -1, None    # sem fase: nada, nao um chute
         else:
             self.passo, self.passos_trk = self.calcular_passos(n)
         depois = {self.passo} | set(self.passos_trk or [])
@@ -640,6 +662,142 @@ class Motor:
         return {"tocando": self.tocando, "passo": self.passo,
                 "passos_trk": list(self.passos_trk) if self.passos_trk else None}
 
+    # ── a variacao que toca (tocando.py) ────────────────────
+    def _nota(self, nota):
+        """Uma nota da maquina: o track dela entra no step em que caiu. Nota
+        que chega no fim de um step (depois do ultimo pulso dele) e do
+        proximo: a maquina manda a nota um pouco antes do pulso que o abre."""
+        tr = toc.track_da_nota(nota)
+        if tr is None:
+            return
+        if not self.tocando:
+            # sem START: conta para adotar (o Controller ligou com a maquina
+            # ja tocando - ou alguem tocou um pad parado; a adocao decide)
+            if self.sem_adocao:
+                return                               # desistiu: so o START/STOP volta
+            if self.adocao is None:
+                self.adocao = {"pulsos": 0, "n": 0, "pps": self.pulsos_por_step(),
+                               "ouvidos": {}, "sem_nota": 0, "fora": 0}
+            a = self.adocao
+            # so nota na virada do step conta: a maquina tocando manda tudo
+            # junto do pulso que abre o step; um pad tocado com ela parada cai
+            # em qualquer lugar (revisao do PR #13: dois pads viravam "tocando")
+            if 0 < a["pulsos"] < a["pps"]:
+                a["fora"] += 1
+                return
+            n = a["n"] + (1 if a["pulsos"] >= a["pps"] else 0)
+            a["ouvidos"].setdefault(n, set()).add(tr)
+            a["sem_nota"] = 0
+            return
+        if self.ouvidos is None:
+            self.ouvidos = {}
+        n = self.n_steps + (1 if self.pulsos >= self.pps_step else 0)
+        self.ouvidos.setdefault(n, set()).add(tr)
+
+    def _pulso_de_adocao(self):
+        """Um pulso de clock durante a adocao. Duas viradas de step com notas
+        = a maquina esta tocando: o motor assume, com a fase a descobrir.
+        32 steps sem nota = era um pad tocado parado: desiste."""
+        a = self.adocao
+        a["pulsos"] += 1
+        if a["pulsos"] <= a["pps"]:
+            return
+        a["pulsos"] = 1
+        a["n"] += 1
+        a["sem_nota"] += 1
+        if a["sem_nota"] > 32:
+            self.adocao = None
+            return
+        com_notas = [k for k in a["ouvidos"] if k < a["n"]]
+        if 2 * a["fora"] > len(com_notas):           # nota fora da grade demais: pad, nao a maquina
+            self.adocao = None
+            return
+        if len(com_notas) >= 3:
+            self.ouvidos = dict(a["ouvidos"])
+            self.n_steps, self.pulsos, self.pps_step = a["n"], a["pulsos"], a["pps"]
+            self.tocando, self.fase_incerta, self.adocao = True, True, None
+            self.adotado, self.sem_nota_n = True, 0
+            self.log("a TR-1000 ja estava tocando: procurando a fase pelas notas")
+            self._avisar_passo()
+
+    def _vars_da_chain(self):
+        """{v: {track: [131]}} das variacoes da chain que o cache ja tem."""
+        mascara = self._c(campos.CAB_VARIACOES, 1)
+        out = {}
+        for v in range(8):
+            if mascara >> v & 1:
+                steps = {tr: self.cache.get((v, tr)) for tr in range(N_TRACKS)}
+                if all(x is not None for x in steps.values()):
+                    out[v] = steps
+        return out
+
+    def _avaliar_tocando(self):
+        """Depois de cada step: a variacao que toca, ou a fase (adotado)."""
+        if not self.tocando or not self.ouvidos and not self.fase_incerta:
+            return
+        n = self.n_steps
+        ouvidos = self.ouvidos or {}
+        for k in [k for k in ouvidos if k < n - 64]:
+            del ouvidos[k]
+        janela = [(k, frozenset(ouvidos.get(k, ()))) for k in range(max(0, n - toc.JANELA), n)]
+        vars_steps = self._vars_da_chain()
+        if not vars_steps:
+            return
+        extremos = {v: (self._c(campos.CAB_FIRST_VAR + v, 0),
+                        self._c(campos.CAB_LAST_VAR + v, PASSOS - 1)) for v in vars_steps}
+        mudos = {t for t in range(N_TRACKS) if self.mudo_mascara >> t & 1}
+        if self.fase_incerta:
+            achado = toc.achar_fase(janela, vars_steps, extremos, mudos)
+            if achado is None:
+                if n > 64:                           # 4 compassos sem fase unica
+                    # desiste de vez ate um START/STOP (revisao do PR #13: sem
+                    # isso adotava e desistia de novo a cada ~8 s)
+                    self.log("(!) nao achei a fase pelas notas - de STOP e START na maquina")
+                    self.tocando = self.fase_incerta = self.adotado = False
+                    self.ouvidos, self.sem_adocao = None, True
+                    self._avisar_passo()
+                return
+            v, d = achado
+            self.ouvidos = {k + d: s for k, s in ouvidos.items()}
+            self.fase_incerta, self.tocando_var = False, v
+            self.log(f"fase achada pelas notas: variacao {ts.VARIACOES_SERIAL[v]}")
+            self.mover_playhead(n + d)
+            self.pintar_botoes()
+            return
+        if self.adotado:
+            # adotado sem START: 32 steps sem nota = a maquina parou (ou nunca
+            # tocou) - o playhead nao segue andando sozinho
+            self.sem_nota_n = 0 if ouvidos.get(n - 1) else self.sem_nota_n + 1
+            if self.sem_nota_n > 32:
+                self.tocando = self.adotado = False
+                self.tocando_var, self.ouvidos = None, None
+                self.mover_playhead(-1)
+                self.pintar_botoes()
+                return
+        nova = toc.qual_toca(janela, vars_steps, extremos, mudos, self.tocando_var)
+        if nova != self.tocando_var:
+            self.tocando_var = nova
+            self.pintar_botoes()
+
+    def _ler_chain(self):
+        """Uma variacao da chain por vez (a mais velha no cache), a cada
+        releitura: o detector precisa dos steps de todas. Parada, nao le
+        (revisao do PR #13: 14 leituras/s a toa com a chain inteira)."""
+        if self.x_pattern is None or not (self.tocando or self.adocao is not None):
+            return
+        if self.lido_em is None:
+            self.lido_em = {}
+        mascara = self._c(campos.CAB_VARIACOES, 1)
+        agora = time.time()
+        velhas = [(self.lido_em.get(v, 0.0), v) for v in range(8)
+                  if mascara >> v & 1 and v != self.variacao
+                  and agora - self.lido_em.get(v, 0.0) > self.RELER_CHAIN_A_CADA]
+        if not velhas:
+            return
+        _t, v = min(velhas)
+        self.cache.update(self._ler_variacao(self.x_pattern, v))
+        self.lido_em[v] = agora
+
     # ── clock (a porta MIDI comum) ──────────────────────────
     def _ler_clock(self):
         if not self.clk:
@@ -651,24 +809,47 @@ class Motor:
         for msg in self.clk.iter_pending():
             t = msg.type
             if t == "clock":
+                if self.adocao is not None and not self.tocando:
+                    self._pulso_de_adocao()
+                    continue
                 lote += 1
                 continue
             lote = self._aplicar_pulsos(lote)  # transporte fecha o lote
+            if (t == "note_on" and msg.velocity > 0
+                    and msg.channel == tr1000.CANAL_PATTERN_PADRAO - 1):
+                self._nota(msg.note)
+                continue
             if t == "start":
                 # start sem stop antes (recomeco): as colunas velhas sao
                 # repintadas pelo mover_playhead (revisao do PR #4)
+                # as notas do step 1 chegam ~3 ms ANTES do start (REFERENCIA
+                # 7.3): ficaram na adocao, e sao do step 0
+                antes = (self.adocao or {}).get("ouvidos", {})
+                ultimo = max(antes) if antes else None
+                pre = antes.get(ultimo, set()) if (self.adocao or {}).get("pulsos") == 0 else set()
+                self.adocao, self.fase_incerta = None, False
+                self.adotado = self.sem_adocao = False
+                self.ouvidos = {0: set(pre)}
                 self.pulsos, self.tocando = 0, True
                 self.pps_step = self.pulsos_por_step()
                 self.mover_playhead(0)
             elif t == "continue":
                 # retoma de onde parou: os pulsos do step ficaram guardados
-                # (revisao do PR #8)
+                # (revisao do PR #8). Sem saber onde parou (parou procurando a
+                # fase): procura de novo, em vez de por no step 1 (PR #13)
                 self.tocando = True
-                self.mover_playhead(max(self.n_parado, 0))
+                if self.n_parado < 0:
+                    self.fase_incerta, self.adotado, self.ouvidos = True, True, {}
+                    self.mover_playhead(0)
+                else:
+                    self.mover_playhead(self.n_parado)
             elif t == "stop":
                 self.tocando = False
-                self.n_parado = self.n_steps
+                self.n_parado = -1 if self.fase_incerta else self.n_steps
+                self.fase_incerta, self.adocao, self.tocando_var = False, None, None
+                self.adotado = self.sem_adocao = False
                 self.mover_playhead(-1)
+                self.pintar_botoes()
         self._aplicar_pulsos(lote)
 
     def _aplicar_pulsos(self, lote):
@@ -678,15 +859,19 @@ class Motor:
         step, sem o playhead pular para um lugar calculado com a Scale nova."""
         if not (lote and self.tocando):
             return 0
-        n = self.n_steps
+        andou = False
         for _ in range(lote):
             self.pulsos += 1
             if self.pulsos > self.pps_step:
                 self.pulsos = 1
-                n += 1
                 self.pps_step = self.pulsos_por_step()    # a Scale do step que abre
-        if n != self.n_steps:
-            self.mover_playhead(n)
+                # o detector olha cada step, mesmo num lote grande; a pintura e
+                # o /passo, so o ultimo (revisao do PR #13)
+                self.n_steps += 1
+                andou = True
+                self._avaliar_tocando()
+        if andou:
+            self.mover_playhead(self.n_steps)
         return 0
 
     # ── as paginas PAR / PERF / ROUT ────────────────────────
@@ -1223,6 +1408,7 @@ class Motor:
                 "variacao": v, "velocidade_idx": self.vel_idx, "modo_layer": self.modo_layer,
                 "banco": self.banco, "passo": self.passo, "tocando": self.tocando,
                 "pagina": self.pagina,
+                "tocando_var": self.tocando_var, "fase_incerta": self.fase_incerta,
                 "passos_trk": list(self.passos_trk) if self.passos_trk else None,
                 "loop_segurados": sorted(self.loop_segurados),
                 "ultima_sessao": self.ultima_sessao,
@@ -1386,6 +1572,7 @@ class Motor:
                 self.proxima_releitura = agora + RELER_A_CADA
                 try:
                     self.reler()
+                    self._ler_chain()
                 except ERROS_DE_LEITURA as e:
                     self.log(f"(!) releitura falhou: {e}")
             if self.modo_geral == MODO_ON:
