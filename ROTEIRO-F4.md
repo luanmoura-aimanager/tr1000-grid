@@ -80,6 +80,16 @@ Com **ON**, nos botões do topo do Launchpad direito:
    Linha 8: DUCK/GATE e TIME/STEP. **Esperado:** a aba Efeitos mostra o mesmo.
 5. O mesmo botão volta para os steps.
 
+## F4.6d — O gráfico e os presets do SIDE CHAIN
+
+1. Aba **Efeitos**, SIDE CHAIN, com a máquina tocando. Arraste o **ponto de baixo** para
+   baixo (MSTR DEP maior) e para a direita (HOLD maior). **Esperado:** o bombeado fica mais
+   fundo e mais longo, e os sliders seguem.
+2. O **ponto de cima** para a direita: a volta fica mais lenta. O **do meio**: muda o
+   formato da volta.
+3. **PRESET:** passe pelos 9 e diga, para cada um, se soa como o nome promete e o que
+   mudar (ex.: "Pump clássico: release mais curto").
+
 ## F4.7 — c5d: o TEMPO (para o BPM digitável)
 
 Com **OFF** no Controller (a serial livre):

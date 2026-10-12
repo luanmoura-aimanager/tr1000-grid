@@ -292,6 +292,14 @@ def _param(a):
     HOST.enfileirar(HOST.motor.definir_param, id, int(a["valor"]))   # a faixa: o motor (por type)
 
 
+def _preset_sc(a):
+    nome = str(a["nome"])
+    if nome not in P.PRESETS_SC:
+        raise ValueError(f"preset {nome!r} desconhecido")
+    for id, valor in P.PRESETS_SC[nome].items():
+        HOST.enfileirar(HOST.motor.definir_param, id, valor)
+
+
 ACOES = {
     "exec": _exec,
     "step": lambda a: HOST.enfileirar(HOST.motor.alternar_step, _track(a), _step(a)),
@@ -308,6 +316,8 @@ ACOES = {
     "extremos_track": _extremos_track,
     "loop": lambda a: HOST.enfileirar(HOST.motor.definir_loop, bool(a["ligado"]), _passo_ou_none(a, "step")),
     "param": _param,
+    # um preset do SIDE CHAIN: cada valor pelo definir_param (o portao e a faixa)
+    "preset_sc": lambda a: _preset_sc(a),
     # o pattern por Program Change (pedido do Luan, 12/10/2026; nao medido ate o F4)
     "ptn": lambda a: HOST.enfileirar(HOST.motor.trocar_pattern, _faixa(a, "x", 0, 127)),
     # a foto da sessao: so no app, nunca na maquina
@@ -335,6 +345,7 @@ def dados_estaticos():
         "nomes": P.NOMES, "mfx_tipos": P.MFX_TIPOS, "delay_tipos": P.DELAY_TIPOS,
         "lfo_syncs": P.LFO_SYNCS, "rotas": P.ROTAS, "sc_fontes": P.SC_FONTES,
         "seletores": {id: P.seletor_de(id) for id in P.POR_TIPO},
+        "presets_sc": P.PRESETS_SC,
         "build": time.strftime("%d/%m %H:%M", time.localtime(os.path.getmtime(os.path.abspath(__file__)))),
     }
 

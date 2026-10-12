@@ -916,6 +916,18 @@ O TR-8S Controller, para a TR-1000:
 **O que a tela escreve:** o mesmo portão de sempre, `campos.py` + `parametros.py`. O accent
 é só leitura, porque é feito no painel. O roteiro é o `ROTEIRO-F3.md`.
 
+**Fase 2e (12/10/2026): o gráfico e os presets do SIDE CHAIN** (aba Efeitos).
+- **O gráfico** (`web/js/envelope.mjs`) é a nossa leitura do App, com três pontos:
+  - o de baixo: HOLD (o `sc.hld_step` ou o `sc.hld_time`, conforme o HLD MODE) × MSTR DEP;
+  - o de cima: o RELEASE;
+  - o do meio: a CURVE.
+
+  O GATE vira o desenho de cabeça para baixo. Arrastar manda o mesmo `param` dos sliders.
+  O desenho é proporcional à faixa crua, porque as unidades não foram medidas.
+- **Os 9 presets** (`parametros.PRESETS_SC`, ação `preset_sc`) gravam cada valor pelo
+  `definir_param`. Os números são palpite, a acertar de ouvido no F4. O dropdown mostra o
+  preset que bate com o kit, ou "—".
+
 **Fase 2d (12/10/2026): as páginas do Launchpad.** O botão do topo direito abre a página, e
 o mesmo botão volta aos steps. Tudo chama as mesmas ações da tela (o mesmo portão).
 - **PAR (96):**

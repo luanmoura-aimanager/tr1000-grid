@@ -139,6 +139,19 @@ select{ background:var(--painel2); border:1px solid var(--linha2); border-radius
 .fila.entre{ justify-content:space-between; }
 .toques.loop .bt{ min-width:30px; touch-action:none; }
 
+/* ── o grafico do side chain ─────────────────────────── */
+@media (min-width: 720px){ .secao-larga{ grid-column:span 2; } }
+.envelope{ width:100%; max-width:480px; height:auto; touch-action:none; user-select:none; }
+.env-fundo{ fill:#0a0908; stroke:var(--linha); }
+.env-grade{ stroke:var(--linha); stroke-dasharray:3 4; fill:none; }
+.env-area{ fill:var(--acento); opacity:.14; }
+.env-linha{ fill:none; stroke:var(--acento); stroke-width:2.5; stroke-linejoin:round; }
+.env-ponto{ fill:var(--tinta); stroke:var(--acento); stroke-width:2; cursor:grab; }
+.env-ponto:focus-visible{ outline:none; stroke:var(--tinta); stroke-width:3; }
+.env-meio{ fill:var(--acento); }
+.env-rot{ fill:var(--fraco); font:10px var(--f-mono); text-anchor:middle; }
+.env-vazio .env-ponto, .env-vazio .env-linha, .env-vazio .env-area, .env-vazio .env-rot{ display:none; }
+
 #rodape{ position:fixed; left:0; right:0; bottom:0; display:flex; justify-content:space-between; gap:var(--e3);
          padding:6px 16px calc(6px + env(safe-area-inset-bottom,0px)); background:#0a0908;
          border-top:1px solid var(--linha); font-size:11px; }

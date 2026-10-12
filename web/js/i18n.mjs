@@ -121,6 +121,9 @@ const EN = {
   "Cada som vai para THROUGH, MASTER FX ou ANALOG FX.":
     "Each sound goes to THROUGH, MASTER FX or ANALOG FX.",
   "{f} para {d}": "{f} to {d}",
+  "preset do side chain": "side chain preset",
+  "Arraste os pontos: o de baixo é o HOLD e o MSTR DEP, o de cima o RELEASE, o do meio a CURVE. Os presets são palpites crus, a acertar de ouvido.":
+    "Drag the points: the bottom one is HOLD and MSTR DEP, the top one RELEASE, the middle one CURVE. The presets are raw guesses, to be tuned by ear.",
 };
 
 /** t("texto em portugues", {variaveis}) -> na lingua atual. Sem traducao,
