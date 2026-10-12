@@ -780,9 +780,10 @@ class Motor:
 
     def _avaliar_tocando(self):
         """Depois de cada step. Com a sequencia conhecida (START), as notas
-        CONFEREM: dois steps que nao batem na janela -> procura o estado que
-        explica o que soou; achou um so, ressincroniza; senao mostra "?" e
-        segue a sequencia. Sem START (adotado), procura o estado ate achar."""
+        CONFEREM: o estado do modelo com mais de toc.MAX_ERROS erros (fora
+        os tracks que nenhum estado explica) -> procura o estado que explica
+        o que soou; achou um so, ressincroniza; senao mostra "?" e segue a
+        sequencia. Sem START (adotado), procura o estado ate achar."""
         if not self.tocando:
             return
         n = self.n_steps
@@ -824,27 +825,27 @@ class Motor:
             return
         if self.seq is None:
             return
-        pares = [(o, self.hist[k]) for k, o in janela if self.hist and k in self.hist]
+        # o modelo contra todos os pontos de partida, com os steps tocados
+        # depois da ultima troca de FIRST/LAST: um track que nenhum estado
+        # explica (o SD do F4.1b) fica de fora; os outros contam inteiros
+        recente = [(k, o) for k, o in janela if k >= self.n_extremos]
         nova = self.seq[0]
-        if toc.confere(pares, vars_steps, mudos) >= 2:
-            # so os steps tocados com os extremos de agora; e no maximo uma
-            # busca a cada 4 steps (a mesma janela da a mesma resposta)
-            recente = [(k, o) for k, o in janela if k >= self.n_extremos]
-            achado = None
-            if n - self.resync_tentado >= 4:
-                achado = toc.achar_estado(recente, vars_steps, chain, extremos, mudos)
-                if achado is None:
-                    self.resync_tentado = n
-            if achado is not None:
-                estado = toc.proximo(achado, chain, extremos)
-                if estado != self.seq:
-                    self.log(f"ressincronizei pelas notas: variacao "
-                             f"{ts.VARIACOES_SERIAL[estado[0]]}, step {estado[1] + 1}")
-                    self._iniciar_seq(estado, n, manter_trk=True)
-                    self.mover_playhead(n)
-                nova = self.seq[0]
-            else:
-                nova = None                          # nao bate e nao da para saber: "?"
+        cands = (toc.analisar(recente, vars_steps, chain, extremos, mudos)
+                 if len(recente) >= toc.MIN_STEPS_FASE else None)
+        modelo = self.hist.get(n - 1) if self.hist else None
+        if cands is not None and modelo is not None:
+            if not toc.modelo_bate(cands, modelo):
+                achado = toc.decidir(cands)
+                if achado is not None:
+                    estado = toc.proximo(achado, chain, extremos)
+                    if estado != self.seq:
+                        self.log(f"ressincronizei pelas notas: variacao "
+                                 f"{ts.VARIACOES_SERIAL[estado[0]]}, step {estado[1] + 1}")
+                        self._iniciar_seq(estado, n, manter_trk=True)
+                        self.mover_playhead(n)
+                    nova = self.seq[0]
+                else:
+                    nova = None                      # nao bate e nao da para saber: "?"
         if nova != self.tocando_var:
             self.tocando_var = nova
             self.pintar_botoes()

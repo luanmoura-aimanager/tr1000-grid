@@ -938,6 +938,28 @@ tocados depois da última troca de FIRST/LAST.
 - um track com FIRST/LAST próprio anda sozinho e não recomeça quando a chain troca de
   variação.
 
+**Fase 2h (12/10/2026, F4.1b): a conferência tolera um track fora da grade.**
+- **O que foi medido:** com o `?` aparecendo mesmo depois de STOP/START, uma escuta só de
+  leitura da porta `TR-1000` (3 s, a chain A12+B16 tocando) mostrou:
+  - toda nota chega no **pulso 6** do step, logo antes do pulso que abre o seguinte (o
+    TRG 84 vem um pulso depois). É o que o motor assume;
+  - a sequência **A (12) → B (16)** explica todos os tracks, **menos o SD**. Ele soa um
+    step antes ou depois do esperado, sem PROB, SUB, CYCLE ou START nos steps.
+  - O cabeçalho tem `[37..47]` = 0, `[48]` = 30 e `[49..59]` = 100 logo depois da Scale.
+    Parecem a "Scale Trk" e a "Shuffle Trk" do catálogo, mas **não foram decifrados**.
+    Dedução a medir: o SD tem um ajuste por track que não lemos.
+- **O que mudou** (`tocando.decidir`), em duas etapas:
+  1. a comparação **exata**, com todos os tracks; um pattern de 1 ou 2 tracks decide como
+     antes;
+  2. só se ela não decide: **um** track de fora por vez, valendo apenas se todas as
+     respostas concordam no mesmo estado.
+
+  O modelo "bate" se bater exato, ou, com um track de fora, se for o melhor de todos.
+- **Na captura:** 18 de 18 janelas com o estado certo, nenhuma errada, e o modelo certo
+  aceito em todas.
+- **Não testado em hardware:** a ressincronização de verdade (chain editada tocando) e a
+  adoção com patterns de 1 ou 2 tracks. Só há uma captura, de um pattern.
+
 **Fase 2f (12/10/2026): a variação que TOCA, pelas notas** (`tocando.py`).
 
 Pela serial não há de onde ler isso (7.3). Mas a máquina manda uma `note_on` por disparo

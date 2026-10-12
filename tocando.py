@@ -42,6 +42,7 @@ del _t, _nome, _n
 
 JANELA = 8            # steps ouvidos que a decisao olha (os mais recentes)
 MIN_STEPS_FASE = 8    # steps ouvidos para achar o estado sem START
+MAX_ERROS = 1         # erros (fora os tracks que nenhum estado explica) que ainda "batem"
 
 
 def track_da_nota(nota):
@@ -70,8 +71,7 @@ def esperado(steps_da_var, coluna):
 
 def bate(ouvido, certos, talvez, mudos=frozenset()):
     """O step ouvido e o esperado concordam? Mutados e 'talvez' nao contam."""
-    fora = set(mudos) | set(talvez)
-    return set(ouvido) - fora == set(certos) - fora
+    return not diferenca(ouvido, certos, talvez, mudos)
 
 
 def volta(n, first, last, passos=16):
@@ -134,35 +134,82 @@ def estados(chain, extremos):
     return out
 
 
+def diferenca(ouvido, certos, talvez, mudos=frozenset()):
+    """Os tracks que discordam no step (soou sem esperar, ou o contrario).
+    Mutados e 'talvez' (PROB < 100, CYCLE) nao contam."""
+    fora = set(mudos) | set(talvez)
+    return (set(ouvido) - fora) ^ (set(certos) - fora)
+
+
 def confere(ouvidos_e_estados, vars_steps, mudos=frozenset()):
-    """[(tracks ouvidos, (v, col))] -> quantos steps NAO batem."""
+    """[(tracks ouvidos, (v, col))] -> quantos tracks discordam, somados."""
     erros = 0
     for ouvido, (v, col) in ouvidos_e_estados:
-        if v not in vars_steps:
-            continue
-        certos, talvez = esperado(vars_steps[v], col)
-        if not bate(ouvido, certos, talvez, mudos):
-            erros += 1
+        if v in vars_steps:
+            erros += len(diferenca(ouvido, *esperado(vars_steps[v], col), mudos))
     return erros
 
 
-def achar_estado(janela, vars_steps, chain, extremos, mudos=frozenset()):
-    """O estado da sequencia no ULTIMO step da janela, se um so ponto de
-    partida explica todos os steps ouvidos; senao None (nao chuta). Serve
-    para adotar a maquina ja tocando e para ressincronizar."""
-    if len(janela) < MIN_STEPS_FASE or sum(1 for _n, o in janela if o) < 2:
+def analisar(janela, vars_steps, chain, extremos, mudos=frozenset()):
+    """Cada ponto de partida da chain contra os steps ouvidos ->
+    {estado no ULTIMO step: {track: erros}}, ou None sem os steps da chain."""
+    if not janela or any(v not in vars_steps for v in chain):
         return None
-    if any(v not in vars_steps for v in chain):
-        return None
-    achado = None
+    esp, cands = {}, {}
     for s0 in estados(chain, extremos):
-        estado, seq = s0, []
+        estado, por_track = s0, {}
         for _n, ouvido in janela:
-            seq.append((ouvido, estado))
+            if estado not in esp:
+                esp[estado] = esperado(vars_steps[estado[0]], estado[1])
+            for tr in diferenca(ouvido, *esp[estado], mudos):
+                por_track[tr] = por_track.get(tr, 0) + 1
             ultimo = estado
             estado = proximo(estado, chain, extremos)
-        if confere(seq, vars_steps, mudos) == 0:
-            if achado is not None and achado != ultimo:
-                return None
-            achado = ultimo
-    return achado
+        if ultimo not in cands or sum(por_track.values()) < sum(cands[ultimo].values()):
+            cands[ultimo] = por_track
+    return cands
+
+
+def melhor(cands, sem=None):
+    """O estado com menos erros (sem contar o track `sem`), se ele tem no
+    maximo MAX_ERROS e nenhum outro empata; senao None."""
+    notas = sorted((sum(n for t, n in pt.items() if t != sem), est) for est, pt in cands.items())
+    if not notas or notas[0][0] > MAX_ERROS:
+        return None
+    if len(notas) > 1 and notas[1][0] == notas[0][0]:
+        return None
+    return notas[0][1]
+
+
+def decidir(cands):
+    """Primeiro a comparacao EXATA, com todos os tracks - um pattern de um ou
+    dois tracks decide como sempre. So se ela nao decide: um track de fora
+    por vez, e so vale se todas as respostas concordam. E o SD do F4.1b,
+    deslocado da grade por algo que nao lemos, enquanto os outros batiam."""
+    exato = melhor(cands)
+    if exato is not None:
+        return exato
+    tracks = set().union(*cands.values()) if cands else set()
+    respostas = {melhor(cands, t) for t in tracks} - {None}
+    return respostas.pop() if len(respostas) == 1 else None
+
+
+def modelo_bate(cands, estado):
+    """O estado do modelo explica o que soou? Exato, ou com UM track de fora
+    quando, sem esse track, ele e o melhor de todos."""
+    pt = cands.get(estado)
+    if pt is None:
+        return False
+    if sum(pt.values()) <= MAX_ERROS:
+        return True
+    return any(sum(n for x, n in pt.items() if x != t) <= MAX_ERROS and melhor(cands, t) == estado
+               for t in pt)
+
+
+def achar_estado(janela, vars_steps, chain, extremos, mudos=frozenset()):
+    """O estado da sequencia no ULTIMO step da janela (decidir), ou None (nao
+    chuta). Serve para adotar a maquina ja tocando e para ressincronizar."""
+    if len(janela) < MIN_STEPS_FASE or sum(1 for _n, o in janela if o) < 2:
+        return None
+    cands = analisar(janela, vars_steps, chain, extremos, mudos)
+    return None if cands is None else decidir(cands)
