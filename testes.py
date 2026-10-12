@@ -2183,7 +2183,7 @@ class TestePaginas(unittest.TestCase):
         self.assertEqual(_escritas(m.maquina), [
             (3, 0, 0, 112 + 12, 1 << 3),
             (116, 0, 0, cab + campos.CAB_VARIACOES, 2),
-            (116, 0, 0, cab + campos.CAB_FIRST_VAR, 0), (116, 0, 0, cab + campos.CAB_LAST_VAR, 11),
+            (116, 0, 0, cab + campos.CAB_LAST_VAR, 11),
             (116, 0, 0, cab + campos.CAB_SCALE, 3)])
 
     def test_perf_chain_segurando_soma(self):
@@ -2223,6 +2223,42 @@ class TestePaginas(unittest.TestCase):
         self.assertEqual(_escritas(m.maquina), [(13, 0, 1, 559, 2), (12, 0, 0, 546, 18),
                                                 (12, 0, 0, 550, 1), (12, 0, 0, 553, 1)])
         self.assertEqual(m.cor_rout(2, 1), motor.COR_ROTA[2])
+
+    def test_niveis_de_vel_sao_as_velocidades_da_borda(self):
+        self.assertEqual(campos.NIVEIS_PAR["vel"], tuple(reversed(motor.VELOCIDADES)))
+
+    def test_off_solta_o_loop_segurado_no_launchpad(self):
+        m = self._m()
+        m.executar("pagina", "perf")
+        modo = 112 + campos.B3_LOOP
+        m.maquina.valores[(3, 0, 0, modo)] = 0
+        self._pad(m, motor.PERF_LOOP, 5)
+        m.maquina.recebido.clear()
+        m.soltar_maquina()
+        self.assertEqual(_escritas(m.maquina), [(3, 0, 0, 112 + 151 + 5, 0), (3, 0, 0, modo, 0)])
+
+    def test_last_nao_reescreve_o_first(self):
+        m = self._m()
+        m.executar("pagina", "perf")
+        self._pad(m, motor.PERF_LAST, 9)
+        self.assertEqual(_escritas(m.maquina), [(116, 0, 0, 988 + campos.CAB_LAST_VAR, 9)])
+
+    def test_chain_soma_sobre_a_mascara_fresca(self):
+        m = self._m()
+        m.executar("pagina", "perf")
+        m.maquina.valores[(116, 0, 0, 988 + campos.CAB_VARIACOES)] = 0b111   # o painel: A+B+C
+        self._pad(m, motor.PERF_CHAIN, 0)                # segura A (escreve so A)
+        m.maquina.valores[(116, 0, 0, 988 + campos.CAB_VARIACOES)] = 0b111   # painel de novo
+        self._pad(m, motor.PERF_CHAIN, 3)                # + D
+        self.assertEqual(_escritas(m.maquina)[-1][4], 0b1111)
+
+    def test_rout_le_so_o_que_mostra(self):
+        m = self._m()
+        lidos = []
+        orig = m._ler
+        m._ler = lambda *a: (lidos.append(a), orig(*a))[1]
+        m.ler_kit(motor.IDS_ROUT)
+        self.assertLessEqual(len(lidos), len(motor.IDS_ROUT))
 
     def test_steps_continua_igual(self):
         m = self._m()
