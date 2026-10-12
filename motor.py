@@ -572,8 +572,11 @@ class Motor:
         if ligado and self.pagina == "par":
             # a coluna lateral: o track escolhido; a borda direita: o parametro
             for linha in range(LINHAS):
+                # o escolhido bem branco; os outros quase apagados (F4.6c: com o
+                # brilho de borda de sempre, nao se via qual estava escolhido)
                 self._luz(e, lp.FUNC_CCS[-1 - linha],
-                          lp.cor_borda(lp.COR_ATIVO, self.track_da_linha(linha) == self.par_track))
+                          (127, 127, 127) if self.track_da_linha(linha) == self.par_track
+                          else (4, 4, 4))
             for i, cc in enumerate(lp.CENA_CCS):
                 if i < len(campos.PAR_PARAMS):
                     cor = COR_PAR[campos.PAR_PARAMS[i]]
@@ -966,22 +969,26 @@ class Motor:
 
     def cor_par(self, linha, step):
         """16 colunas x 8 niveis: a barra (ou o nivel, nos de escolha) do
-        parametro do track escolhido. Sem nota no step, a cor fraca."""
+        parametro do track escolhido, so nos steps que TOCAM (F4.6c: com as
+        barras cheias tambem nos vazios, a pagina ficava toda amarela e trocar
+        de track nao mudava nada). Step vazio: apagado; o toque nele ainda
+        escreve (a VEL liga a nota)."""
         tr = self.par_track
         nome = campos.PAR_PARAMS[self.par_param]
         nivel = LINHAS - 1 - linha                       # de baixo para cima
         s = self.slots(tr, step)
         toca = ts.slot_toca(s[0]) or ts.slot_toca(s[1])
         cor = COR_PAR[nome]
+        vazio = (2, 2, 2) if step % lp.STEPS_TEMPO == 0 and nivel == 0 else (0, 0, 0)
+        if not toca:
+            return vazio
         if nome == "alt":
             if tr < TRACKS_LAYER:
                 return (0, 0, 0)                         # layer A/B nao tem ALT
-            return cor if campos.eh_alt(s[0]) else (_fraca(cor) if toca else (0, 0, 0))
+            return cor if campos.eh_alt(s[0]) else _fraca(cor)
         n = campos.nivel_par(nome, self.valor_par(nome, tr, step))
         aceso = nivel == n if nome in campos.PAR_ESCOLHA else 0 <= nivel <= n
-        if not aceso:
-            return (2, 2, 2) if step % lp.STEPS_TEMPO == 0 and nivel == 0 else (0, 0, 0)
-        return cor if toca else _fraca(cor, 0.3)
+        return cor if aceso else vazio
 
     def definir_vel(self, tr, step, vel):
         """A velocity de um step pela pagina PAR: reescreve os slots que tocam
