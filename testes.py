@@ -2162,6 +2162,11 @@ class TestePaginas(unittest.TestCase):
         self._pad(m, 3, 0)
         self.assertEqual(_escritas(m.maquina)[-1][4], tr1000_serial.nota(80) | campos.BIT_ALT)
 
+    def test_par_step_vazio_fica_apagado(self):
+        m = self._m()
+        m.pagina = "par"
+        self.assertTrue(all(m.cor_par(l, 1) in ((0, 0, 0), (2, 2, 2)) for l in range(8)))
+
     def test_par_mostra_a_barra(self):
         m = self._m()
         m.cache[(0, 0)][0] = tr1000_serial.nota(80)
