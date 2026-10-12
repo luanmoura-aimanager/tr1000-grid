@@ -927,7 +927,16 @@ o deixou atrasado. A causa era a conta: "steps desde o START" dividido pelo comp
 
 As notas **conferem** essa sequência. Se dois steps da janela não batem, o motor procura o
 ponto de partida único que explica o que soou e ressincroniza; se não acha, mostra `?`.
-Isso vale também para adotar sem START. **Dedução:** a chain toca na ordem A → H.
+Isso vale também para adotar sem START. A busca de ressincronização só olha os steps
+tocados depois da última troca de FIRST/LAST.
+
+**Deduções, nenhuma medida ainda:**
+- a chain toca na ordem A → H;
+- um LAST trocado tocando vale quando a coluna chega nele, e a coluna já além dele volta
+  na hora;
+- um FIRST subido acima da coluna não interrompe a volta;
+- um track com FIRST/LAST próprio anda sozinho e não recomeça quando a chain troca de
+  variação.
 
 **Fase 2f (12/10/2026): a variação que TOCA, pelas notas** (`tocando.py`).
 

@@ -2354,6 +2354,21 @@ class TesteTocando(unittest.TestCase):
         self.assertEqual(tocando.proximo((0, 11), chain, {0: (0, 11)}), (0, 0))
         self.assertEqual(tocando.proximo((0, 13), chain, {0: (0, 11)}), (0, 0))   # ja passou
 
+    def test_prob_e_mute_nao_contam(self):
+        import tocando
+        v = self._var({0: (0,), 6: (0,)})
+        v[6][64] = 50                                    # o CH do step 1 com PROB 50
+        certos, talvez = tocando.esperado(v, 0)
+        self.assertEqual((certos, talvez), ({0}, {6}))
+        self.assertTrue(tocando.bate({0}, certos, talvez))
+        self.assertTrue(tocando.bate({0, 6}, certos, talvez))
+        self.assertTrue(tocando.bate(set(), certos, talvez, mudos={0}))
+        self.assertFalse(tocando.bate(set(), certos, talvez))
+
+    def test_first_subido_tocando_nao_pula_de_variacao(self):
+        import tocando
+        self.assertEqual(tocando.proximo((0, 3), [0, 1], {0: (8, 15), 1: (0, 15)}), (0, 4))
+
     def test_estado_unico_e_periodico(self):
         import tocando
         vs = {0: self._var(self.A), 1: self._var(self.B)}
@@ -2460,11 +2475,12 @@ class TesteTocando(unittest.TestCase):
     def test_motor_last_trocado_tocando(self):
         import mido
         m = self._motor(chain=0b01)
-        self._tocar(m, self.A, range(5), start=True)     # step 5 (col 4) aberto? 5 steps
-        m.cab[campos.CAB_LAST_VAR + 0] = 6               # LAST = 7 com a coluna em 5
+        self._tocar(m, self.A, range(5), start=True)     # 5 steps de 6 pulsos: na coluna 4
+        self.assertEqual(m.passo, 4)
+        m.cab[campos.CAB_LAST_VAR + 0] = 6               # LAST = 7 com a coluna em 4 (0-based)
         m.clk.fila = [mido.Message("clock")] * (6 * 3)
         m._ler_clock()
-        self.assertEqual(m.passo, 0)                     # 5 -> 6 -> volta no 7
+        self.assertEqual(m.passo, 0)                     # 4 -> 5 -> 6 (o LAST) -> volta
 
     def test_pad_tocado_parado_nao_vira_playhead(self):
         import mido

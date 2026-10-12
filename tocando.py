@@ -105,12 +105,14 @@ def inicio(chain, extremos):
 
 
 def proximo(estado, chain, extremos):
-    """O step seguinte: a coluna anda; passou do LAST, a proxima variacao da
-    chain comeca no FIRST dela. Os extremos sao lidos a cada step, entao um
-    LAST trocado tocando vale na hora em que a coluna chega nele."""
+    """O step seguinte: a coluna anda; no LAST (ou alem dele), a proxima
+    variacao da chain comeca no FIRST dela. Os extremos sao os de AGORA: um
+    LAST trocado tocando vale quando a coluna chega nele, e um FIRST subido
+    acima da coluna nao interrompe a volta (as duas regras sao deducao, a
+    medir no F4)."""
     v, col = estado
     first, last = _extremos(extremos, v)
-    if v in chain and first <= col < last:
+    if v in chain and col < last:
         return v, col + 1
     depois = [x for x in chain if x > v]
     nv = depois[0] if depois else chain[0]
@@ -119,9 +121,8 @@ def proximo(estado, chain, extremos):
 
 def proximo_trk(col, first, last, passos=16):
     """O mesmo para um track com FIRST/LAST proprio (polimetria)."""
-    if not (0 <= first <= last < passos):
-        first, last = 0, passos - 1
-    return col + 1 if first <= col < last else first
+    first, last = _extremos({0: (first, last)}, 0, passos)
+    return col + 1 if col < last else first
 
 
 def estados(chain, extremos):
