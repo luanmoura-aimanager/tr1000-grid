@@ -948,8 +948,17 @@ tocados depois da última troca de FIRST/LAST.
   - O cabeçalho tem `[37..47]` = 0, `[48]` = 30 e `[49..59]` = 100 logo depois da Scale.
     Parecem a "Scale Trk" e a "Shuffle Trk" do catálogo, mas **não foram decifrados**.
     Dedução a medir: o SD tem um ajuste por track que não lemos.
-- **O que mudou:** a conta descarta o track que mais errou, e decide pela margem sobre o
-  segundo melhor. Na captura, acertou o estado nas 18 janelas, sem nenhum errado.
+- **O que mudou** (`tocando.decidir`), em duas etapas:
+  1. a comparação **exata**, com todos os tracks; um pattern de 1 ou 2 tracks decide como
+     antes;
+  2. só se ela não decide: **um** track de fora por vez, valendo apenas se todas as
+     respostas concordam no mesmo estado.
+
+  O modelo "bate" se bater exato, ou, com um track de fora, se for o melhor de todos.
+- **Na captura:** 18 de 18 janelas com o estado certo, nenhuma errada, e o modelo certo
+  aceito em todas.
+- **Não testado em hardware:** a ressincronização de verdade (chain editada tocando) e a
+  adoção com patterns de 1 ou 2 tracks. Só há uma captura, de um pattern.
 
 **Fase 2f (12/10/2026): a variação que TOCA, pelas notas** (`tocando.py`).
 
