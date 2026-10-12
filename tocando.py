@@ -53,18 +53,49 @@ PROB_POS = campos.CAMPOS_STEP["prob"][0]
 CYCLE_POS = campos.CAMPOS_STEP["cycle"][0]
 
 
-def esperado(steps_da_var, coluna):
-    """(os tracks que TOCAM com certeza, os que talvez) na coluna de uma
-    variacao. `steps_da_var` = {track: [131 u32]} (o cache do motor)."""
+def coluna_tocada(direcao, p, first, last):
+    """A coluna que um track com esse DIRECTION toca na posicao p (p anda de
+    FIRST a LAST, como o playhead da variacao). None se nao da para saber:
+    RND/DNK/DNK2 sorteiam, e o P-P depende da volta (ida ou vinda). R-L/L-R
+    com comprimento impar: o ultimo passo fica sozinho (deducao, nao medido)."""
+    if not (0 <= first <= last < 16):
+        first, last = 0, 15
+    i, n = p - first, last - first + 1
+    if direcao == 0:                                  # FWD
+        return p
+    if direcao == 1:                                  # BWD
+        return last - i
+    if direcao in (3, 4):                             # R-L / L-R: pares trocados
+        j = i + 1 if i % 2 == 0 else i - 1
+        if j >= n:
+            j = i
+        return first + j if direcao == 3 else last - j
+    return None                                       # P-P, RND, DNK, DNK2
+
+
+def direcao_de(v):
+    return v[campos.STEP_DIRECAO] if v is not None and campos.STEP_DIRECAO < len(v) else 0
+
+
+def esperado(steps_da_var, coluna, first=0, last=15):
+    """(os tracks que TOCAM com certeza, os que talvez) na posicao `coluna`
+    de uma variacao. `steps_da_var` = {track: [131 u32]} (o cache do motor).
+    Cada track toca a coluna do DIRECTION dele; os imprevisiveis (RND, P-P...)
+    viram "talvez" se tocam alguma coisa na variacao."""
     certos, talvez = set(), set()
     for tr, v in steps_da_var.items():
         if v is None:
             continue
-        a, b = v[coluna * 4], v[coluna * 4 + 1]
+        c = coluna_tocada(direcao_de(v), coluna, first, last)
+        if c is None:
+            if any(ts.slot_toca(v[4 * k]) or ts.slot_toca(v[4 * k + 1]) for k in range(16)):
+                talvez.add(tr)
+            continue
+        a, b = v[c * 4], v[c * 4 + 1]
         if not (ts.slot_toca(a) or ts.slot_toca(b)):
             continue
-        prob = v[PROB_POS + coluna] if PROB_POS + coluna < len(v) else 100
-        cycle = v[CYCLE_POS + coluna] if CYCLE_POS + coluna < len(v) else 0
+        prob = v[PROB_POS + c] if PROB_POS + c < len(v) else 100
+        cycle = v[CYCLE_POS + c] if CYCLE_POS + c < len(v) else 0
         (certos if prob >= 100 and cycle == 0 else talvez).add(tr)
     return certos, talvez
 
@@ -141,12 +172,13 @@ def diferenca(ouvido, certos, talvez, mudos=frozenset()):
     return (set(ouvido) - fora) ^ (set(certos) - fora)
 
 
-def confere(ouvidos_e_estados, vars_steps, mudos=frozenset()):
+def confere(ouvidos_e_estados, vars_steps, mudos=frozenset(), extremos=None):
     """[(tracks ouvidos, (v, col))] -> quantos tracks discordam, somados."""
     erros = 0
     for ouvido, (v, col) in ouvidos_e_estados:
         if v in vars_steps:
-            erros += len(diferenca(ouvido, *esperado(vars_steps[v], col), mudos))
+            first, last = _extremos(extremos or {}, v)
+            erros += len(diferenca(ouvido, *esperado(vars_steps[v], col, first, last), mudos))
     return erros
 
 
@@ -160,7 +192,8 @@ def analisar(janela, vars_steps, chain, extremos, mudos=frozenset()):
         estado, por_track = s0, {}
         for _n, ouvido in janela:
             if estado not in esp:
-                esp[estado] = esperado(vars_steps[estado[0]], estado[1])
+                esp[estado] = esperado(vars_steps[estado[0]], estado[1],
+                                       *_extremos(extremos, estado[0]))
             for tr in diferenca(ouvido, *esp[estado], mudos):
                 por_track[tr] = por_track.get(tr, 0) + 1
             ultimo = estado

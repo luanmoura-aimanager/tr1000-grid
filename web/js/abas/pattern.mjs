@@ -32,6 +32,7 @@ let ed = {},
   fl = {},
   tk = {};
 let tocandoCols = []; // a coluna do playhead em cada track, ou -1
+let rotulos = []; // o nome de cada track (com a direcao, se nao e FWD)
 
 function kind(c) {
   if (c.a && c.alt) return c.vel < VEL_FRACA ? "altf" : "alt";
@@ -171,7 +172,9 @@ export default {
           },
         },
         tn,
+        h("small.dir"),
       );
+      rotulos.push(rot);
       grade.append(rot, m);
       celulas[tr] = [];
       for (let s = 0; s < 16; s++) {
@@ -517,6 +520,9 @@ export default {
       pressionado(b, m === E.modo_layer);
     E.grade.forEach((linha, tr) => {
       attr(mutes[tr], "data-mudo", !!(E.mudos || [])[tr]);
+      // o DIRECTION do track (TRACK SETTING do painel): so aparece se nao e FWD
+      const d = (E.direcoes || [])[tr] || 0;
+      texto(rotulos[tr].lastChild, d ? D.direcoes[d] : "");
       linha.forEach((c, s) => {
         const el = celulas[tr][s];
         attr(el, "data-k", kind(c) || null);

@@ -938,6 +938,23 @@ tocados depois da última troca de FIRST/LAST.
 - um track com FIRST/LAST próprio anda sozinho e não recomeça quando a chain troca de
   variação.
 
+**O SD "fora da grade" era o DIRECTION (12/10/2026, depois do F4).**
+- **No painel:** o playhead do SD andava "2 1 4 3 6 5…". É o **DIRECTION = R-L** do
+  TRACK SETTING (SHIFT + botão do track, [C1]; manual RM p.18). O pattern de fábrica 1-01
+  já vem assim.
+- **Medido com foto e diff, só leitura:** o SD de R-L para FWD mudou o índice **`[96]`
+  do bloco de steps** do SD (absoluto 1345) de **3 para 0**, nas **12 variações** de uma
+  vez.
+- **Valores, pela ordem do manual:** FWD 0, BWD 1, P-P 2, R-L 3, L-R 4, RND 5, DNK 6,
+  DNK2 7. **Só o 0 e o 3 foram medidos;** o resto é dedução.
+- **No Controller** (`campos.STEP_DIRECAO`, `tocando.coluna_tocada`, fase 2k):
+  - BWD, R-L e L-R viram a coluna que o track toca, para o playhead e para a conferência;
+  - P-P, RND, DNK e DNK2 não dão para prever: o track sai da conferência ("talvez") e
+    fica sem playhead;
+  - a grade mostra a direção ao lado do nome do track.
+- **Na escuta só da A (50 steps):** com o DIRECTION, **zero erros em todos os tracks**.
+  O SD só parecia "fora da grade".
+
 **Resultado do `ROTEIRO-F4.md` (12/10/2026, o Luan na frente da máquina):**
 
 | passo | o quê | resultado |

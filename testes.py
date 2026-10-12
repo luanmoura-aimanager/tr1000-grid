@@ -2419,6 +2419,35 @@ class TesteTocando(unittest.TestCase):
         janela = [(n, self._ouvido(curta, (n + 3) % 8)) for n in range(8)]
         self.assertEqual(tocando.achar_estado(janela, vs, [0], {0: (0, 7)}), (0, (3 + 7) % 8))
 
+    def test_direction_como_no_manual(self):
+        # manual RM p.18 (as tabelas); o SD do 1-01 em R-L, medido 12/10/2026
+        import tocando
+        um = lambda d: [tocando.coluna_tocada(d, p, 0, 15) + 1 for p in range(16)]
+        self.assertEqual(um(1), list(range(16, 0, -1)))
+        self.assertEqual(um(3), [2, 1, 4, 3, 6, 5, 8, 7, 10, 9, 12, 11, 14, 13, 16, 15])
+        self.assertEqual(um(4), [15, 16, 13, 14, 11, 12, 9, 10, 7, 8, 5, 6, 3, 4, 1, 2])
+        for d in (2, 5, 6, 7):                           # P-P, RND, DNK, DNK2
+            self.assertIsNone(tocando.coluna_tocada(d, 0, 0, 15))
+
+    def test_esperado_segue_o_direction(self):
+        import tocando
+        v = self._var({1: (3,)})                         # SD no step 4
+        v[1][campos.STEP_DIRECAO] = 3                    # R-L: na posicao 3 toca o 4
+        self.assertEqual(tocando.esperado(v, 2)[0], {1})
+        self.assertEqual(tocando.esperado(v, 3)[0], set())
+        v[1][campos.STEP_DIRECAO] = 5                    # RND: nao da para saber
+        self.assertEqual(tocando.esperado(v, 2), (set(), {1}))
+
+    def test_playhead_do_track_segue_o_direction(self):
+        m = self._motor(chain=0b01)
+        m.cache[(0, 1)][campos.STEP_DIRECAO] = 3         # SD em R-L
+        m.cache[(0, 2)][campos.STEP_DIRECAO] = 5         # LT em RND
+        self._tocar(m, self.A, range(1), start=True)     # posicao 0
+        self.assertEqual(m.passos_trk[0], 0)
+        self.assertEqual(m.passos_trk[1], 1)             # o SD toca a coluna 2
+        self.assertEqual(m.passos_trk[2], -1)            # o LT: sem playhead
+        self.assertEqual(m.estado()["direcoes"][1], 3)
+
     def _motor(self, chain=0b11):
         m = motor_cru()
         m.cab = [0] * 248
