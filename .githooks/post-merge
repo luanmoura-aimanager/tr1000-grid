@@ -1,0 +1,14 @@
+#!/bin/sh
+# Depois de um merge ou pull na main: atualiza a copia que o LaunchAgent do
+# TR-1000 Controller roda (instalar_agente.py --se-mudou). Mudou so web/: copia
+# e basta um Cmd+R. Mudou algum .py: o agente reinicia. Sem o agente instalado,
+# nao faz nada. Falhar aqui nunca desfaz o merge.
+
+raiz=$(git rev-parse --show-toplevel) || exit 0
+cd "$raiz" || exit 0
+[ "$(git rev-parse --abbrev-ref HEAD)" = "main" ] || exit 0
+
+export PYTHONPATH="$HOME/Library/Python/3.9/lib/python/site-packages"
+python3 instalar_agente.py --se-mudou ORIG_HEAD HEAD || \
+    echo "(!) post-merge: a atualizacao do Controller falhou - rode python3 instalar_agente.py" >&2
+exit 0

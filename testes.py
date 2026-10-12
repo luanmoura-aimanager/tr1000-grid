@@ -1984,6 +1984,20 @@ class TesteFase2b(unittest.TestCase):
 
 
 class TesteEmbalagem(unittest.TestCase):
+    def test_post_merge_so_atualiza_o_que_a_copia_leva(self):
+        import instalar_agente as ia
+        self.assertEqual(ia.o_que_atualizar(["motor.py", "README.md"]), "tudo")
+        self.assertEqual(ia.o_que_atualizar(["web/js/app.mjs", "REFERENCIA.md"]), "web")
+        self.assertEqual(ia.o_que_atualizar(["mapas/controladoras.json"]), "tudo")
+        self.assertIsNone(ia.o_que_atualizar(["README.md", "testes.py", "gen_adesivo.py", ""]))
+        cap = os.path.relpath(conexao_serial.CAPTURAS_DE_REFERENCIA[0], AQUI)
+        self.assertEqual(ia.o_que_atualizar([cap]), "tudo")
+
+    def test_post_merge_executavel_e_ligado_pelo_instalar_hooks(self):
+        import instalar_hooks
+        self.assertIn("post-merge", instalar_hooks.HOOKS)
+        self.assertTrue(os.access(os.path.join(AQUI, ".githooks", "post-merge"), os.X_OK))
+
     """O LaunchAgent e o .app rodam uma COPIA (o TCC nao deixa ler
     ~/Documents): se faltar um modulo ou uma captura de referencia, o
     Controller sobe quebrado longe dos olhos."""

@@ -117,6 +117,10 @@ python3 instalar_hooks.py   # uma vez por clone; liga os hooks de .githooks/
 
 - `pre-commit` recusa commit na `main`
 - `pre-push` roda `python3 testes.py`; falhou, não empurra
+- `post-merge` atualiza o Controller instalado (`instalar_agente.py --se-mudou`) quando um
+  merge ou pull na `main` mexe no que a cópia leva. Se mexeu num `.py`, o agente reinicia e
+  derruba um ON em andamento: avise o Luan antes de dar pull no meio de uma sessão de
+  hardware
 - Para escapar de um deles, quando você sabe o que está fazendo: `--no-verify`
 
 O CI (`.github/workflows/testes.yml`) roda os mesmos testes. **Verde não significa
