@@ -2,6 +2,7 @@
 // Os knobs que dependem do type (DELAY 2-6, MFX 1-7) mudam de nome e de faixa
 // com o type que a maquina tem - igual aos knobs do MC-24.
 import { h, attr, texto } from "../dom.mjs";
+import { t } from "../i18n.mjs";
 import { paramSlider, paramSeletor, fmt } from "../params.mjs";
 
 let itens = [],
@@ -42,7 +43,7 @@ export default {
     const reverb = h(
       "div.secao",
       {},
-      h("h2", {}, "reverb"),
+      h("h2", {}, t("reverb")),
       h(
         "div.fila",
         {},
@@ -59,7 +60,7 @@ export default {
     const delay = h(
       "div.secao",
       {},
-      h("h2", {}, "delay"),
+      h("h2", {}, t("delay")),
       h(
         "div.fila",
         {},
@@ -75,7 +76,7 @@ export default {
     const lfo = h(
       "div.secao",
       {},
-      h("h2", {}, "lfo do kit"),
+      h("h2", {}, t("lfo do kit")),
       h(
         "div.fila",
         {},
@@ -88,14 +89,14 @@ export default {
       h(
         "p.nota",
         {},
-        "O LFO só se ouve com um TARGET escolhido no App (Mod (Kit)).",
+        t("O LFO só se ouve com um TARGET escolhido no App (Mod (Kit))."),
       ),
     );
 
     const mfx = h(
       "div.secao",
       {},
-      h("h2", {}, "master fx"),
+      h("h2", {}, t("master fx")),
       h(
         "div.fila",
         {},
@@ -103,13 +104,13 @@ export default {
         L("mfx.type", D.mfx_tipos, "MASTER FX TYPE"),
       ),
       [1, 2, 3, 4, 5, 6, 7].map((n) => S(`mfx.p${n}`, null)),
-      h("p.nota", {}, "O botão ON do MASTER FX fica no painel da TR-1000."),
+      h("p.nota", {}, t("O botão ON do MASTER FX fica no painel da TR-1000.")),
     );
 
     const sc = h(
       "div.secao",
       {},
-      h("h2", {}, "side chain"),
+      h("h2", {}, t("side chain")),
       h(
         "div.fila",
         {},
@@ -141,7 +142,7 @@ export default {
       FONTES.forEach((f, i) => {
         const b = h("button.ponto", {
           type: "button",
-          "aria-label": `${f} para ${nome}`,
+          "aria-label": t("{f} para {d}", { f, d: nome }),
           onclick: () => ctx.acao("param", { id: `rota.${f}`, valor: d }),
         });
         (matriz[i] = matriz[i] || [])[d] = b;
@@ -151,9 +152,9 @@ export default {
     const rota = h(
       "div.secao",
       {},
-      h("h2", {}, "routing matrix"),
+      h("h2", {}, t("routing matrix")),
       h("div.grade-rolo", {}, tab),
-      h("p.nota", {}, "Cada som vai para THROUGH, MASTER FX ou ANALOG FX."),
+      h("p.nota", {}, t("Cada som vai para THROUGH, MASTER FX ou ANALOG FX.")),
     );
 
     el.append(h("div.colunas", {}, reverb, delay, lfo, mfx, sc), rota);

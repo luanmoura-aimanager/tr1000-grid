@@ -14,6 +14,7 @@ sessao_c4.py - leituras ao vivo para os criterios 4 e 5 do portao (REFERENCIA 3.
     python3 sessao_c4.py c5b                     # a 2a rodada: tocando (STEP LOOP) e o Flam
     python3 sessao_c4.py c5c                     # a 3a: mapas de SUB/CYCLE/START (serie), FIRST
                                                  # STEP, 8th(T), modo MUTE, side chain pelo painel
+    python3 sessao_c4.py c5d                     # a 4a: o TEMPO (serie) e a troca de pattern
 
 SO LE. Nada aqui escreve: as leituras passam pelo mesmo portao de saida da
 conexao_serial (so dentro das faixas que o proprio App leu no boot), e escrita
@@ -246,6 +247,22 @@ GESTOS_C5C = [
 ]
 
 
+# A 4a rodada (c5d, 12/10/2026): o TEMPO, para a tela poder digitar o BPM, e a
+# troca de pattern pelo painel, para comparar com o Program Change da tela.
+INICIO_C5D = ("Painel: 1-01, var A, PARADA, [TR-REC] apagado. TEMPO em 128 (o visor "
+              "mostra o BPM ao girar).")
+GESTOS_C5D = [
+    ("tempo", "Gire o knob TEMPO UM clique para a direita; DIGITE o BPM que o visor "
+              "mostrou (ex.: 129). Uns 4 assim; depois um giro grande (digite); f = fim.",
+              "Volte o TEMPO para 128.", "serie"),
+    ("tempo-fino", "Segure [SHIFT] e gire o TEMPO UM clique (o ajuste fino, se houver); "
+                   "digite o visor. Uns 3; f = fim.",
+                   "Volte o TEMPO para 128,0.", "serie"),
+    ("ptn", "Aperte [PTN SELECT] e o pad/STEP 2: o pattern 1-02. [EXIT] se precisar.",
+            "[PTN SELECT] e STEP 1: de volta ao 1-01."),
+]
+
+
 def mudancas_de(va, vb, ignorar=()):
     """[(bloco, x, y, i, antes, depois)] do que mudou fora do ruido."""
     out = []
@@ -398,6 +415,8 @@ def main(a):
             cmd_c5(GESTOS_C5B, INICIO_C5B, "c5b"); return 0
         if a[:1] == ["c5c"]:
             cmd_c5(GESTOS_C5C, INICIO_C5C, "c5c"); return 0
+        if a[:1] == ["c5d"]:
+            cmd_c5(GESTOS_C5D, INICIO_C5D, "c5d"); return 0
         if a[:1] == ["foto"] and len(a) == 2:
             cmd_foto(a[1]); return 0
         if a[:1] == ["diff"] and len(a) == 3:

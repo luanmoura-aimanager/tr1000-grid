@@ -1666,6 +1666,246 @@ class TesteController(unittest.TestCase):
             srv.shutdown()
 
 
+class TesteFase2b(unittest.TestCase):
+    """O que o F3 (12/10/2026) pediu: playhead com Scale e FIRST/LAST, o /passo,
+    o STEP LOOP que nao deixa a maquina muda, a foto da sessao, o PTN."""
+
+    @staticmethod
+    def _tocar(m, n_clocks, start=True):
+        import mido
+        m.clk = _PortaLP(([mido.Message("start")] if start else [])
+                         + [mido.Message("clock")] * n_clocks)
+        m._ler_clock()
+
+    def _cab(self, **campos_):
+        cab = [0] * 248
+        for t in range(10):
+            cab[campos.CAB_LAST_TRK + t] = 15
+        for v in range(campos.N_VARS):
+            cab[campos.CAB_LAST_VAR + v] = 15
+        cab[campos.CAB_SCALE] = 2
+        for k, v in campos_.items():
+            cab[k] = v
+        return cab
+
+    def test_scale_muda_os_pulsos_por_step(self):
+        for scale, pulsos in ((0, 8), (1, 4), (2, 6), (3, 3)):
+            m = motor_cru()
+            m.cab = self._cab(**{})
+            m.cab[campos.CAB_SCALE] = scale
+            self._tocar(m, pulsos)                       # ainda o step 0
+            self.assertEqual(m.passo, 0, scale)
+            m.clk.fila = [__import__("mido").Message("clock")]
+            m._ler_clock()
+            self.assertEqual(m.passo, 1, scale)          # o pulso p+1 abre o step 1
+
+    def test_da_a_volta_no_last_da_variacao(self):
+        # F3.4.5: com LAST = 12 a maquina volta no 12; o playhead ia ate o 16
+        m = motor_cru()
+        m.cab = self._cab()
+        m.cab[campos.CAB_LAST_VAR + 0] = 11
+        self._tocar(m, 6 * 12 + 1)                       # o 13o step desde o start
+        self.assertEqual(m.passo, 0)
+        m.cab[campos.CAB_FIRST_VAR + 0] = 2              # FIRST 3, LAST 12: 10 steps
+        m.clk.fila = [__import__("mido").Message("start")] + [__import__("mido").Message("clock")] * (6 * 10 + 1)
+        m._ler_clock()
+        self.assertEqual(m.passo, 2)
+
+    def test_track_com_extremos_proprios_anda_sozinho(self):
+        m = motor_cru()
+        m.cab = self._cab()
+        m.cab[campos.CAB_TRK_SW + 1] = 1                 # SD: steps 1..3
+        m.cab[campos.CAB_LAST_TRK + 1] = 2
+        self._tocar(m, 6 * 4 + 1)                        # o 5o step
+        self.assertEqual(m.passo, 4)
+        self.assertEqual(m.passos_trk[0], 4)
+        self.assertEqual(m.passos_trk[1], 1)             # 4 % 3
+        import launchpad as lp
+        self.assertIn(m.cor_do_step(1, 1), (lp.COR_PLAY, lp.COR_PLAY_HIT))
+        self.assertNotIn(m.cor_do_step(1, 4), (lp.COR_PLAY, lp.COR_PLAY_HIT))
+
+    def test_scale_trocada_tocando_vale_do_proximo_step(self):
+        import mido
+        m = motor_cru()
+        m.cab = self._cab()
+        self._tocar(m, 6 * 3 + 1)                        # step 3
+        self.assertEqual(m.passo, 3)
+        m.cab[campos.CAB_SCALE] = 3                      # 32nd
+        m.clk.fila = [mido.Message("clock")] * 5         # o fim do step 3 (16th)
+        m._ler_clock()
+        self.assertEqual(m.passo, 3)
+        m.clk.fila = [mido.Message("clock")] * 3
+        m._ler_clock()
+        self.assertEqual(m.passo, 4)
+
+    def test_o_motor_avisa_cada_step(self):
+        import mido
+        m = motor_cru()
+        m.cab = self._cab()
+        avisos = []
+        m.ao_passo = avisos.append
+        self._tocar(m, 0)
+        for _ in range(2):                               # o clock chega aos poucos
+            m.clk.fila = [mido.Message("clock")] * 6
+            m._ler_clock()
+        m.clk.fila = [mido.Message("clock")]
+        m._ler_clock()
+        self.assertEqual([a["passo"] for a in avisos], [0, 1, 2])
+        m.clk.fila = [mido.Message("stop")]
+        m._ler_clock()
+        self.assertEqual(avisos[-1], {"tocando": False, "passo": -1, "passos_trk": None})
+
+    def test_passo_por_sse(self):
+        import io, servidor
+        h = servidor.Host()
+        h._novo_passo({"tocando": True, "passo": 5, "passos_trk": None})
+        falso = object.__new__(servidor.Handler)
+        falso.wfile = io.BytesIO()
+        falso.request_version = "HTTP/1.1"
+        falso.requestline = "GET /passo HTTP/1.1"
+        falso.command = "GET"
+        falso.client_address = ("127.0.0.1", 0)
+        antes, servidor.HOST = servidor.HOST, h
+        try:
+            falso._servir_passo(max_eventos=1)
+        finally:
+            servidor.HOST = antes
+        corpo = falso.wfile.getvalue().decode()
+        self.assertIn("text/event-stream", corpo)
+        self.assertIn('data: {"tocando": true, "passo": 5, "passos_trk": null}', corpo)
+
+    def test_passo_exige_o_cookie(self):
+        import http.server, threading, urllib.request, urllib.error, servidor
+        srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), servidor.Handler)
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        try:
+            with self.assertRaises(urllib.error.HTTPError) as e:
+                urllib.request.urlopen(f"http://127.0.0.1:{srv.server_port}/passo")
+            self.assertEqual(e.exception.code, 403)
+        finally:
+            srv.shutdown()
+
+    def test_segurar_step_liga_o_modo_e_devolve(self):
+        # F3.4.6: com o [150] em 0, segurar um step deixava a maquina muda
+        m = motor_cru()
+        modo = 112 + campos.B3_LOOP
+        m.maquina.valores[(3, 0, 0, modo)] = 0
+        m.definir_loop(True, 4)
+        self.assertEqual(_escritas(m.maquina), [(3, 0, 0, modo, 1), (3, 0, 0, 112 + 151 + 4, 1)])
+        m.definir_loop(True, 6)                          # outro dedo: o modo ja esta
+        m.maquina.recebido.clear()
+        m.definir_loop(False, 4)
+        self.assertEqual(_escritas(m.maquina), [(3, 0, 0, 112 + 151 + 4, 0)])
+        m.maquina.recebido.clear()
+        m.definir_loop(False, 6)                         # o ultimo: devolve o 0
+        self.assertEqual(_escritas(m.maquina), [(3, 0, 0, 112 + 151 + 6, 0), (3, 0, 0, modo, 0)])
+
+    def test_segurar_com_o_modo_ja_ligado_nao_mexe_nele(self):
+        m = motor_cru()
+        modo = 112 + campos.B3_LOOP
+        m.maquina.valores[(3, 0, 0, modo)] = 1
+        m.definir_loop(True, 2)
+        m.definir_loop(False, 2)
+        self.assertNotIn(modo, [e[3] for e in _escritas(m.maquina)])
+
+    def test_foto_da_sessao_so_le_e_grava_no_app(self):
+        import json
+        m = motor_cru()
+        m.cab, m.b3, m.x_kit, m.kit_valores = self._cab(), [0] * 292, 0, {"bd.pan": 500}
+        m.b3[36] = 12800
+        with tempfile.TemporaryDirectory() as tmp:
+            antes = motor.DIR_SESSOES
+            motor.DIR_SESSOES = tmp
+            try:
+                nome = m.foto_sessao("botao")
+            finally:
+                motor.DIR_SESSOES = antes
+            with open(os.path.join(tmp, nome)) as f:
+                foto = json.load(f)
+        self.assertEqual(_escritas(m.maquina), [])       # nada escrito na maquina
+        self.assertEqual(foto["pattern"], "1-01")
+        self.assertEqual(foto["tempo"], 128.0)
+        self.assertEqual(set(foto["steps"]["por_variacao"]), set(tr1000_serial.VARIACOES_SERIAL))
+        self.assertEqual(len(foto["steps"]["por_variacao"]["A"]["BD"]), 131)
+        self.assertEqual(foto["kit"], {"bd.pan": 500})
+        self.assertEqual(m.ultima_sessao, nome)
+
+    def test_fotos_antigas_saem(self):
+        m = motor_cru()
+        m.cab, m.b3, m.kit_valores = self._cab(), [0] * 292, {"x": 1}
+        with tempfile.TemporaryDirectory() as tmp:
+            for i in range(5):
+                open(os.path.join(tmp, f"2000-01-0{i + 1}-000000-1-01.json"), "w").close()
+            antes, maxi = motor.DIR_SESSOES, motor.MAX_SESSOES
+            motor.DIR_SESSOES, motor.MAX_SESSOES = tmp, 3
+            try:
+                nome = m.foto_sessao("botao")
+            finally:
+                motor.DIR_SESSOES, motor.MAX_SESSOES = antes, maxi
+            ficaram = sorted(os.listdir(tmp))
+        self.assertEqual(len(ficaram), 3)
+        self.assertIn(nome, ficaram)
+
+    def test_troca_de_pattern_e_program_change_no_canal_10(self):
+        m = motor_cru()
+        saida = _PortaLP()
+        saida.bytes = []
+        saida.send_bytes = saida.bytes.append
+        m.pc_out = saida
+        m.trocar_pattern(4)                              # 1-05
+        self.assertEqual(saida.bytes, [[0xC9, 4]])
+        m.trocar_pattern(128)                            # fora: nada
+        self.assertEqual(len(saida.bytes), 1)
+        self.assertEqual(_escritas(m.maquina), [])       # nao passa pela serial
+
+    def test_ptn_digitado_vira_x(self):
+        import shutil, subprocess, json
+        node = shutil.which("node")
+        if not node:
+            self.skipTest("sem node")
+        casos = ["1-01", "1-05", "8-16", "2-1", "37", "128", "129", "9-01", "1-17", "x", ""]
+        js = ('import {xDoPattern as f} from "./web/js/ptn.mjs";'
+              f'console.log(JSON.stringify({json.dumps(casos)}.map(f)))')
+        r = subprocess.run([node, "--input-type=module", "-e", js], cwd=AQUI,
+                           capture_output=True, text=True)
+        self.assertEqual(json.loads(r.stdout),
+                         [0, 4, 127, 16, 36, 127, None, None, None, None, None])
+
+    def test_acoes_novas_conferem_a_faixa(self):
+        import servidor
+        servidor.HOST.motor = m = motor_cru()
+        try:
+            for args in ({"x": 128}, {"x": -1}):
+                with self.assertRaises(ValueError):
+                    servidor.ACOES["ptn"](args)
+            self.assertTrue(m.fila_cmd.empty())
+            servidor.ACOES["ptn"]({"x": 4})
+            servidor.ACOES["sessao"]({})
+            self.assertEqual(m.fila_cmd.qsize(), 2)
+        finally:
+            servidor.HOST.motor = None
+
+    def test_toda_frase_traduzida_existe_na_tela(self):
+        # o dicionario EN so tem chaves que algum t("...") usa (sem lixo velho)
+        import re, glob
+        base = os.path.join(AQUI, "web")
+        with open(os.path.join(base, "js", "i18n.mjs")) as f:
+            i18n = f.read()
+        fonte = ""
+        for p in glob.glob(os.path.join(base, "**", "*.*"), recursive=True):
+            if p.endswith((".mjs", ".html")) and not p.endswith("i18n.mjs"):
+                with open(p) as f:
+                    fonte += f.read()
+        usadas = set(re.findall(r'\bt\(\s*"((?:[^"\\]|\\.)*)"', fonte)) | \
+            set(re.findall(r"\bt\(\s*'((?:[^'\\]|\\.)*)'", fonte)) | \
+            set(re.findall(r'data-t="([^"]+)"', fonte)) | {"Pattern", "Mixer", "Efeitos"}
+        en = i18n[i18n.index("const EN = {"):i18n.index("\n};")]
+        chaves = set(re.findall(r'^  "((?:[^"\\]|\\.)*)":', en, re.M)) | \
+            set(re.findall(r"^  '((?:[^'\\]|\\.)*)':", en, re.M)) | \
+            set(re.findall(r"^  ([A-Za-zÀ-ú_]+):", en, re.M))
+        self.assertEqual(usadas - chaves, set(), "frase sem traducao")
+
+
 class TesteEmbalagem(unittest.TestCase):
     """O LaunchAgent e o .app rodam uma COPIA (o TCC nao deixa ler
     ~/Documents): se faltar um modulo ou uma captura de referencia, o

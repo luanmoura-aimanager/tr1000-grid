@@ -1,13 +1,17 @@
 // app.mjs - o topo, as abas e o laco de estado (~4x/s, como o TR-8S Controller).
+// O playhead vem a parte, pelo /passo (um evento por step): o laco de 250 ms
+// pulava steps a 128 BPM (F3, 12/10/2026).
 import { $, h, texto, attr } from "./dom.mjs";
 import * as rede from "./rede.mjs";
+import { t, tLog, linguaAtual, trocarLingua } from "./i18n.mjs";
+import { xDoPattern } from "./ptn.mjs";
 import pattern from "./abas/pattern.mjs";
 import mixer from "./abas/mixer.mjs";
 import efeitos from "./abas/efeitos.mjs";
-import performance from "./abas/performance.mjs";
 
-const ABAS = [pattern, mixer, efeitos, performance];
+const ABAS = [pattern, mixer, efeitos];
 const ESTADO_A_CADA = 250; // ms
+const N_AH = 8; // A..H
 
 let D = null;
 let E = {};
@@ -18,8 +22,8 @@ try {
   /* sem storage */
 }
 
-function msg(t) {
-  texto($("#msg"), t);
+function msg(s) {
+  texto($("#msg"), s);
 }
 
 // a acao com o erro virando mensagem no rodape, em vez de sumir
@@ -68,16 +72,91 @@ function pedirKit(forcar = false) {
   acao("quer_kit", { sim });
 }
 
+function montarPtn() {
+  const bt = $("#b-ptn"),
+    campo = $("#c-ptn");
+  attr(bt, "title", t("trocar o pattern"));
+  attr(campo, "aria-label", t("trocar o pattern"));
+  attr(
+    campo,
+    "title",
+    t("Digite o pattern (1-05, ou 1..128) e Enter. Esc cancela."),
+  );
+  const fechar = () => {
+    campo.hidden = true;
+    bt.hidden = false;
+  };
+  bt.addEventListener("click", () => {
+    if (!E.ligado) return;
+    campo.value = E.pattern || "";
+    bt.hidden = true;
+    campo.hidden = false;
+    campo.focus();
+    campo.select();
+  });
+  campo.addEventListener("keydown", (ev) => {
+    if (ev.key === "Escape") fechar();
+    if (ev.key !== "Enter") return;
+    const x = xDoPattern(campo.value);
+    if (x === null) {
+      msg(t("pattern inválido: use banco-número (1-05) ou 1..128"));
+      return;
+    }
+    msg(
+      t("pedindo o pattern {p} (Program Change)...", { p: campo.value.trim() }),
+    );
+    acao("ptn", { x });
+    fechar();
+  });
+  campo.addEventListener("blur", fechar);
+  attr(
+    $("#s-bpm"),
+    "title",
+    t(
+      "Digitar o BPM depende da sessão c5d (o endereço do TEMPO ainda não foi aprendido).",
+    ),
+  );
+  attr(
+    $("#s-toca"),
+    "title",
+    t("a chain (a variação que toca ainda não é detectada)"),
+  );
+}
+
 function montar() {
+  document.documentElement.lang = linguaAtual() === "en" ? "en" : "pt-BR";
+  document
+    .querySelectorAll("[data-t]")
+    .forEach((el) => texto(el, t(el.dataset.t)));
+  texto(
+    $("#aviso-off"),
+    t(
+      "Desligado: a serial está livre para o TR-1000 App da Roland. Aperte ON para o Controller assumir a máquina, os Launchpads e as controladoras.",
+    ),
+  );
+  attr($("#abas"), "aria-label", t("seções"));
+  document.querySelectorAll("[data-lingua]").forEach((b) => {
+    attr(
+      b,
+      "aria-pressed",
+      b.dataset.lingua === linguaAtual() ? "true" : "false",
+    );
+    b.addEventListener("click", () => {
+      if (b.dataset.lingua !== linguaAtual()) trocarLingua(b.dataset.lingua);
+    });
+  });
   const nav = $("#abas"),
     main = $("#paineis");
   ABAS.forEach((a, i) => {
     a._botao = h(
       "button.aba",
       { type: "button", role: "tab", onclick: () => mostrarAba(i) },
-      a.nome,
+      t(a.nome),
     );
-    a._painel = h("section.painel", { role: "tabpanel", "aria-label": a.nome });
+    a._painel = h("section.painel", {
+      role: "tabpanel",
+      "aria-label": t(a.nome),
+    });
     nav.append(a._botao);
     main.append(a._painel);
     a.montar(a._painel, ctx);
@@ -86,8 +165,8 @@ function montar() {
     const ligar = !E.ligado;
     msg(
       ligar
-        ? "ligando: serial, Launchpads e controladoras..."
-        : "desligando: soltando a serial...",
+        ? t("ligando: serial, Launchpads e controladoras...")
+        : t("desligando: soltando a serial..."),
     );
     try {
       await rede.ligar(ligar);
@@ -95,8 +174,16 @@ function montar() {
       msg(`(!) ${e.message}`);
     }
   });
+  montarPtn();
   texto($("#build"), `build ${D.build}`);
   mostrarAba(atual);
+}
+
+// a chain do cabecalho ("A+B"); a variacao que TOCA e o item 4 do plano
+function textoToca() {
+  const m = E.variacoes || 0;
+  const v = D.variacoes.slice(0, N_AH).filter((_, i) => (m >> i) & 1);
+  return v.length ? v.join("+") : "—";
 }
 
 function pintarTopo() {
@@ -110,7 +197,7 @@ function pintarTopo() {
     $("#d-var"),
     E.variacao !== undefined && ligado ? D.variacoes[E.variacao] : "—",
   );
-  texto($("#d-step"), E.tocando && E.passo >= 0 ? String(E.passo + 1) : "—");
+  texto($("#d-toca"), ligado ? textoToca() : "—");
   const leds = [
     ["TR-1000", ligado],
     ["Launchpads", ligado && E.launchpads],
@@ -122,7 +209,31 @@ function pintarTopo() {
     leds.forEach(([n]) => el.append(h("span.led", {}, h("i"), n)));
   leds.forEach(([, on], i) => attr(el.children[i], "data-on", !!on));
   const log = E.log || [];
-  if (log.length) msg(log[log.length - 1]);
+  if (log.length) msg(tLog(log[log.length - 1]));
+}
+
+// o playhead: um evento por step. O EventSource reconecta sozinho se o
+// servidor reiniciar.
+function ouvirPasso() {
+  let fonte;
+  try {
+    fonte = new EventSource("/passo");
+  } catch (e) {
+    return;
+  }
+  fonte.onmessage = (ev) => {
+    let info;
+    try {
+      info = JSON.parse(ev.data);
+    } catch (e) {
+      return;
+    }
+    texto(
+      $("#d-step"),
+      info.tocando && info.passo >= 0 ? String(info.passo + 1) : "—",
+    );
+    for (const a of ABAS) if (a.passo) a.passo(info);
+  };
 }
 
 let ligadoAntes = false;
@@ -137,7 +248,9 @@ async function laco() {
     pintarTopo();
     ABAS[atual].atualizar(E, ctx);
   } catch (e) {
-    msg("sem contato com o servidor - ele esta no ar? (python3 servidor.py)");
+    msg(
+      t("sem contato com o servidor - ele esta no ar? (python3 servidor.py)"),
+    );
   }
   setTimeout(laco, ESTADO_A_CADA);
 }
@@ -146,10 +259,11 @@ async function laco() {
   try {
     D = await rede.dados();
   } catch (e) {
-    msg("sem contato com o servidor");
+    msg(t("sem contato com o servidor"));
     setTimeout(() => location.reload(), 2000);
     return;
   }
   montar();
   laco();
+  ouvirPasso();
 })();

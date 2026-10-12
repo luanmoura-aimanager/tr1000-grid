@@ -3,6 +3,7 @@
 // fader daqui (na proxima leitura do kit, ~2 s), e mexer aqui faz o knob
 // voltar a "pegar no caminho".
 import { h, attr } from "../dom.mjs";
+import { t } from "../i18n.mjs";
 import { paramSlider, fmt } from "../params.mjs";
 
 const COLUNAS = [
@@ -22,9 +23,9 @@ export default {
     const mesa = h(
       "div.mesa",
       {},
-      h("span.cab", {}, "track"),
+      h("span.cab", {}, t("track")),
       COLUNAS.map(([, r]) => h("span.cab", {}, r)),
-      h("span.cab", {}, "mute"),
+      h("span.cab", {}, t("mute")),
     );
     ctx.D.tracks.forEach((t, tr) => {
       mesa.append(h("strong.mono", {}, t));
@@ -47,12 +48,12 @@ export default {
       h(
         "div.secao",
         {},
-        h("h2", {}, "mixer"),
+        h("h2", {}, t("mixer")),
         h("div.grade-rolo", {}, mesa),
         h(
           "p.nota",
           {},
-          "GAIN vai de −INF a +6 dB (0..661 na máquina). Os valores relêem a máquina a cada 2 s enquanto esta aba está aberta.",
+          t("GAIN vai de −INF a +6 dB (0..661 na máquina). Os valores relêem a máquina a cada 2 s enquanto esta aba está aberta."),
         ),
       ),
     );

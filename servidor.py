@@ -90,6 +90,24 @@ class Host:
         self.thread = None
         self.rodando = False
         self.ultimo = {}
+        # o playhead para o /passo: o motor avisa a cada step (F3, 12/10/2026:
+        # o polling de 250 ms pulava steps a 128 BPM)
+        self.cond_passo = threading.Condition()
+        self.passo = {"tocando": False, "passo": -1, "passos_trk": None}
+        self.versao_passo = 0
+
+    def _novo_passo(self, info):
+        with self.cond_passo:
+            self.passo = info
+            self.versao_passo += 1
+            self.cond_passo.notify_all()
+
+    def esperar_passo(self, versao, timeout=15.0):
+        """-> (versao, info) quando o passo mudar depois de `versao`, ou o
+        mesmo par no timeout (o /passo manda um comentario para manter viva)."""
+        with self.cond_passo:
+            self.cond_passo.wait_for(lambda: self.versao_passo != versao, timeout)
+            return self.versao_passo, dict(self.passo)
 
     def ligar(self):
         if self.motor is None:
@@ -103,6 +121,7 @@ class Host:
             except Exception as e:
                 self.log(f"(!) nao consegui abrir os Launchpads: {e} - seguindo so com a tela")
                 self.motor = M.Motor(None, log=self.log)
+            self.motor.ao_passo = self._novo_passo
             self.rodando = True
             self.thread = threading.Thread(target=self._laco, daemon=True)
             self.thread.start()
@@ -134,6 +153,7 @@ class Host:
         except Exception:
             pass
         self.motor, self.thread, self.ultimo = None, None, {}
+        self._novo_passo({"tocando": False, "passo": -1, "passos_trk": None})
         self.log("desligado: a serial esta livre para o TR-1000 App")
 
     def enfileirar(self, fn, *args):
@@ -243,6 +263,10 @@ ACOES = {
     "extremos_track": _extremos_track,
     "loop": lambda a: HOST.enfileirar(HOST.motor.definir_loop, bool(a["ligado"]), _passo_ou_none(a, "step")),
     "param": _param,
+    # o pattern por Program Change (pedido do Luan, 12/10/2026; nao medido ate o F4)
+    "ptn": lambda a: HOST.enfileirar(HOST.motor.trocar_pattern, _faixa(a, "x", 0, 127)),
+    # a foto da sessao: so no app, nunca na maquina
+    "sessao": lambda a: HOST.enfileirar(HOST.motor.foto_sessao, "botao"),
     "quer_kit": lambda a: setattr(HOST.motor, "quer_kit", bool(a["sim"])),
     "reler": lambda a: HOST.enfileirar(HOST.motor.reler, True),
 }
@@ -376,7 +400,37 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return self._responder(json.dumps(HOST.estado(), default=str))
         if rota == "/dados":
             return self._responder(json.dumps(dados_estaticos(), default=str))
+        if rota == "/passo":
+            if not self._tem_cookie():
+                return self._erro("sem cookie de sessao", 403)
+            return self._servir_passo()
         return self._erro("nao encontrado", 404)
+
+    def _servir_passo(self, max_eventos=None):
+        """Server-Sent Events: um evento por step, na hora em que o motor anda
+        (a thread desta conexao fica aqui; o ThreadingHTTPServer tem uma por
+        conexao). `max_eventos` e para os testes."""
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Connection", "close")
+        self.end_headers()
+        self.close_connection = True
+        versao, info = -1, None
+        enviados = 0
+        try:
+            while max_eventos is None or enviados < max_eventos:
+                nova, info = HOST.esperar_passo(versao)
+                if nova == versao:
+                    self.wfile.write(b": viva\n\n")      # sem mudanca: so manter
+                else:
+                    versao = nova
+                    self.wfile.write(f"data: {json.dumps(info)}\n\n".encode())
+                    enviados += 1
+                self.wfile.flush()
+        except (BrokenPipeError, ConnectionResetError, OSError):
+            pass                                          # a pagina fechou
 
     def do_OPTIONS(self):
         self._responder(b"", "text/plain", 204)     # sem Allow-*: o preflight morre aqui

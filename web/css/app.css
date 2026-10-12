@@ -39,6 +39,11 @@ button, select, input{ font:inherit; color:inherit; }
       padding:3px 9px; display:flex; flex-direction:column; min-width:64px; }
 .seg-rot{ font-size:9px; letter-spacing:.12em; text-transform:uppercase; color:var(--fraco); }
 .seg-val{ font:600 17px/1.15 var(--f-mono); color:var(--acento); font-variant-numeric:tabular-nums; }
+.seg-bt{ cursor:pointer; text-align:left; font:inherit; color:inherit; }
+.seg-bt:hover{ border-color:var(--acento); }
+.seg-campo{ width:72px; background:#0a0908; border:1px solid var(--acento); border-radius:var(--r1);
+            padding:3px 9px; font:600 17px/1.15 var(--f-mono); color:var(--acento); }
+.lingua{ display:flex; gap:2px; margin-left:auto; }
 .leds{ display:flex; gap:var(--e3); flex-wrap:wrap; }
 .led{ display:flex; align-items:center; gap:6px; font-size:11px; color:var(--tinta2); }
 .led i{ width:9px; height:9px; border-radius:50%; background:#3a3632; display:inline-block; }
@@ -47,6 +52,8 @@ button, select, input{ font:inherit; color:inherit; }
      padding:6px 12px; cursor:pointer; }
 .bt:hover{ border-color:var(--fraco); }
 .bt[aria-pressed="true"]{ background:var(--acento); color:#160a02; border-color:var(--acento); font-weight:700; }
+.bt[disabled]{ opacity:.4; cursor:not-allowed; }
+.lingua + .bt-ligar{ margin-left:0; }
 .bt-ligar{ margin-left:auto; min-width:72px; font-weight:800; letter-spacing:.06em; }
 .bt-peq{ padding:3px 8px; font-size:12px; }
 .aviso-off{ margin:var(--e3) 0 0; padding:var(--e2) var(--e3); background:var(--painel);
@@ -70,7 +77,10 @@ button, select, input{ font:inherit; color:inherit; }
 .grade-rolo{ overflow-x:auto; }
 .grade{ display:grid; grid-template-columns:40px 34px repeat(16, var(--cel)); gap:var(--gap); justify-content:start;
         align-items:center; min-width:max-content; }
-.grade .rot{ font:600 12px var(--f-mono); color:var(--tinta2); padding-right:6px; text-align:right; }
+.grade .rot{ font:600 12px var(--f-mono); color:var(--tinta2); padding:0 6px 0 0; text-align:right;
+             background:none; border:0; }
+.grade button.rot{ cursor:pointer; border-radius:var(--r1); }
+.grade button.rot:hover{ color:var(--acento); }
 .grade .num{ font:600 11px var(--f-mono); text-align:center; background:#000; color:#fff;
              border-radius:2px; padding-block:1px; }
 .grade .num:nth-child(4n+3){ }
@@ -119,6 +129,15 @@ select{ background:var(--painel2); border:1px solid var(--linha2); border-radius
              align-items:center; justify-content:start; }
 .matriz .cab-esq{ text-align:left; }
 .toques .bt{ min-width:34px; text-align:center; }
+
+/* ── pattern: a grade + a coluna do lado (o que era a aba Performance) ── */
+.pattern-corpo{ display:grid; grid-template-columns:minmax(0, max-content) minmax(260px, 360px);
+                gap:var(--e4); align-items:start; }
+.principal, .lado{ display:grid; gap:var(--e4); min-width:0; }
+@media (max-width: 1080px){ .pattern-corpo{ grid-template-columns:minmax(0, 1fr); } }
+.vars{ display:grid; grid-template-columns:auto 1fr; gap:6px var(--e3); align-items:center; }
+.fila.entre{ justify-content:space-between; }
+.toques.loop .bt{ min-width:30px; touch-action:none; }
 
 #rodape{ position:fixed; left:0; right:0; bottom:0; display:flex; justify-content:space-between; gap:var(--e3);
          padding:6px 16px calc(6px + env(safe-area-inset-bottom,0px)); background:#0a0908;

@@ -49,7 +49,9 @@ grid — escreve na máquina. **Toda saída da serial passa por um único portã
   - **CAMPOS da `campos.py`**, aprendidos pelo **painel** (C5, REFERENCIA 7.6), liberados
     pelo Luan em 10/10/2026: PROB/SUB/CYCLE/START/ALT do step; o cabeçalho do pattern
     (variações/chain, Scale, FIRST/LAST, FILL); e o MUTE e o STEP LOOP do bloco 3. O
-    **accent fica de fora**: é feito no painel. Cada grupo só vale depois do ROTEIRO-F3.
+    **accent fica de fora**: é feito no painel. O ROTEIRO-F3 (12/10/2026) provou de
+    ouvido quase todos (REFERENCIA 7.8); o CYCLE, o FILL 3/4 e o FIRST/LAST por track
+    ainda não foram conferidos, e o LED do STEP LOOP do painel não acompanha o `[150]`.
 
   Ampliar a regra é **decisão do Luan**, não detalhe de código. As 3 escritas
   históricas da C3 continuam na lista `ESCRITAS_PERMITIDAS`.
@@ -57,6 +59,9 @@ grid — escreve na máquina. **Toda saída da serial passa por um único portã
   referência (`CAPTURAS_DE_REFERENCIA`, que inclui as capturas B2 das controladoras).
   Os blocos de pattern e de kit valem para qualquer x 0..127 (decisão do Luan, depois de
   três patterns de dois bancos provarem x = índice global).
+- **Fora da serial, uma escrita só:** o **Program Change** do PTN digitado na tela
+  (`motor.trocar_pattern`, porta `TR-1000`, Pattern Ch. 10), pedido do Luan em
+  12/10/2026. Ele só sai com o Luan digitando, nunca sozinho.
 - Fora isso, só o aperto de mão.
 - **Quem escreve é o Luan:** o grid só escreve quando ele aperta um pad ou gira um knob; o
   `sessao_c3.py` só com `sim`/`--sim` digitado por ele. **O agente nunca roda uma
