@@ -8,8 +8,9 @@ import { xDoPattern, x100DoBpm } from "./ptn.mjs";
 import pattern from "./abas/pattern.mjs";
 import mixer from "./abas/mixer.mjs";
 import efeitos from "./abas/efeitos.mjs";
+import ritmos from "./abas/ritmos.mjs";
 
-const ABAS = [pattern, mixer, efeitos];
+const ABAS = [pattern, mixer, efeitos, ritmos];
 const ESTADO_A_CADA = 250; // ms
 const N_AH = 8; // A..H
 

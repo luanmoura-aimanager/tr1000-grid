@@ -1121,6 +1121,103 @@ o mesmo botão volta aos steps. Tudo chama as mesmas ações da tela (o mesmo po
   - o mostrador **TOCA** mostra a chain;
   - o FIRST/LAST do track abre clicando no nome dele.
 
+### 7.9 Fase 2l — a aba Ritmos e o Kit por Program Change (13/10/2026; NÃO testada no hardware até o `ROTEIRO-F5.md`)
+
+O pedido do Luan foi uma aba de ritmos prontos inspirada na Grooves do tr8s-grid, com a
+família reggae/dub, pelo menos 2 variações por ritmo, preferência pelos kits analógicos e
+pesquisa de acurácia. As decisões dele em 13/10/2026: botão **Kit por Program Change**,
+**foto + Desfazer**, e o escopo "reggae/dub + port do tr8s + auditoria + o que falta".
+
+**Os arquivos:**
+- `biblioteca.py` tem os dados: 83 ritmos em 37 estilos, cada um com A, B (às vezes C) e
+  Fill 1, e a **fonte** de cada um.
+- `ritmos.py` tem o formato, a validação e a conta que vira escrita (só a diferença), mais
+  a lista `KITS`.
+- `motor.escrever_ritmo` / `desfazer_ritmo` / `trocar_kit` fazem a parte da máquina.
+- `web/js/abas/ritmos.mjs` é a aba.
+
+**O que é medido, deduzido e não testado:**
+- **Medido (captura):** os 128 nomes da lista de kits `0c`, na ordem
+  (`capturas/2026-10-08-s0-autoteste.serlog`; o `TesteRitmos` redecodifica). Do 64 ao
+  127 vêm vazios.
+- **Deduzido:**
+  - o kit N da lista = o Program Change N no **Kit Ch. 1**: a MIDI chart diz "Only KIT
+    switches", o canal é o padrão do manual;
+  - quais kits têm circuito **analógico**: o TR-808-1000 e o TR-909-1000 pelo nome, os OG
+    pela ideia.
+
+  Nada disso foi medido; é o **F5.1**.
+- **Não testado:**
+  - o tempo de uma escrita inteira: são 60 a 200 escritas por ritmo, 12 por tick;
+  - o som de cada ritmo;
+  - os sends do Mix dub fora do SD.
+
+**Como a escrita anda:**
+1. A foto da sessão (`-ritmo.json`, só leitura). Se a foto falha, nada é escrito.
+2. O Kit PC, se o "Auto kit" está ligado, e uma espera de 0,6 s. Depois o motor relê.
+   Se o `x_kit` não virou o do ritmo (Rx PC desligado, outro canal, outro número), a aba
+   avisa e o mix **não** é escrito, para não cair no kit errado.
+3. A leitura das variações que o ritmo usa, do accent e do cabeçalho.
+4. Só a diferença:
+   - os slots 0/1 (o slot 1 só em BD..HT);
+   - PROB/SUB/CYCLE/START só nos steps que tocam, com o que o ritmo não diz voltando ao
+     neutro (100/0/0/0);
+   - o step que tocava e sai vira `FF`;
+   - no cabeçalho: Scale, chain, FIRST/LAST das variações, FILL 0 e `CAB_TRK_SW = 0`.
+
+   Cada escrita confirmada entra no **diário** na hora: um OFF no meio não perde o que o
+   Desfazer precisa.
+5. O Mix dub: os sends, com o valor de antes lido na hora. Com o kit incerto (bloco 3
+   [2..4] diferentes), o mix não é escrito.
+
+**O diário** só substitui o do ritmo anterior quando algo do novo foi escrito de fato:
+um ritmo que falha no começo não apaga o Desfazer do anterior.
+
+**O Desfazer** reescreve o diário de trás para frente:
+- um slot que era `00` volta `FF`, porque o portão recusa `00` e as duas pausas soam
+  iguais;
+- um valor antigo que o portão recusa não volta, e o Desfazer avisa;
+- com o pattern trocado, o tempo atual (bloco 3) não volta.
+
+**Os avisos:**
+- o DIRECTION ≠ FWD, que é só leitura (o caso do SD em R-L da fase 2k);
+- o accent na variação, que não é gravável.
+
+**Os limites da máquina e as saídas usadas:**
+- **Accent:** vira velocity (`X` = 127).
+- **Shuffle:** não há gravável. O swing de tercina é a **Scale 16th(T) com LAST 12**
+  (meio compasso por variação) ou **8th(T) com LAST 12** (um compasso).
+- **Chain:** é uma **máscara**, não uma ordem. O A A B C do amen fica A B C.
+- **MT:** a TR-1000 não tem. O MT do tr8s virou LT ou HT, anotado no ritmo.
+
+**A convenção do reggae: meio-tempo.** São 60–90 BPM, com o drop/backbeat nos steps 5 e 13,
+como na notação da Wikipedia (`bd` no 2 e no 4 a ♩=80), no *Wicked Beats* e no dubroom.
+- **Rockers** = bumbo em cada tempo (1 5 9 13).
+- **Steppers** = bumbo em cada colcheia (os steps ímpares).
+- **Flying cymbal** = o chimbal aberto nos steps pares (o "e" da contagem rápida).
+
+As fontes principais:
+- Gil Sharone, *Wicked Beats* (Hudson Music 2017), na amostra: o capítulo Ska inteiro;
+- Wikipedia: One drop rhythm, Carlton Barrett, Nyabinghi rhythm, Rocksteady, D-beat,
+  Amen break, Sleng Teng;
+- dubroom.org (tutoriais 05 e 15), bonedo.de (one drop, Cold Sweat), DancehallMag (2026),
+  attackmagazine (dub, UK drill), Native Instruments e orphiq (Jersey club).
+
+O que só tinha "conhecimento geral" está escrito assim no campo `fonte`.
+
+**A auditoria do tr8s** (o que estava errado lá e foi corrigido aqui):
+- o CH tocava junto do OH no contratempo (house, deep, techno, disco), contra a regra de
+  choke do próprio tr8s;
+- o **d-beat** tinha bumbo e caixa juntos no 7 e no 15 (Wikipedia: bumbo 1 7 11, caixa no
+  2 e no 4);
+- o **Cold Sweat** tinha uma barra só (bonedo: a figura é de dois compassos, a segunda
+  caixa do 1º atrasada uma colcheia, o 2º sem backbeat);
+- o **amen** tinha uma barra só: agora são as barras 1–2, 3 e 4;
+- o "dancehall" do tr8s virou o **Dancehall (anos 90)**, com fonte.
+
+**Pesquisados e não incluídos**, por falta de uma grade com fonte: funk 150 (só a história
+do Polyvox e o tempo), brega funk, pisadinha e Baltimore club.
+
 ### 7.5 Fase 1b — as controladoras de knobs (09–10/10/2026; F2 PASSOU no hardware em 10/10)
 
 **Resultado do ROTEIRO-F2 (10/10/2026, o Luan na frente da máquina):**

@@ -154,6 +154,24 @@ select{ background:var(--painel2); border:1px solid var(--linha2); border-radius
 .env-rot{ fill:var(--fraco); font:10px var(--f-mono); text-anchor:middle; }
 .env-vazio .env-ponto, .env-vazio .env-linha, .env-vazio .env-area, .env-vazio .env-rot{ display:none; }
 
+/* ── ritmos ───────────────────────────────────────────── */
+.ritmos-corpo{ display:grid; grid-template-columns:minmax(260px, 420px) minmax(0, 1fr);
+               gap:var(--e4); align-items:start; }
+@media (max-width: 900px){ .ritmos-corpo{ grid-template-columns:minmax(0, 1fr); } }
+.ritmos-lista{ display:grid; gap:var(--e2); max-height:70vh; overflow-y:auto; }
+.ritmos-lista .estilo{ margin:var(--e2) 0 0; font-size:11px; letter-spacing:.12em; text-transform:uppercase;
+                       color:var(--fraco); }
+.ritmos-grupo{ display:flex; flex-wrap:wrap; gap:4px; }
+.filtro{ background:var(--painel2); border:1px solid var(--linha2); border-radius:var(--r1); padding:6px 8px;
+         width:100%; }
+.mini-grade{ display:grid; grid-template-columns:28px repeat(var(--n, 16), 18px); gap:2px; align-items:center;
+             min-width:max-content; }
+.mini-grade .rot{ font-size:10px; color:var(--tinta2); text-align:right; padding-right:4px; }
+.cel.mini{ width:18px; height:14px; border-radius:2px; cursor:default; }
+.avisos{ margin:0; padding-left:18px; color:var(--erro); font-size:12px; }
+.avisos:empty{ display:none; }
+progress{ width:100%; accent-color:var(--acento); }
+
 #rodape{ position:fixed; left:0; right:0; bottom:0; display:flex; justify-content:space-between; gap:var(--e3);
          padding:6px 16px calc(6px + env(safe-area-inset-bottom,0px)); background:#0a0908;
          border-top:1px solid var(--linha); font-size:11px; }

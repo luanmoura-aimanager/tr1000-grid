@@ -3001,6 +3001,480 @@ class TestePortaoDaFase0(unittest.TestCase):
         self.assertEqual(_SaidaFalsa.enviados, [])
 
 
+def _rodar_ritmo(m, maximo=10000):
+    """Anda o gerador do ritmo (escrita ou desfazer) ate o fim."""
+    for _ in range(maximo):
+        if m.ritmo_passos is None:
+            return
+        m._andar_ritmo()
+    raise AssertionError("o gerador do ritmo nao acabou")
+
+
+def _bloco_do_ritmo(r, v):
+    """{track: [131]} como ficaria a variacao v depois do ritmo r escrito."""
+    import ritmos
+    grade = ritmos.expandir(r)[v]
+    out = {}
+    for tr, passos in grade.items():
+        b = [0] * 131
+        for s, p in enumerate(passos):
+            if p is None:
+                continue
+            for slot in p.slots:
+                b[4 * s + slot] = ritmos.valor_do_slot(p, slot)
+            for nome in ("prob", "sub", "cycle", "start"):
+                pos, mn, _mx = campos.CAMPOS_STEP[nome]
+                b[pos + s] = campos.u32(getattr(p, nome)) if mn < 0 else getattr(p, nome)
+        out[tr] = b
+    return out
+
+
+class TesteRitmos(unittest.TestCase):
+    """A biblioteca da aba Ritmos (biblioteca.py + ritmos.py), sem hardware."""
+
+    def test_todos_validam_e_ids_unicos(self):
+        import ritmos
+        for r in ritmos.RITMOS:
+            with self.subTest(id=r.get("id")):
+                ritmos.validar(r)
+        ids = [r["id"] for r in ritmos.RITMOS]
+        self.assertEqual(len(ids), len(set(ids)))
+
+    def test_pelo_menos_duas_variacoes_e_kit_com_nome(self):
+        import ritmos
+        for r in ritmos.RITMOS:
+            ah = [v for v in r["variacoes"] if v in ritmos.VARIACOES[:8]]
+            self.assertGreaterEqual(len(ah), 2, r["id"])
+            self.assertTrue(ritmos.KITS[ritmos.KIT_POR_NOME[r["kit"]]], r["id"])
+
+    def test_kits_sao_os_da_captura(self):
+        # a lista 0c que a maquina mandou ao App (S0, 08/10/2026)
+        import ritmos
+        regs = tr1000_serial.ler_serlog(os.path.join(AQUI, "capturas", "2026-10-08-s0-autoteste.serlog"))
+        nomes = {}
+        for d, _t, p in tr1000_serial.pacotes(regs):
+            c = tr1000_serial.carga(p)
+            if d == "RX" and c[:1] == b"\x0c" and len(c) >= 19:
+                nomes[c[1] | c[2] << 8] = c[3:19].decode("ascii").rstrip()
+        self.assertEqual(len(nomes), 128)
+        self.assertEqual([nomes[i] for i in range(len(ritmos.KITS))], ritmos.KITS)
+        self.assertEqual({nomes[i] for i in range(len(ritmos.KITS), 128)}, {""})
+
+    def test_toda_escrita_de_todo_ritmo_passa_no_portao(self):
+        # contra um pattern vazio (escreve tudo) e contra um cheio de outra
+        # coisa (escreve FF e devolve campos ao neutro), em x 0 e 127; e o
+        # desfazer de cada. Os enderecos repetidos sao conferidos uma vez so
+        # (o portao dos parametros e lento: ~0,1 ms por consulta)
+        import ritmos
+        cheio = [ts_nota(1)] * 64 + [50] * 16 + [5] * 16 + [0] * 2 + [3] * 16 + [campos.u32(-40)] * 16 + [0]
+        vistas, ruins = set(), []
+        for r in ritmos.RITMOS:
+            for x, base in ((0, [0] * 131), (127, cheio)):
+                lidos = {v: {tr: list(base) for tr in range(10)} for v in ritmos.expandir(r)}
+                es = ritmos.escritas_do_ritmo(r, x, lidos, [1] * 248)
+                for e in es + ritmos.desfazer(es):
+                    chave = (e.bloco, e.x, e.y, e.indice, e.valor)
+                    if chave not in vistas:
+                        vistas.add(chave)
+                        if not conexao_serial.escrita_permitida(*chave):
+                            ruins.append((r["id"], chave))
+        self.assertEqual(ruins, [])
+        self.assertGreater(len(vistas), 1000)
+
+    def test_so_a_diferenca(self):
+        import ritmos
+        r = ritmos.POR_ID["one_drop"]
+        lidos = {v: _bloco_do_ritmo(r, v) for v in ritmos.expandir(r)}
+        cab = [0] * 248
+        cab[campos.CAB_SCALE], cab[campos.CAB_VARIACOES] = 2, ritmos.chain_de(r)
+        for v in ritmos.expandir(r):
+            cab[campos.CAB_LAST_VAR + v] = 15
+        self.assertEqual(ritmos.escritas_do_ritmo(r, 0, lidos, cab), [])
+
+    def test_step_que_toca_e_sai_vira_ff_e_campo_volta_ao_neutro(self):
+        import ritmos
+        r = ritmos.POR_ID["one_drop"]
+        lidos = {v: _bloco_do_ritmo(r, v) for v in ritmos.expandir(r)}
+        lidos[0][0][0] = ts_nota(100)                     # BD step 1: o ritmo nao toca
+        lidos[0][0][80 + 4] = 3                           # BD step 5 (toca) com SUB 1/4
+        lidos[0][2][4] = 0xFF                             # LT pausa: ja e pausa, nada
+        cab = [0] * 248
+        cab[campos.CAB_SCALE], cab[campos.CAB_VARIACOES] = 2, ritmos.chain_de(r)
+        for v in ritmos.expandir(r):
+            cab[campos.CAB_LAST_VAR + v] = 15
+        es = ritmos.escritas_do_ritmo(r, 0, lidos, cab)
+        self.assertEqual([(e.y, e.indice, e.valor, e.antigo) for e in es],
+                         [(0, 1249, 0xFF, ts_nota(100)), (0, 1249 + 80 + 4, 0, 3)])
+
+    def test_cabecalho_scale_chain_last_e_track_sw(self):
+        import ritmos
+        r = ritmos.POR_ID["one_drop_barrett"]               # 16th(T), last 12
+        lidos = {v: {tr: [0] * 131 for tr in range(10)} for v in ritmos.expandir(r)}
+        cab = [0] * 248
+        cab[campos.CAB_TRK_SW + 1] = 1                      # o SD tinha FIRST/LAST proprio
+        es = [e for e in ritmos.escritas_do_ritmo(r, 3, lidos, cab) if e.bloco == campos.CAB]
+        quer = {(e.indice - campos.INI_CAB): e.valor for e in es}
+        self.assertEqual(quer[campos.CAB_SCALE], 1)
+        self.assertEqual(quer[campos.CAB_VARIACOES], 0b11)
+        self.assertEqual(quer[campos.CAB_LAST_VAR + 0], 11)
+        self.assertEqual(quer[campos.CAB_LAST_VAR + 1], 11)
+        self.assertEqual(quer[campos.CAB_TRK_SW + 1], 0)
+        self.assertNotIn(campos.CAB_FIRST_VAR, quer)        # ja era 0
+        self.assertNotIn(campos.CAB_FILL, quer)             # ja era 0 (Fill 1)
+        self.assertTrue(all(e.x == 3 for e in es))
+
+    def test_desfazer_inverte_e_00_vira_ff(self):
+        import ritmos
+        es = [ritmos.Escrita(118, 0, 0, 1249, ts_nota(80), 0x00),
+              ritmos.Escrita(118, 0, 0, 1249 + 64, 100, 37),
+              ritmos.Escrita(campos.CAB, 0, 0, campos.INI_CAB + campos.CAB_SCALE, 1, 0)]
+        d = ritmos.desfazer(es)
+        self.assertEqual([(e.indice, e.valor) for e in d],
+                         [(campos.INI_CAB + campos.CAB_SCALE, 0), (1249 + 64, 37), (1249, 0xFF)])
+
+    def test_linha_detalhada_e_erros(self):
+        import ritmos
+        ps = ritmos.linha(("x...", {1: {"sub": "1/3"}, 3: {"vel": 66, "alt": True}}), 4, 4)
+        self.assertEqual((ps[0].vel, ps[0].sub), (80, 2))
+        self.assertTrue(ps[2].alt and ps[2].vel == 66)
+        self.assertEqual(ps[0].slots, (0,))                 # RS: so o slot 0
+        for ruim in (("x..", 0, 4), ("x..z", 0, 4)):
+            with self.assertRaises(ValueError):
+                ritmos.linha(*ruim)
+        with self.assertRaises(ValueError):
+            ritmos.linha(("x...", {1: {"alt": True}}), 0, 4)   # ALT no BD
+        with self.assertRaises(ValueError):
+            ritmos.linha(("x...", {1: {"layer": "B"}}), 4, 4)  # layer no RS
+
+    def test_pagina_recebe_o_preview(self):
+        import ritmos
+        p = ritmos.para_pagina(ritmos.POR_ID["one_drop_barrett"])
+        self.assertEqual(p["last"], 12)
+        self.assertEqual(len(p["variacoes"]["A"]), 10)
+        self.assertTrue(all(len(l) == 12 for l in p["variacoes"]["A"]))
+        self.assertEqual(p["kit"], ritmos.KITS[p["kit_n"]])
+
+
+def ritmos_mod():
+    import ritmos
+    return ritmos
+
+
+def ts_nota(vel):
+    return tr1000_serial.nota(vel)
+
+
+class TesteEscritaRitmo(unittest.TestCase):
+    """O motor escrevendo um ritmo: foto antes, so a diferenca, aos pedacos."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.antes = motor.DIR_SESSOES
+        motor.DIR_SESSOES = self.tmp.name
+
+    def tearDown(self):
+        motor.DIR_SESSOES = self.antes
+        self.tmp.cleanup()
+
+    def _motor(self):
+        m = motor_cru()
+        m.ESPERA_KIT = 0.0
+        return m
+
+    def test_escreve_o_one_drop_num_pattern_vazio(self):
+        import ritmos
+        m = self._motor()
+        m.escrever_ritmo("one_drop")
+        _rodar_ritmo(m)
+        self.assertEqual(m.ritmo_estado["fase"], "pronto")
+        w = {(b, y, i): v for b, x, y, i, v in _escritas(m.maquina)}
+        nota80 = ts_nota(80)
+        for v in (0, 1):                                    # A e B
+            b = tr1000_serial.bloco_de_steps(v)
+            self.assertEqual(w[(b, 0, 1249 + 16)], nota80)  # BD no step 5, layer A
+            self.assertEqual(w[(b, 0, 1249 + 17)], nota80)  # e layer B
+            self.assertEqual(w[(b, 4, 1249 + 16)], nota80)  # RS no step 5
+            self.assertNotIn((b, 4, 1249 + 17), w)          # RS: so o slot 0
+            self.assertEqual(w[(b, 0, 1249 + 64 + 4)], 100) # PROB do BD 5: 0 -> 100
+        self.assertEqual(w[(campos.CAB, 0, campos.INI_CAB + campos.CAB_SCALE)], 2)
+        self.assertEqual(w[(campos.CAB, 0, campos.INI_CAB + campos.CAB_VARIACOES)], 0b11)
+        self.assertEqual(w[(campos.CAB, 0, campos.INI_CAB + campos.CAB_LAST_VAR + 8)], 15)
+        self.assertIn("ritmo", m.estado())
+        self.assertEqual(m.estado()["ritmo_desfazer"], ritmos.POR_ID["one_drop"]["nome"])
+        self.assertTrue(os.listdir(self.tmp.name))          # a foto foi antes
+
+    def test_tudo_passa_pelo_portao(self):
+        m = self._motor()
+        visto = []
+        orig = conexao_serial.conferir_pacote
+
+        def espia(pac):
+            visto.append(pac)
+            return orig(pac)
+        conexao_serial.conferir_pacote = espia
+        try:
+            m.escrever_ritmo("dub_roots")
+            _rodar_ritmo(m)
+        finally:
+            conexao_serial.conferir_pacote = orig
+        conferidas = {bytes(tr1000_serial.carga(p)) for p in visto
+                      if tr1000_serial.carga(p)[:1] == b"\x01"}
+        enviadas = {bytes(tr1000_serial.carga(p)) for p in m.maquina.recebido
+                    if tr1000_serial.carga(p)[:1] == b"\x01"}
+        self.assertTrue(enviadas)
+        self.assertEqual(enviadas - conferidas, set())
+
+    def test_aos_pedacos(self):
+        m = self._motor()
+        m.ESCRITAS_POR_TICK = 3
+        m.escrever_ritmo("steppers")
+        while m.ritmo_estado["fase"] != "escrevendo":
+            m._andar_ritmo()
+        antes = len(_escritas(m.maquina))
+        m._andar_ritmo()
+        self.assertLessEqual(len(_escritas(m.maquina)) - antes, 3)
+        _rodar_ritmo(m)
+        self.assertEqual(m.ritmo_estado["fase"], "pronto")
+        self.assertEqual(m.ritmo_estado["feito"], m.ritmo_estado["total"])
+
+    def test_foto_e_leitura_uma_variacao_por_tick(self):
+        m = self._motor()
+        m.escrever_ritmo("one_drop")
+        lidas = []
+        orig = m._ler_variacao
+        m._ler_variacao = lambda x, v: lidas.append(v) or orig(x, v)
+        while m.ritmo_estado["fase"] in ("foto", "lendo"):
+            antes = len(lidas)
+            m._andar_ritmo()
+            self.assertLessEqual(len(lidas) - antes, 1)
+        _rodar_ritmo(m)
+        self.assertEqual(m.ritmo_estado["fase"], "pronto")
+
+    def test_pattern_trocado_no_meio_para(self):
+        m = self._motor()
+        m.ESCRITAS_POR_TICK = 1
+        m.escrever_ritmo("steppers")
+        while m.ritmo_estado["fase"] != "escrevendo" or m.ritmo_estado["feito"] < 5:
+            m._andar_ritmo()
+        m.x_pattern = 9
+        _rodar_ritmo(m)
+        self.assertEqual(m.ritmo_estado["fase"], "falhou")
+        self.assertEqual({x for _b, x, *_ in _escritas(m.maquina)}, {0})
+        self.assertEqual(len(m.ritmo_diario["escritas"]), 5)   # o Desfazer sabe o que foi
+
+    def test_sem_foto_nada_escrito(self):
+        m = self._motor()
+        m._passos_da_foto = lambda motivo: iter([""])
+        m.escrever_ritmo("one_drop")
+        _rodar_ritmo(m)
+        self.assertEqual(m.ritmo_estado["fase"], "falhou")
+        self.assertEqual(_escritas(m.maquina), [])
+
+    def test_aviso_do_direction_e_do_accent(self):
+        m = self._motor()
+        sd = [0] * 131
+        sd[campos.STEP_DIRECAO] = 3                          # R-L
+        m.maquina.blocos = {(118, 0, 1): sd}
+        m.maquina.valores[(117, 0, 0, campos.INI_ACC)] = 0x1111
+        m.escrever_ritmo("one_drop")
+        _rodar_ritmo(m)
+        avisos = " | ".join(m.ritmo_estado["avisos"])
+        self.assertIn("SD em R-L na A", avisos)
+        self.assertIn("a A tem accent", avisos)
+        self.assertNotIn((118, 0, 1, 1249 + campos.STEP_DIRECAO),
+                         [(b, x, y, i) for b, x, y, i, _v in _escritas(m.maquina)])
+
+    def test_auto_bpm_escreve_os_dois_tempos(self):
+        m = self._motor()
+        m.escrever_ritmo("one_drop", auto_bpm=True)
+        _rodar_ritmo(m)
+        w = {(b, x, i): v for b, x, _y, i, v in _escritas(m.maquina)}
+        self.assertEqual(w[(campos.CAB, 0, campos.INI_CAB + campos.CAB_TEMPO)], 7600)
+        self.assertEqual(w[(campos.B3, 0, campos.INI_B3 + campos.B3_TEMPO)], 7600)
+
+    def test_mix_sem_kit_certo_nao_escreve(self):
+        m = self._motor()
+        m.x_kit = None
+        m.escrever_ritmo("dub_roots", mix=True)
+        _rodar_ritmo(m)
+        self.assertIn("o mix nao foi escrito", " ".join(m.ritmo_estado["avisos"]))
+        self.assertFalse(any(b == 156 or b < 100 and b != 3 for b, *_ in _escritas(m.maquina)))
+
+    def test_desfazer_devolve_o_que_estava(self):
+        import ritmos
+        m = self._motor()
+        bd = [0] * 131
+        bd[0] = ts_nota(127)                                 # um BD no step 1 (o one drop nao tem)
+        bd[64] = 100
+        cab = [0] * 248
+        cab[campos.CAB_TEMPO], cab[campos.CAB_VARIACOES] = 12000, 1
+        m.maquina.blocos = {(118, 0, 0): bd, (campos.CAB, 0, 0): cab}
+        m.maquina.valores[(campos.B3, 0, 0, campos.INI_B3 + campos.B3_TEMPO)] = 12000
+        m.escrever_ritmo("one_drop", auto_bpm=True)
+        _rodar_ritmo(m)
+        escritas = [ritmos.Escrita(b, x, y, i, v, None) for b, x, y, i, v in _escritas(m.maquina)]
+        diario = list(m.ritmo_diario["escritas"])
+        self.assertEqual(len(diario), len(escritas))
+        m.maquina.recebido.clear()
+        m.desfazer_ritmo()
+        _rodar_ritmo(m)
+        self.assertEqual(m.ritmo_estado["fase"], "desfeito")
+        volta = _escritas(m.maquina)
+        self.assertEqual(volta, [(e.bloco, e.x, e.y, e.indice, e.valor)
+                                 for e in ritmos.desfazer(diario)])
+        w = {(b, y, i): v for b, x, y, i, v in volta}
+        self.assertEqual(w[(118, 0, 1249)], ts_nota(127))    # o BD do step 1 voltou
+        self.assertEqual(w[(118, 0, 1249 + 16)], 0xFF)       # o que era 00 volta FF
+        self.assertIsNone(m.ritmo_diario)
+        self.assertIsNone(m.estado()["ritmo_desfazer"])
+        self.assertEqual(w[(campos.B3, 0, campos.INI_B3 + campos.B3_TEMPO)], 12000)
+
+    def test_valor_antigo_fora_do_portao_nao_volta_e_avisa(self):
+        m = self._motor()
+        m.escrever_ritmo("one_drop", auto_bpm=True)          # o tempo antigo (falso) e 0
+        _rodar_ritmo(m)
+        m.desfazer_ritmo()
+        _rodar_ritmo(m)
+        self.assertEqual(m.ritmo_estado["fase"], "desfeito")
+        self.assertIn("fora do portao nao voltaram", " ".join(m.ritmo_estado["avisos"]))
+
+    def test_erro_inesperado_nao_deixa_a_tela_ocupada(self):
+        m = self._motor()
+        m.escrever_ritmo("one_drop")
+        m._ler_variacao = lambda x, v: {}[("boom", v)]          # KeyError, nao ErroConexao
+        _rodar_ritmo(m)
+        self.assertEqual(m.ritmo_estado["fase"], "falhou")
+        self.assertIsNone(m.ritmo_passos)
+
+    def test_ritmo_que_falha_no_comeco_nao_apaga_o_desfazer_do_anterior(self):
+        m = self._motor()
+        m.escrever_ritmo("one_drop")
+        _rodar_ritmo(m)
+        anterior = m.ritmo_diario
+        m.maquina.calada = True                                  # a primeira escrita falha
+        m.escrever_ritmo("steppers")
+        _rodar_ritmo(m)
+        self.assertEqual(m.ritmo_estado["fase"], "falhou")
+        self.assertIs(m.ritmo_diario, anterior)
+
+    def test_mix_que_falha_avisa_e_nao_conta(self):
+        import controladoras
+        m = self._motor()
+        m.x_kit = 5
+        orig = controladoras.resolver
+        mix = ritmos_mod().POR_ID["dub_roots"]["mix"]
+        controladoras.resolver = lambda id, xp, xk, ler: (
+            (parametros.TABELA[id], (156, 5, 0, 900)) if id in mix else orig(id, xp, xk, ler))
+        escrever = m._escrever
+        m._escrever = lambda b, x, y, i, v: False if b == 156 else escrever(b, x, y, i, v)
+        try:
+            m.escrever_ritmo("dub_roots", mix=True)
+            _rodar_ritmo(m)
+        finally:
+            controladoras.resolver = orig
+        avisos = " ".join(m.ritmo_estado["avisos"])
+        self.assertIn("rs.dly: escrita recusada", avisos)
+        self.assertEqual(m.ritmo_diario["params"], [])
+
+    def test_auto_kit_que_nao_troca_avisa_e_nao_escreve_o_mix(self):
+        m = self._motor()
+        saida = _PortaLP()
+        saida.bytes = []
+        saida.send_bytes = saida.bytes.append
+        m.pc_out = saida
+        m.x_kit = 12
+        m.reler = lambda forcar=False: False                     # a maquina ignorou o PC
+        m.escrever_ritmo("dub_roots", auto_kit=True, mix=True)
+        _rodar_ritmo(m)
+        self.assertEqual(m.ritmo_estado["fase"], "pronto")
+        self.assertIn("o kit nao trocou", " ".join(m.ritmo_estado["avisos"]))
+        self.assertEqual(m.ritmo_diario["params"], [])
+        self.assertEqual(m.ritmo_diario["kit"], 12)
+
+    def test_desfazer_com_send_que_nao_volta_guarda_o_send(self):
+        m = self._motor()
+        m.escrever_ritmo("one_drop")
+        _rodar_ritmo(m)
+        m.ritmo_diario["params"] = [("sd.dly", (156, 5, 1, 900), 0)]
+        escrever = m._escrever
+        m._escrever = lambda b, x, y, i, v: False if b == 156 else escrever(b, x, y, i, v)
+        m.desfazer_ritmo()
+        _rodar_ritmo(m)
+        self.assertEqual(m.ritmo_estado["fase"], "falhou")
+        self.assertIn("sd.dly: o valor de antes (0) nao voltou", " ".join(m.ritmo_estado["avisos"]))
+        self.assertEqual(m.ritmo_diario["escritas"], [])         # o pattern ja voltou
+        self.assertEqual(len(m.ritmo_diario["params"]), 1)
+
+    def test_desligar_no_meio_guarda_o_diario(self):
+        m = self._motor()
+        m.ESCRITAS_POR_TICK = 1
+        m.escrever_ritmo("steppers")
+        while m.ritmo_estado["fase"] != "escrevendo" or m.ritmo_estado["feito"] < 3:
+            m._andar_ritmo()
+        m.soltar_maquina()
+        self.assertIsNone(m.ritmo_passos)
+        self.assertEqual(m.ritmo_estado["fase"], "falhou")
+        self.assertEqual(len(m.ritmo_diario["escritas"]), 3)
+
+
+class TesteKitPC(unittest.TestCase):
+    """O kit por Program Change no Kit Ch. 1 (aprovado pelo Luan 13/10/2026)."""
+
+    def _saida(self, m):
+        saida = _PortaLP()
+        saida.bytes = []
+        saida.send_bytes = saida.bytes.append
+        m.pc_out = saida
+        return saida
+
+    def test_pc_no_canal_1_so_kit_com_nome(self):
+        m = motor_cru()
+        saida = self._saida(m)
+        m.trocar_kit(40)                                     # TR-808-1000
+        self.assertEqual(saida.bytes, [[0xC0, 40]])
+        for ruim in (64, 127, 128, -1):                      # sem nome / fora
+            m.trocar_kit(ruim)
+        self.assertEqual(len(saida.bytes), 1)
+        self.assertEqual(_escritas(m.maquina), [])           # nao passa pela serial
+
+    def test_auto_kit_manda_o_pc_do_ritmo_e_o_desfazer_volta(self):
+        import ritmos
+        tmp = tempfile.TemporaryDirectory()
+        antes, motor.DIR_SESSOES = motor.DIR_SESSOES, tmp.name
+        try:
+            m = motor_cru()
+            m.ESPERA_KIT = 0.0
+            saida = self._saida(m)
+            m.x_kit = 44
+            m.reler = lambda forcar=False: False             # sem o bloco 3 falso
+            m.escrever_ritmo("one_drop", auto_kit=True)
+            _rodar_ritmo(m)
+            self.assertEqual(saida.bytes, [[0xC0, ritmos.KIT_POR_NOME["TR-808-1000"]]])
+            m.desfazer_ritmo()
+            _rodar_ritmo(m)
+            self.assertEqual(saida.bytes[-1], [0xC0, 44])
+        finally:
+            motor.DIR_SESSOES = antes
+            tmp.cleanup()
+
+    def test_servidor_confere_os_argumentos(self):
+        import servidor
+        servidor.HOST.motor = m = motor_cru()
+        try:
+            for nome, args in (("kit", {"n": 64}), ("kit", {"n": 128}), ("kit", {"n": -1}),
+                               ("ritmo", {"id": "nao_existe"})):
+                with self.subTest(nome=nome, args=args):
+                    with self.assertRaises(ValueError):
+                        servidor.ACOES[nome](args)
+            self.assertTrue(m.fila_cmd.empty())
+            servidor.ACOES["kit"]({"n": 40})
+            servidor.ACOES["ritmo"]({"id": "one_drop", "auto_bpm": True})
+            servidor.ACOES["desfazer_ritmo"]({})
+            self.assertEqual(m.fila_cmd.qsize(), 3)
+        finally:
+            servidor.HOST.motor = None
+
+
 class TesteSintaxe(unittest.TestCase):
     def test_todo_py_compila(self):
         with tempfile.TemporaryDirectory() as tmp:
