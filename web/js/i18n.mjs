@@ -134,6 +134,36 @@ const EN = {
   "Delay que respira": "Breathing delay",
   "Gate picotado": "Chopped gate",
   Desligado: "Off",
+  // ritmos
+  Ritmos: "Rhythms",
+  ritmos: "rhythms",
+  escrita: "writing",
+  kit: "kit",
+  fonte: "source",
+  Escrever: "Write",
+  "Confirmar?": "Confirm?",
+  Desfazer: "Undo",
+  "Auto BPM": "Auto BPM",
+  "Auto kit": "Auto kit",
+  "Mix dub": "Dub mix",
+  "Escolha um ritmo na lista.": "Pick a rhythm from the list.",
+  "nenhum ritmo com esse filtro": "no rhythm matches this filter",
+  "filtrar (nome, estilo, kit)": "filter (name, style, kit)",
+  "nada escrito ainda": "nothing written yet",
+  "Program Change no Kit Ch. 1 (não medido: ROTEIRO-F5)":
+    "Program Change on Kit Ch. 1 (not measured: ROTEIRO-F5)",
+  "Escreve as variações e a chain no pattern da tela (só na memória: o WRITE é no painel). Antes, a foto da sessão vai para o app; o Desfazer devolve o que estava.":
+    "Writes the variations and the chain into the pattern on screen (memory only: WRITE is on the panel). Before that, the session snapshot goes to the app; Undo brings back what was there.",
+  "Nenhum ritmo foi ouvido na TR-1000 ainda: a fonte de cada um está no ritmo, e o som é o ROTEIRO-F5.":
+    "No rhythm has been heard on the TR-1000 yet: each one carries its source, and the sound check is ROTEIRO-F5.",
+  "tirando a foto da sessão…": "taking the session snapshot…",
+  "trocando o kit…": "changing the kit…",
+  "lendo o pattern…": "reading the pattern…",
+  "escrevendo…": "writing…",
+  pronto: "done",
+  falhou: "failed",
+  "desfazendo…": "undoing…",
+  desfeito: "undone",
   "Arraste os pontos: o de baixo é o HOLD e o MSTR DEP, o de cima o RELEASE, o do meio a CURVE. Os presets são palpites crus, a acertar de ouvido.":
     "Drag the points: the bottom one is HOLD and MSTR DEP, the top one RELEASE, the middle one CURVE. The presets are raw guesses, to be tuned by ear.",
 };
@@ -177,6 +207,13 @@ const LOG_EN = [
     "$1pattern $2 requested (Program Change $3, channel $4)",
   ],
   [/^(\S+ )?servidor no ar em (.*)$/, "$1server up at $2"],
+  [
+    /^(\S+ )?kit (\d+) (.*) pedido \(Program Change (\d+), canal (\d+)\)$/,
+    "$1kit $2 $3 requested (Program Change $4, channel $5)",
+  ],
+  [/^(\S+ )?ritmo (.*) desfeito$/, "$1rhythm $2 undone"],
+  [/^(\S+ )?ritmo (.*) escrito no (\S+): (\d+) escritas \((\d+) de mix\)$/,
+    "$1rhythm $2 written to $3: $4 writes ($5 mix)"],
   [
     /^(\S+ )?\(!\) escrita recusada\/sem resposta: (.*)$/,
     "$1(!) write refused/no answer: $2",

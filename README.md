@@ -50,8 +50,15 @@ python3 criar_app.py            # "TR-1000 Controller.app" no Desktop
 
 No Safari, abra `http://127.0.0.1:8734/` e use **Arquivo › Adicionar ao Dock**.
 
-- **Três abas:** Pattern (com o que era a Performance: variações edita / toca / fill,
-  STEP LOOP, Scale e FIRST/LAST), Mixer e Efeitos.
+- **Quatro abas:**
+  - **Pattern**, com o que era a Performance: variações edita / toca / fill, STEP LOOP,
+    Scale e FIRST/LAST;
+  - **Mixer**;
+  - **Efeitos**;
+  - **Ritmos:** 83 ritmos prontos (`biblioteca.py`), com a família reggae/dub inteira,
+    cada um com 2+ variações e um fill. Escreve no pattern da tela depois da foto da
+    sessão e tem **Desfazer**. Nada disso foi ouvido na máquina ainda: o Kit (Program Change),
+    a escrita, o Desfazer e o Mix dub são o `ROTEIRO-F5.md`.
 - **PT | EN** no topo troca a língua da tela.
 - **PTN:** clique e digite outro pattern (`1-05`). Vai por Program Change, e só foi testado
   no `ROTEIRO-F4.md`.
@@ -63,7 +70,7 @@ No Safari, abra `http://127.0.0.1:8734/` e use **Arquivo › Adicionar ao Dock**
   - **OFF:** solta tudo, a serial e os Launchpads.
   - **chuva / ambiente:** solta só a serial; os Launchpads fazem ondas, e um toque solta
     mais uma. As ondas são as do TR-8S Controller.
-- **Roteiros de teste:** `ROTEIRO-F3.md` (passou em 12/10) e `ROTEIRO-F4.md`.
+- **Roteiros de teste:** `ROTEIRO-F3.md` (passou em 12/10), `ROTEIRO-F4.md` e `ROTEIRO-F5.md`.
 - **Atualização:** o hook `post-merge` (ligado pelo `instalar_hooks.py`) atualiza sozinho a
   cópia que o LaunchAgent roda, sempre que a `main` recebe um merge ou um pull. Se mudou
   só `web/`, basta um Cmd+R. Se mudou um `.py`, o agente reinicia, e é preciso apertar ON

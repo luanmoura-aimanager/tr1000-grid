@@ -35,6 +35,7 @@ import campos
 import launchpad
 import motor as M
 import parametros as P
+import ritmos as R
 import tr1000_serial as ts
 
 AQUI = os.path.dirname(os.path.abspath(__file__))
@@ -300,6 +301,21 @@ def _preset_sc(a):
         HOST.enfileirar(HOST.motor.definir_param, id, valor)
 
 
+def _ritmo(a):
+    id = str(a["id"])
+    if id not in R.POR_ID:
+        raise ValueError(f"ritmo {id!r} desconhecido")
+    HOST.enfileirar(HOST.motor.escrever_ritmo, id, bool(a.get("auto_bpm")),
+                    bool(a.get("auto_kit")), bool(a.get("mix")))
+
+
+def _kit(a):
+    n = _faixa(a, "n", 0, len(R.KITS) - 1)
+    if not R.KITS[n]:
+        raise ValueError(f"kit {n} sem nome")
+    HOST.enfileirar(HOST.motor.trocar_kit, n)
+
+
 ACOES = {
     "exec": _exec,
     "step": lambda a: HOST.enfileirar(HOST.motor.alternar_step, _track(a), _step(a)),
@@ -324,6 +340,12 @@ ACOES = {
     "ptn": lambda a: HOST.enfileirar(HOST.motor.trocar_pattern, _faixa(a, "x", 0, 127)),
     # a foto da sessao: so no app, nunca na maquina
     "sessao": lambda a: HOST.enfileirar(HOST.motor.pedir_foto, "botao"),
+    # os ritmos prontos (aba Ritmos): a escrita e o desfazer andam no motor, aos
+    # pedacos; o kit por Program Change no Kit Ch. (aprovado pelo Luan em
+    # 13/10/2026, nao medido ate o ROTEIRO-F5)
+    "ritmo": _ritmo,
+    "desfazer_ritmo": lambda a: HOST.enfileirar(HOST.motor.desfazer_ritmo),
+    "kit": _kit,
     "quer_kit": lambda a: setattr(HOST.motor, "quer_kit", bool(a["sim"])),
     "reler": lambda a: HOST.enfileirar(HOST.motor.reler, True),
 }
@@ -348,6 +370,7 @@ def dados_estaticos():
         "lfo_syncs": P.LFO_SYNCS, "rotas": P.ROTAS, "sc_fontes": P.SC_FONTES,
         "seletores": {id: P.seletor_de(id) for id in P.POR_TIPO},
         "presets_sc": P.PRESETS_SC,
+        "ritmos": [R.para_pagina(r) for r in R.RITMOS], "kits": R.KITS,
         "build": time.strftime("%d/%m %H:%M", time.localtime(os.path.getmtime(os.path.abspath(__file__)))),
     }
 

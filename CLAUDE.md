@@ -61,10 +61,19 @@ grid — escreve na máquina. **Toda saída da serial passa por um único portã
   três patterns de dois bancos provarem x = índice global).
   - **O TEMPO** (`campos.CAB_TEMPO` [16] e `B3_TEMPO` [36], × 100, 40.00..300.00),
     aprendido na c5d e liberado pelo Luan em 12/10/2026: o BPM digitado na tela.
-- **Fora da serial, uma escrita só:** o **Program Change** do PTN digitado na tela
-  (`motor.trocar_pattern`, porta `TR-1000`, Pattern Ch. 10), pedido do Luan em
-  12/10/2026. Ele só sai com o Luan digitando, nunca sozinho, e só funciona com o
-  **Rx Program Change em ON** na máquina (F4.4).
+- **Fora da serial, duas escritas** (as duas por `motor._program_change`, porta `TR-1000`).
+  Elas só funcionam com o **Rx Program Change em ON** na máquina (F4.4):
+  - o **Program Change do PTN** digitado na tela (`motor.trocar_pattern`, Pattern
+    Ch. 10), pedido do Luan em 12/10/2026. Só sai com o Luan digitando, nunca sozinho;
+  - o **Program Change do KIT** (`motor.trocar_kit`, Kit Ch. 1, só índice de kit com
+    nome em `ritmos.KITS`), aprovado pelo Luan em 13/10/2026 para a aba Ritmos. Sai no
+    botão Kit ou no "Auto kit" ligado. **Não medido** até o ROTEIRO-F5: o número do kit,
+    o canal e o efeito no bloco 3 [2..4].
+- **A aba Ritmos** (`ritmos.py` + `biblioteca.py`) escreve só o que a regra acima já
+  permite: steps, campos do step, cabeçalho, tempo e os sends (`*.rvb`, `*.dly`). A
+  escrita anda aos pedaços, depois da foto da sessão, e guarda um diário para o
+  **Desfazer**, a primeira restauração do projeto (decisão do Luan, 13/10/2026). Um
+  valor antigo que o portão recusa não volta: o Desfazer avisa.
 - Fora isso, só o aperto de mão.
 - **Quem escreve é o Luan:** o grid só escreve quando ele aperta um pad ou gira um knob; o
   `sessao_c3.py` só com `sim`/`--sim` digitado por ele. **O agente nunca roda uma
