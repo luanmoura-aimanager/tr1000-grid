@@ -359,6 +359,8 @@ class Motor:
             # largado no meio: o diario tem o que ja foi confirmado
             self.ritmo_passos = None
             self._ritmo_falhou("desligado no meio da escrita")
+        elif self.ritmo_estado and self.ritmo_estado["fase"] in self.FASES_OCUPADAS:
+            self.ritmo_estado["fase"] = "falhou"         # nunca 'ocupada' sem gerador
         # o STEP LOOP segurado e da sessao que acabou: soltar um dedo depois
         # nao pode devolver um [150] velho a outro pattern (revisao do PR #10)
         self.loop_antes, self.loop_segurados = None, frozenset()
@@ -1323,11 +1325,7 @@ class Motor:
             self.log(f"(!) {id}: {valor} fora de {p.minimo}..{p.maximo}")
             return
         if self._escrever(*end, valor):
-            self.kit_valores[id] = valor
-            if self.pickup is not None:
-                self.pickup.estado.pop(id, None)
-                if id in parametros.SELETORES:
-                    self.pickup.seletores[id] = valor
+            self._param_escrito(id, valor)
 
     def ids_do_kit(self):
         return (list(parametros.TABELA) + list(parametros.POR_TIPO)
@@ -1493,27 +1491,30 @@ class Motor:
         """Pede o kit n (0-based, a ordem da lista 0c = ritmos.KITS) por Program
         Change no Kit Ch. (MIDI chart: 'Only KIT switches'). Aprovado pelo
         Luan em 13/10/2026; NAO MEDIDO: o numero do kit = o PC, o canal 1 e o
-        efeito no bloco 3 [2..4] sao o ROTEIRO-F5. So kit com nome."""
+        efeito no bloco 3 [2..4] sao o ROTEIRO-F5. So kit com nome.
+        -> True se o PC saiu (nao quer dizer que a maquina obedeceu)."""
         if not 0 <= n < len(ritmos.KITS) or not ritmos.KITS[n]:
             self.log(f"(!) kit {n} fora da lista - nada enviado")
-            return
+            return False
         if not self._program_change(tr1000.CANAL_KIT_PADRAO, n, "troca de kit"):
-            return
+            return False
         self.log(f"kit {n + 1} {ritmos.KITS[n]} pedido (Program Change {n}, "
                  f"canal {tr1000.CANAL_KIT_PADRAO})")
         self.proxima_releitura = 0.0
+        return True
 
     # ── os ritmos prontos (a aba Ritmos) ────────────────────
-    # A escrita de um ritmo anda aos pedacos, como a foto: ate
-    # ESCRITAS_POR_TICK passos do gerador por tick, para os pads e os knobs
-    # seguirem respondendo. Cada passo e uma leitura ou uma escrita, e cada
-    # escrita passa pelo portao. Antes de escrever: a foto da sessao (so
-    # leitura). Depois: o diario para o Desfazer (decisao do Luan, 13/10/2026).
+    # A escrita de um ritmo anda aos pedacos, como a foto: a foto e as leituras
+    # um passo por tick, as escritas ate ESCRITAS_POR_TICK, para os pads e os
+    # knobs seguirem respondendo. Cada escrita passa pelo portao. Antes de
+    # escrever: a foto da sessao (so leitura). Depois: o diario para o
+    # Desfazer (decisao do Luan, 13/10/2026).
     ESCRITAS_POR_TICK = 12
     ESPERA_KIT = 0.6                            # s depois do PC do kit, antes do mix
     ritmo_passos = None                         # o gerador
     ritmo_estado = None                         # o que a tela mostra
     ritmo_diario = None                         # o que o Desfazer reescreve
+    FASES_OCUPADAS = ("foto", "kit", "lendo", "escrevendo", "desfazendo")
 
     def escrever_ritmo(self, id, auto_bpm=False, auto_kit=False, mix=False):
         if self.conexao is None or self.x_pattern is None:
@@ -1541,11 +1542,22 @@ class Motor:
     def _andar_ritmo(self):
         if self.ritmo_passos is None:
             return
-        for _ in range(self.ESCRITAS_POR_TICK):
+        # a foto e a leitura: um passo (uma variacao) por tick, como a foto
+        # automatica (revisao do PR #8: ~130 leituras de uma vez travavam os
+        # pads); so as escritas andam ESCRITAS_POR_TICK de cada vez
+        fase = (self.ritmo_estado or {}).get("fase")
+        n = self.ESCRITAS_POR_TICK if fase in ("escrevendo", "desfazendo") else 1
+        for _ in range(n):
             try:
                 next(self.ritmo_passos)
             except StopIteration:
                 self.ritmo_passos = None
+                return
+            except Exception as e:
+                # qualquer outra coisa: o gerador morreu - a tela nao pode ficar
+                # 'ocupada' para sempre (revisao do PR #20)
+                self.ritmo_passos = None
+                self._ritmo_falhou(f"erro inesperado: {e!r}")
                 return
 
     def _ritmo_falhou(self, msg):
@@ -1566,12 +1578,30 @@ class Motor:
                 out.append(f"a {nome_v} tem accent: ele continua (o accent e pelo painel)")
         return out
 
-    def _escrever_diario(self, escritas, est, feitas, x=None):
+    def _so_a_vista_no_cache(self):
+        """As variacoes fora da tela saem do cache (a chain as rele); a da tela
+        a releitura rele ja."""
+        for k in [k for k in self.cache if k[0] != self.variacao]:
+            del self.cache[k]
+        self.lido_em = {}
+        self.proxima_releitura = 0.0
+
+    def _param_escrito(self, id, valor):
+        """O que muda no motor depois de um parametro escrito: o valor lido e o
+        pickup daquele knob, que volta a 'pegar no caminho'."""
+        self.kit_valores[id] = valor
+        if self.pickup is not None:
+            self.pickup.estado.pop(id, None)
+            if id in parametros.SELETORES:
+                self.pickup.seletores[id] = valor
+
+    def _escrever_diario(self, escritas, est, feitas, x=None, ao_primeiro=None):
         """Escreve uma lista de ritmos.Escrita, um passo do gerador cada (use
         com yield from), anotando em `feitas` as que a maquina confirmou - na
         hora, para o Desfazer valer mesmo se o gerador for largado no meio
-        (OFF). -> True se foram todas. Para na primeira falha ou se o pattern
-        x saiu da tela: nunca repete."""
+        (OFF). `ao_primeiro` e chamado na primeira confirmada. -> True se foram
+        todas. Para na primeira falha ou se o pattern x saiu da tela: nunca
+        repete."""
         for e in escritas:
             if x is not None and self.x_pattern != x:
                 self._ritmo_falhou("o pattern mudou no meio - parei")
@@ -1580,6 +1610,8 @@ class Motor:
                 self._ritmo_falhou(f"escrita recusada/sem resposta em {e.bloco}/{e.y}/{e.indice}")
                 return False
             feitas.append(e)
+            if ao_primeiro is not None and len(feitas) == 1:
+                ao_primeiro()
             est["feito"] += 1
             yield
         return True
@@ -1598,24 +1630,50 @@ class Motor:
         if self.x_pattern != x:
             self._ritmo_falhou("o pattern mudou durante a foto - nada escrito")
             return
+        # o diario novo so substitui o do ritmo anterior quando algo deste foi
+        # de fato escrito (revisao do PR #20: um ritmo que falha no comeco nao
+        # pode apagar o Desfazer do anterior)
+        diario = {"id": r["id"], "nome": r["nome"], "x": x, "escritas": [], "params": [],
+                  "kit": None}
+
+        def assumir():
+            self.ritmo_diario = diario
         # 2. o kit, antes: o mix e um parametro do kit que vai tocar
-        kit_antes = self.x_kit
+        kit_ok = True
         if auto_kit:
             est["fase"] = "kit"
-            self.trocar_kit(ritmos.KIT_POR_NOME[r["kit"]])
-            ate = time.time() + self.ESPERA_KIT
-            while time.time() < ate:
-                yield
-            try:
-                self.reler()
-            except ERROS_DE_LEITURA as e:
-                self._ritmo_falhou(f"nao reli depois do kit: {e}")
-                return
+            alvo = ritmos.KIT_POR_NOME[r["kit"]]
+            kit_antes = self.x_kit
+            if self.trocar_kit(alvo):
+                diario["kit"] = kit_antes
+                assumir()
+                if kit_antes is None:
+                    est["avisos"].append("o kit de antes era incerto (bloco 3 [2..4] "
+                                         "diferentes): o Desfazer nao volta o kit")
+                ate = time.time() + self.ESPERA_KIT
+                while time.time() < ate:
+                    yield
+                try:
+                    self.reler()
+                except ERROS_DE_LEITURA as e:
+                    self._ritmo_falhou(f"nao reli depois do kit: {e}")
+                    return
+                if self.x_kit != alvo:
+                    kit_ok = False
+                    est["avisos"].append(
+                        f"o kit nao trocou para {r['kit']} (o motor le o kit "
+                        f"{'incerto' if self.x_kit is None else self.x_kit + 1}; Rx Program "
+                        "Change? Kit Ch.?) - o mix nao sera escrito")
+            else:
+                kit_ok = False
+                est["avisos"].append("o Program Change do kit nao saiu (porta 'TR-1000'?) - "
+                                     "o mix nao sera escrito")
         # 3. o que a maquina tem agora: as variacoes, o accent, o cabecalho
         est["fase"] = "lendo"
+        grade = ritmos.expandir(r)
         lidos, acentos = {}, {}
         try:
-            for v in ritmos.expandir(r):
+            for v in grade:
                 lido = self._ler_variacao(x, v)
                 lidos[v] = {tr: lido[(v, tr)] for tr in range(N_TRACKS)}
                 try:
@@ -1625,7 +1683,7 @@ class Motor:
                     pass
                 yield
             cab = self._ler(campos.CAB, x, 0, *cs.faixa_do_bloco(campos.CAB, x, 0))
-            escritas = ritmos.escritas_do_ritmo(r, x, lidos, cab)
+            escritas = ritmos.escritas_do_ritmo(r, x, lidos, cab, grade)
             if auto_bpm:
                 x100 = round(r["bpm"] * 100)
                 tempo_b3 = self._ler(campos.B3, 0, 0, campos.INI_B3 + campos.B3_TEMPO, 1)[0]
@@ -1638,49 +1696,50 @@ class Motor:
         except ERROS_DE_LEITURA as e:
             self._ritmo_falhou(f"leitura falhou: {e} - nada escrito")
             return
-        est["avisos"] = self._avisos_do_ritmo(lidos, acentos)
+        est["avisos"] = self._avisos_do_ritmo(lidos, acentos) + est["avisos"]
         com_mix = bool(mix and r.get("mix"))
         est["total"] = len(escritas) + (len(r["mix"]) if com_mix else 0)
         # 4. as escritas do pattern, so a diferenca
         est["fase"] = "escrevendo"
-        self.ritmo_diario = {"id": r["id"], "nome": r["nome"], "x": x, "escritas": [],
-                             "params": [], "kit": kit_antes if auto_kit else None}
-        feitas = self.ritmo_diario["escritas"]
-        ok = yield from self._escrever_diario(escritas, est, feitas, x)
-        # o cache: as variacoes mudaram - a releitura e a chain releem
-        for v in lidos:
-            for tr in range(N_TRACKS):
-                if v != self.variacao:
-                    self.cache.pop((v, tr), None)
-        self.lido_em = {}
-        self.proxima_releitura = 0.0
+        feitas = diario["escritas"]
+        ok = yield from self._escrever_diario(escritas, est, feitas, x, assumir)
+        self._so_a_vista_no_cache()
         if not ok:
             return
         # 5. o mix (os sends), com o valor de antes lido na hora
+        n_mix = 0
         if com_mix:
             if self.x_kit is None:
                 est["avisos"].append("kit incerto (bloco 3 [2..4] diferentes): o mix nao foi escrito")
-            for id, valor in r["mix"].items():
-                if self.x_kit is None:
-                    break
-                try:
-                    e = self._resolver(id)
-                    if e is None:
-                        est["avisos"].append(f"{id}: inativo agora - nao escrito")
+            elif not kit_ok:
+                pass                                 # o aviso ja esta la
+            else:
+                for id, valor in r["mix"].items():
+                    try:
+                        e = self._resolver(id)
+                        if e is None:
+                            est["avisos"].append(f"{id}: inativo agora - nao escrito")
+                            continue
+                        p, end = e
+                        if not p.minimo <= valor <= p.maximo:
+                            est["avisos"].append(f"{id}: {valor} fora de {p.minimo}..{p.maximo}")
+                            continue
+                        antigo = self._ler(*end, 1)[0]
+                    except ERROS_DE_LEITURA as exc:
+                        est["avisos"].append(f"{id}: nao li ({exc}) - nao escrito")
                         continue
-                    _p, end = e
-                    antigo = self._ler(*end, 1)[0]
-                except ERROS_DE_LEITURA as exc:
-                    est["avisos"].append(f"{id}: nao li ({exc}) - nao escrito")
-                    continue
-                if self._escrever(*end, valor):
-                    self.ritmo_diario["params"].append((id, end, antigo))
-                    self.kit_valores[id] = valor
-                est["feito"] += 1
-                yield
+                    if self._escrever(*end, valor):
+                        diario["params"].append((id, end, antigo))
+                        assumir()
+                        self._param_escrito(id, valor)
+                        n_mix += 1
+                    else:
+                        est["avisos"].append(f"{id}: escrita recusada/sem resposta")
+                    est["feito"] += 1
+                    yield
         est["fase"] = "pronto"
         self.log(f"ritmo {r['nome']} escrito no {ts.nome_do_pattern(x)}: "
-                 f"{len(feitas)} escritas ({est['total'] - len(feitas)} de mix)")
+                 f"{len(feitas)} escritas ({n_mix} de mix)")
 
     def _passos_do_desfazer(self, d):
         est = self.ritmo_estado
@@ -1690,24 +1749,35 @@ class Motor:
             escritas = [e for e in escritas if e.bloco != campos.B3]
         # um valor antigo que o portao nao aceita (fora da faixa medida) nao
         # volta - avisa, em vez de parar o resto no meio
-        fora = [e for e in escritas if not cs.escrita_permitida(e.bloco, e.x, e.y, e.indice, e.valor)]
+        aceitas, fora = [], []
+        for e in escritas:
+            (aceitas if cs.escrita_permitida(e.bloco, e.x, e.y, e.indice, e.valor) else fora).append(e)
         if fora:
-            escritas = [e for e in escritas if e not in fora]
             est["avisos"].append(f"{len(fora)} valor(es) antigo(s) fora do portao nao voltaram: "
                                  + ", ".join(f"{e.bloco}/{e.y}/{e.indice}={e.valor}" for e in fora[:4]))
-        est["total"] = len(escritas) + len(d["params"])
+        est["total"] = len(aceitas) + len(d["params"])
+        params_ok = True
         for id, end, antigo in reversed(d["params"]):
             if self._escrever(*end, antigo):
-                self.kit_valores[id] = antigo
+                self._param_escrito(id, antigo)
+            else:
+                params_ok = False
+                est["avisos"].append(f"{id}: o valor de antes ({antigo}) nao voltou")
             est["feito"] += 1
             yield
-        ok = yield from self._escrever_diario(escritas, est, [])
+        ok = yield from self._escrever_diario(aceitas, est, [])
         if ok and d["kit"] is not None:
-            self.trocar_kit(d["kit"])
-        self.cache = {k: v for k, v in self.cache.items() if k[0] == self.variacao}
-        self.lido_em = {}
-        self.proxima_releitura = 0.0
-        if ok:
+            if not self.trocar_kit(d["kit"]):
+                est["avisos"].append("o Program Change do kit de antes nao saiu")
+        self._so_a_vista_no_cache()
+        if ok and not params_ok:
+            # o pattern voltou, mas algum send nao: o diario fica so com eles,
+            # para um Desfazer de novo tentar (sem reescrever o pattern)
+            d["escritas"] = []
+            d["kit"] = None
+            est["fase"] = "falhou"
+            self.log(f"(!) ritmo {d['nome']}: o pattern voltou, algum send nao")
+        elif ok:
             self.ritmo_diario = None
             est["fase"] = "desfeito"
             self.log(f"ritmo {d['nome']} desfeito")

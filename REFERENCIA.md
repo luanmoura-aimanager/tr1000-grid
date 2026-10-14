@@ -1154,7 +1154,9 @@ pesquisa de acurácia. As decisões dele em 13/10/2026: botão **Kit por Program
 
 **Como a escrita anda:**
 1. A foto da sessão (`-ritmo.json`, só leitura). Se a foto falha, nada é escrito.
-2. O Kit PC, se o "Auto kit" está ligado, e uma espera de 0,6 s.
+2. O Kit PC, se o "Auto kit" está ligado, e uma espera de 0,6 s. Depois o motor relê.
+   Se o `x_kit` não virou o do ritmo (Rx PC desligado, outro canal, outro número), a aba
+   avisa e o mix **não** é escrito, para não cair no kit errado.
 3. A leitura das variações que o ritmo usa, do accent e do cabeçalho.
 4. Só a diferença:
    - os slots 0/1 (o slot 1 só em BD..HT);
@@ -1167,6 +1169,9 @@ pesquisa de acurácia. As decisões dele em 13/10/2026: botão **Kit por Program
    Desfazer precisa.
 5. O Mix dub: os sends, com o valor de antes lido na hora. Com o kit incerto (bloco 3
    [2..4] diferentes), o mix não é escrito.
+
+**O diário** só substitui o do ritmo anterior quando algo do novo foi escrito de fato:
+um ritmo que falha no começo não apaga o Desfazer do anterior.
 
 **O Desfazer** reescreve o diário de trás para frente:
 - um slot que era `00` volta `FF`, porque o portão recusa `00` e as duas pausas soam

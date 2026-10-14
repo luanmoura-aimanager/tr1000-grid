@@ -3155,6 +3155,11 @@ class TesteRitmos(unittest.TestCase):
         self.assertEqual(p["kit"], ritmos.KITS[p["kit_n"]])
 
 
+def ritmos_mod():
+    import ritmos
+    return ritmos
+
+
 def ts_nota(vel):
     return tr1000_serial.nota(vel)
 
@@ -3231,6 +3236,19 @@ class TesteEscritaRitmo(unittest.TestCase):
         _rodar_ritmo(m)
         self.assertEqual(m.ritmo_estado["fase"], "pronto")
         self.assertEqual(m.ritmo_estado["feito"], m.ritmo_estado["total"])
+
+    def test_foto_e_leitura_uma_variacao_por_tick(self):
+        m = self._motor()
+        m.escrever_ritmo("one_drop")
+        lidas = []
+        orig = m._ler_variacao
+        m._ler_variacao = lambda x, v: lidas.append(v) or orig(x, v)
+        while m.ritmo_estado["fase"] in ("foto", "lendo"):
+            antes = len(lidas)
+            m._andar_ritmo()
+            self.assertLessEqual(len(lidas) - antes, 1)
+        _rodar_ritmo(m)
+        self.assertEqual(m.ritmo_estado["fase"], "pronto")
 
     def test_pattern_trocado_no_meio_para(self):
         m = self._motor()
@@ -3319,6 +3337,73 @@ class TesteEscritaRitmo(unittest.TestCase):
         _rodar_ritmo(m)
         self.assertEqual(m.ritmo_estado["fase"], "desfeito")
         self.assertIn("fora do portao nao voltaram", " ".join(m.ritmo_estado["avisos"]))
+
+    def test_erro_inesperado_nao_deixa_a_tela_ocupada(self):
+        m = self._motor()
+        m.escrever_ritmo("one_drop")
+        m._ler_variacao = lambda x, v: {}[("boom", v)]          # KeyError, nao ErroConexao
+        _rodar_ritmo(m)
+        self.assertEqual(m.ritmo_estado["fase"], "falhou")
+        self.assertIsNone(m.ritmo_passos)
+
+    def test_ritmo_que_falha_no_comeco_nao_apaga_o_desfazer_do_anterior(self):
+        m = self._motor()
+        m.escrever_ritmo("one_drop")
+        _rodar_ritmo(m)
+        anterior = m.ritmo_diario
+        m.maquina.calada = True                                  # a primeira escrita falha
+        m.escrever_ritmo("steppers")
+        _rodar_ritmo(m)
+        self.assertEqual(m.ritmo_estado["fase"], "falhou")
+        self.assertIs(m.ritmo_diario, anterior)
+
+    def test_mix_que_falha_avisa_e_nao_conta(self):
+        import controladoras
+        m = self._motor()
+        m.x_kit = 5
+        orig = controladoras.resolver
+        mix = ritmos_mod().POR_ID["dub_roots"]["mix"]
+        controladoras.resolver = lambda id, xp, xk, ler: (
+            (parametros.TABELA[id], (156, 5, 0, 900)) if id in mix else orig(id, xp, xk, ler))
+        escrever = m._escrever
+        m._escrever = lambda b, x, y, i, v: False if b == 156 else escrever(b, x, y, i, v)
+        try:
+            m.escrever_ritmo("dub_roots", mix=True)
+            _rodar_ritmo(m)
+        finally:
+            controladoras.resolver = orig
+        avisos = " ".join(m.ritmo_estado["avisos"])
+        self.assertIn("rs.dly: escrita recusada", avisos)
+        self.assertEqual(m.ritmo_diario["params"], [])
+
+    def test_auto_kit_que_nao_troca_avisa_e_nao_escreve_o_mix(self):
+        m = self._motor()
+        saida = _PortaLP()
+        saida.bytes = []
+        saida.send_bytes = saida.bytes.append
+        m.pc_out = saida
+        m.x_kit = 12
+        m.reler = lambda forcar=False: False                     # a maquina ignorou o PC
+        m.escrever_ritmo("dub_roots", auto_kit=True, mix=True)
+        _rodar_ritmo(m)
+        self.assertEqual(m.ritmo_estado["fase"], "pronto")
+        self.assertIn("o kit nao trocou", " ".join(m.ritmo_estado["avisos"]))
+        self.assertEqual(m.ritmo_diario["params"], [])
+        self.assertEqual(m.ritmo_diario["kit"], 12)
+
+    def test_desfazer_com_send_que_nao_volta_guarda_o_send(self):
+        m = self._motor()
+        m.escrever_ritmo("one_drop")
+        _rodar_ritmo(m)
+        m.ritmo_diario["params"] = [("sd.dly", (156, 5, 1, 900), 0)]
+        escrever = m._escrever
+        m._escrever = lambda b, x, y, i, v: False if b == 156 else escrever(b, x, y, i, v)
+        m.desfazer_ritmo()
+        _rodar_ritmo(m)
+        self.assertEqual(m.ritmo_estado["fase"], "falhou")
+        self.assertIn("sd.dly: o valor de antes (0) nao voltou", " ".join(m.ritmo_estado["avisos"]))
+        self.assertEqual(m.ritmo_diario["escritas"], [])         # o pattern ja voltou
+        self.assertEqual(len(m.ritmo_diario["params"]), 1)
 
     def test_desligar_no_meio_guarda_o_diario(self):
         m = self._motor()

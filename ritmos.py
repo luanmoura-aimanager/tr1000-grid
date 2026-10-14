@@ -286,18 +286,20 @@ def escritas_de_steps(grade, lidos):
     return out
 
 
-def escritas_do_ritmo(r, x, lidos_por_var, cab):
+def escritas_do_ritmo(r, x, lidos_por_var, cab, grade=None):
     """Todas as escritas de pattern de um ritmo no pattern x: os steps de cada
     variacao (lidos_por_var = {v: {track: [131]}}) e o cabecalho (cab = a
-    lista lida do bloco 116 a partir de INI_CAB). -> [Escrita]."""
+    lista lida do bloco 116 a partir de INI_CAB). `grade` = o expandir(r), se
+    quem chama ja tem. -> [Escrita]."""
+    grade = expandir(r) if grade is None else grade
     out = []
-    for v, grade in expandir(r).items():
+    for v, grade_v in grade.items():
         bloco = ts.bloco_de_steps(v)
-        for tr, indice, novo, antigo in escritas_de_steps(grade, lidos_por_var[v]):
+        for tr, indice, novo, antigo in escritas_de_steps(grade_v, lidos_por_var[v]):
             out.append(Escrita(bloco, x, tr, indice, novo, antigo))
     last = last_de(r)
     quer = {campos.CAB_SCALE: scale_de(r), campos.CAB_VARIACOES: chain_de(r)}
-    for v in expandir(r):
+    for v in grade:
         quer[campos.CAB_FIRST_VAR + v] = 0
         quer[campos.CAB_LAST_VAR + v] = last - 1
     if "Fill 1" in r["variacoes"]:
