@@ -528,7 +528,7 @@ def x_presente(vals):
 def linhas_do_pattern(vals, x=None):
     """{(bloco, x, y): [u32...]} -> as linhas de texto da grade. Serve as
     capturas (cmd_pattern) e a leitura ao vivo (sessao_c4.py). x = o indice
-    global do pattern (bloco 3 [2]); sem ele, o que a captura tiver."""
+    global do pattern (bloco 3 [3]); sem ele, o que a captura tiver."""
     out = []
     x = x_presente(vals) if x is None else x
     cab = vals.get((BLOCO_CAB_PATTERN, x, 0))

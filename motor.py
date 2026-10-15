@@ -88,8 +88,8 @@ DIR_SESSOES = os.path.expanduser("~/Library/Application Support/tr1000-sessoes")
 MAX_SESSOES = 200
 RELER_A_CADA = 0.5                                  # s
 # O x do KIT e o bloco 3 [2] (ts.OFF_KIT_ATUAL), o pattern o [3]: o PC de kit
-# de 15/10/2026 so mudou o [2] (REFERENCIA 7.10). Os tres so aparecem no log.
-OFFS_DO_KIT = (2, 3, 4)
+# de 15/10/2026 so mudou o [2] (REFERENCIA 7.10). So kit com nome
+# (ritmos.KITS): outro valor deixa os knobs de kit parados.
 # O bloco de steps inteiro: os 64 slots e PROB/SUB/CYCLE/START (campos.py)
 N_SLOTS = ts.N_STEPS_BLOCO                          # 131
 ERROS_DE_LEITURA = (cs.ErroConexao, PermissionError)
@@ -390,7 +390,8 @@ class Motor:
         self.cache.update(self._ler_variacao(self.x_pattern, variacao))
 
     def reler(self, forcar=False):
-        """O pattern selecionado no painel (bloco 3 [2]) e a variacao mostrada.
+        """O pattern selecionado no painel (bloco 3 [3]), o kit ([2]) e a
+        variacao mostrada.
         Devolve True se algo mudou (e entao ja repintou). Le tudo antes de
         trocar qualquer coisa: o x e o cache so mudam juntos, e so se as 11
         leituras deram certo."""
@@ -403,7 +404,7 @@ class Motor:
         cab = self._ler(ts.BLOCO_CAB_PATTERN, x, 0, *cs.faixa_do_bloco(ts.BLOCO_CAB_PATTERN, x, 0))
         acc = self._ler(ts.BLOCO_VAR0 + ts.BLOCOS_POR_VAR * self.variacao, x, 0, campos.INI_ACC, 1)[0]
         x_kit = b3[ts.OFF_KIT_ATUAL]
-        if not 0 <= x_kit < cs.N_PATTERNS:
+        if not (0 <= x_kit < len(ritmos.KITS) and ritmos.KITS[x_kit]):
             x_kit = None
         if self.pickup is not None:
             if x != self.x_pattern or x_kit != self.x_kit:
@@ -412,7 +413,7 @@ class Motor:
                 self.pickup.reconferir()             # o painel pode ter mexido
         if x_kit != self.x_kit:
             self.log(f"kit {'?' if x_kit is None else x_kit + 1} "
-                     f"(bloco 3 [2..4] = {[b3[o] for o in OFFS_DO_KIT]})")
+                     f"(bloco 3 [2..4] = {b3[2:5]})")
         if x_kit != self.x_kit:
             self.kit_valores = {}                    # outro kit: lido de novo
             self.proximo_kit = 0.0
@@ -1465,7 +1466,7 @@ class Motor:
         """Pede o pattern x a maquina por Program Change no Pattern Ch., na
         porta 'TR-1000' (MIDI chart, REFERENCIA 2.3 - nao medido ate o F4).
         Nao passa pela serial: e o pedido do Luan de 12/10/2026. O motor
-        segue o pattern sozinho, pelo bloco 3 [2] (a releitura)."""
+        segue o pattern sozinho, pelo bloco 3 [3] (a releitura)."""
         if not 0 <= x < cs.N_PATTERNS:
             return
         if not self._program_change(tr1000.CANAL_PATTERN_PADRAO, x, "troca de pattern"):
@@ -1507,12 +1508,12 @@ class Motor:
     # um passo por tick, as escritas ate ESCRITAS_POR_TICK, para os pads e os
     # knobs seguirem respondendo. Cada escrita passa pelo portao. Antes de
     # escrever: a foto da sessao (so leitura). Depois: o diario para o
-    # Desfazer (decisao do Luan, 13/10/2026).
+    # Restaurar (decisao do Luan, 13/10/2026; o nome desde 15/10).
     ESCRITAS_POR_TICK = 12
     ESPERA_KIT = 0.6                            # s depois do PC do kit, antes do mix
     ritmo_passos = None                         # o gerador
     ritmo_estado = None                         # o que a tela mostra
-    ritmo_diario = None                         # o que o Desfazer reescreve
+    ritmo_diario = None                         # o que o Restaurar reescreve
     FASES_OCUPADAS = ("foto", "kit", "lendo", "escrevendo", "desfazendo")
 
     def tocar_ritmo(self, id, kit_n=None):
@@ -1569,17 +1570,20 @@ class Motor:
         self.ritmo_estado["avisos"].append(msg)
         self.log(f"(!) ritmo: {msg}")
 
-    def _avisos_do_ritmo(self, lidos, acentos):
+    def _avisos_do_ritmo(self, lidos, acentos, direcoes):
+        """O DIRECTION que o Play poe em FWD (uma linha por track) e o accent,
+        que continua (nao e gravavel)."""
         out = []
+        for tr in range(N_TRACKS):
+            ds = sorted({d for (_v, t), d in direcoes.items() if t == tr and d})
+            if ds:
+                nomes = "/".join(campos.DIRECOES[d] if d < len(campos.DIRECOES) else str(d)
+                                 for d in ds)
+                out.append(f"{ts.TRACKS_SERIAL[tr]}: {nomes} -> FWD (o Restaurar volta)")
         for v in sorted(lidos):
-            nome_v = ts.VARIACOES_SERIAL[v]
-            for tr in range(N_TRACKS):
-                d = toc.direcao_de(lidos[v][tr])
-                if d:
-                    out.append(f"{ts.TRACKS_SERIAL[tr]} em {campos.DIRECOES[d]} na {nome_v}: "
-                               "toca diferente (o DIRECTION e so leitura; mude no painel)")
             if acentos.get(v):
-                out.append(f"a {nome_v} tem accent: ele continua (o accent e pelo painel)")
+                out.append(f"a {ts.VARIACOES_SERIAL[v]} tem accent: ele continua "
+                           "(o accent e pelo painel)")
         return out
 
     def _so_a_vista_no_cache(self):
@@ -1602,7 +1606,7 @@ class Motor:
     def _escrever_diario(self, escritas, est, feitas, x=None, ao_primeiro=None):
         """Escreve uma lista de ritmos.Escrita, um passo do gerador cada (use
         com yield from), anotando em `feitas` as que a maquina confirmou - na
-        hora, para o Desfazer valer mesmo se o gerador for largado no meio
+        hora, para o Restaurar valer mesmo se o gerador for largado no meio
         (OFF). `ao_primeiro` e chamado na primeira confirmada. -> True se foram
         todas. Para na primeira falha ou se o pattern x saiu da tela: nunca
         repete."""
@@ -1636,7 +1640,7 @@ class Motor:
             return
         # o diario novo so substitui o do ritmo anterior quando algo deste foi
         # de fato escrito (revisao do PR #20: um ritmo que falha no comeco nao
-        # pode apagar o Desfazer do anterior)
+        # pode apagar o Restaurar do anterior)
         diario = {"id": r["id"], "nome": r["nome"], "x": x, "escritas": [], "params": [],
                   "kit": None}
 
@@ -1653,7 +1657,7 @@ class Motor:
                 diario["kit"] = kit_antes
                 assumir()
                 if kit_antes is None:
-                    est["avisos"].append("o kit de antes era desconhecido: o Desfazer nao volta o kit")
+                    est["avisos"].append("o kit de antes era desconhecido: o Restaurar nao volta o kit")
                 ate = time.time() + self.ESPERA_KIT
                 while time.time() < ate:
                     yield
@@ -1685,8 +1689,20 @@ class Motor:
                 except PermissionError:
                     pass
                 yield
+            # o DIRECTION: o painel muda as 12 variacoes juntas, entao o Play le
+            # e escreve as 12 (nas do ritmo, ele ja veio com os steps)
+            direcoes = {(v, tr): toc.direcao_de(lidos[v][tr])
+                        for v in lidos for tr in range(N_TRACKS)}
+            for v in range(campos.N_VARS):
+                if v in lidos:
+                    continue
+                for tr in range(N_TRACKS):
+                    direcoes[(v, tr)] = self._ler(bloco_de_steps(v), x, tr,
+                                                  ts.INDICE_STEPS + campos.STEP_DIRECAO, 1)[0]
+                yield
             cab = self._ler(campos.CAB, x, 0, *cs.faixa_do_bloco(campos.CAB, x, 0))
             escritas = ritmos.escritas_do_ritmo(r, x, lidos, cab, grade)
+            escritas += ritmos.escritas_da_direcao(x, direcoes)
             # o tempo: o do pattern e o atual, os dois que o knob TEMPO muda (c5d)
             x100 = round(r["bpm"] * 100)
             tempo_b3 = self._ler(campos.B3, 0, 0, campos.INI_B3 + campos.B3_TEMPO, 1)[0]
@@ -1699,7 +1715,7 @@ class Motor:
         except ERROS_DE_LEITURA as e:
             self._ritmo_falhou(f"leitura falhou: {e} - nada escrito")
             return
-        est["avisos"] = self._avisos_do_ritmo(lidos, acentos) + est["avisos"]
+        est["avisos"] = self._avisos_do_ritmo(lidos, acentos, direcoes) + est["avisos"]
         com_mix = bool(r.get("mix"))
         est["total"] = len(escritas) + (len(r["mix"]) if com_mix else 0)
         # 4. as escritas do pattern, so a diferenca
@@ -1768,12 +1784,16 @@ class Motor:
             yield
         ok = yield from self._escrever_diario(aceitas, est, [])
         if ok and d["kit"] is not None:
-            if not self.trocar_kit(d["kit"]):
+            # como o tempo do bloco 3: com outro pattern na tela, o PC trocaria
+            # o kit de um pattern que o ritmo nao tocou (revisao do PR #21)
+            if self.x_pattern != d["x"]:
+                est["avisos"].append("o kit de antes nao voltou: o pattern mudou")
+            elif not self.trocar_kit(d["kit"]):
                 est["avisos"].append("o Program Change do kit de antes nao saiu")
         self._so_a_vista_no_cache()
         if ok and not params_ok:
             # o pattern voltou, mas algum send nao: o diario fica so com eles,
-            # para um Desfazer de novo tentar (sem reescrever o pattern)
+            # para um Restaurar de novo tentar (sem reescrever o pattern)
             d["escritas"] = []
             d["kit"] = None
             est["fase"] = "falhou"

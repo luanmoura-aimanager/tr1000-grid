@@ -157,8 +157,8 @@ const EN = {
   "escrevendo…": "writing…",
   pronto: "done",
   falhou: "failed",
-  "desfazendo…": "undoing…",
-  desfeito: "undone",
+  "restaurando…": "restoring…",
+  restaurado: "restored",
   "Arraste os pontos: o de baixo é o HOLD e o MSTR DEP, o de cima o RELEASE, o do meio a CURVE. Os presets são palpites crus, a acertar de ouvido.":
     "Drag the points: the bottom one is HOLD and MSTR DEP, the top one RELEASE, the middle one CURVE. The presets are raw guesses, to be tuned by ear.",
 };

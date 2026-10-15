@@ -24,7 +24,10 @@ descarta tudo.
      pattern → escrevendo (n/total) → pronto, **sem** "o pattern mudou no meio";
    - o **visor continua no 1-01**;
    - o **kit muda** para o do menu;
-   - o ritmo entra (o bumbo em toda colcheia, a caixa no 2 e no 4);
+   - o ritmo entra (o bumbo em toda colcheia, a caixa no 2 e no 4), **reto**: o SD do
+     1-01 vem em R-L de fábrica, e o Play o põe em **FWD** (o quadro diz `SD: R-L -> FWD`).
+     No painel, o TRACK SETTING do SD (SHIFT + SD) mostra FWD, e o playhead do SD na tela
+     anda reto;
    - o **BPM** vai para o do ritmo, no visor e no som;
    - o rodapé diz `kit N (bloco 3 [2..4] = [...])` e **não** diz `pattern 3-xx`.
 
@@ -34,8 +37,8 @@ descarta tudo.
 
 ## F5.2 — Restaurar
 
-1. Clique em **Restaurar**. **Esperado:** "desfazendo… → desfeito", e voltam os steps, a
-   Scale, o LAST, a chain, o **BPM** e o **kit** de antes.
+1. Clique em **Restaurar**. **Esperado:** "restaurando… → restaurado", e voltam os steps,
+   a Scale, o LAST, a chain, o **BPM**, o **kit** e o **SD em R-L** (o "2 1 4 3…") de antes.
 2. Me diga se **algo não voltou**. Se o quadro mostrar "valor(es) antigo(s) fora do
    portao nao voltaram", copie a linha para mim.
 
@@ -64,11 +67,12 @@ descarta tudo.
    no F2.2). Me diga quais ecoam.
 3. **Restaurar.** **Esperado:** os sends voltam ao que eram (o eco some).
 
-## F5.6 — O aviso do DIRECTION
+## F5.6 — O DIRECTION em outro track
 
-1. No painel, ponha o **SD em R-L** (TRACK SETTING).
-2. Dê Play no **Rockers (Channel One)**. **Esperado:** o quadro avisa `SD em R-L na A: toca
-   diferente`. Restaure e volte o SD para FWD.
+1. No painel, ponha o **CH em R-L** (TRACK SETTING).
+2. Dê Play no **Rockers (Channel One)**. **Esperado:** o quadro diz `CH: R-L -> FWD`, e o
+   chimbal toca reto.
+3. **Restaurar.** **Esperado:** o CH volta a R-L. Volte o CH para FWD no painel.
 
 ## F5.7 — De ouvido
 

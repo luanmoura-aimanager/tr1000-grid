@@ -52,6 +52,9 @@ grid — escreve na máquina. **Toda saída da serial passa por um único portã
     **accent fica de fora**: é feito no painel. O ROTEIRO-F3 (12/10/2026) provou de
     ouvido quase todos (REFERENCIA 7.8); o CYCLE, o FILL 3/4 e o FIRST/LAST por track
     ainda não foram conferidos, e o LED do STEP LOOP do painel não acompanha o `[150]`.
+  - **O DIRECTION** do track (`campos.STEP_DIRECAO`, o `[96]` do bloco de steps), só
+    **FWD (0) e R-L (3)**, os dois medidos, liberado pelo Luan em 15/10/2026 para o Play
+    da aba Ritmos deixar os tracks retos. O Play escreve as 12 variações, como o painel.
 
   Ampliar a regra é **decisão do Luan**, não detalhe de código. As 3 escritas
   históricas da C3 continuam na lista `ESCRITAS_PERMITIDAS`.

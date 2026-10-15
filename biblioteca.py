@@ -277,7 +277,7 @@ RITMOS = [
         "fonte": "Wicked Beats, cap. Dub; attackmagazine.com (dub-style drum processing: "
                  "delay de fita e mola na caixa e no chimbal, o bumbo seco); MoPOP / "
                  "FACT (King Tubby: baixo e bateria em primeiro plano, eco e reverb)",
-        "obs": "o dub mora no MIX: 'Mix dub' liga delay no rim, delay+reverb na caixa e "
+        "obs": "o dub mora no MIX: o Play liga delay no rim, delay+reverb na caixa e "
                "um pouco de delay no chimbal aberto (o BD fica seco). B e C sao as "
                "quebras de mesa - o que sai da mixagem, nao o que toca diferente",
         "variacoes": {
@@ -304,7 +304,7 @@ RITMOS = [
         "bpm": 75, "kit": "Dub Techno Kit",
         "fonte": "attackmagazine.com (comeca de um steppers seco e manda delay e mola na "
                  "caixa e nos chimbais, o bumbo seco como ancora); dubroom 05",
-        "obs": "'Mix dub' manda a caixa e o chimbal aberto para o delay",
+        "obs": "o Play manda a caixa e o chimbal aberto para o delay",
         "variacoes": {
             "A": {"BD": "x.x.|x.x.|x.x.|x.x.",
                   "SD": "....|x...|....|x...",
@@ -646,7 +646,7 @@ RITMOS = [
         "bpm": 118, "kit": "Dub Techno Kit",
         "fonte": "tr8s-grid (dub_techno); conhecimento geral (Basic Channel / Chain "
                  "Reaction: o acorde e o eco fazem o groove)",
-        "obs": "'Mix dub' manda o rim e o chimbal para o delay e o reverb - o dub "
+        "obs": "o Play manda o rim e o chimbal para o delay e o reverb - o dub "
                "techno mora nos efeitos",
         "variacoes": {
             "A": {"BD": "x...|x...|x...|x...",
@@ -1474,7 +1474,7 @@ RITMOS = [
         "id": "ambient_mare", "nome": "Ambient (maré)", "estilo": "ambient",
         "bpm": 76, "kit": "Ground Swell",
         "fonte": "tr8s-grid (ambient_mare)",
-        "obs": "reverb e delay altos (o 'Mix dub' faz isso) - o espaco e o instrumento",
+        "obs": "reverb e delay altos (o Play faz isso) - o espaco e o instrumento",
         "variacoes": {
             "A": {"BD": "x...|....|..o.|....",
                   "RC": "....|o...|....|o...",
