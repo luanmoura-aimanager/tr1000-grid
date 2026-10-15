@@ -420,7 +420,7 @@ da Chart. Se a Roland publicou algum mapa SysEx, é lá. Baixar antes da C1.
 | piso de ruído entre dois boots sem gesto: zero (139 blocos iguais) | **medido 08/10** (`ruido-1`/`ruido-2`) | 2.1c |
 | bloco 3 `[128]` = variação selecionada no painel (8 = H, 1 = A) | **(deduzido)** de dois diffs; a C5 achou a seleção no **cabeçalho `[18]`** (máscara) | 2.1c, 7.6 |
 | **PROB, SUB, CYCLE, START do step; ACCENT; ALT; LAST STEP; Scale; variação/chain; MUTE; FILL; STEP LOOP**: onde moram | **medido 10/10, painel** (C5/C5b, gesto + foto + diff); **nenhum escrito por nós** | 7.6 |
-| bloco 3 `[2]` = índice global do pattern (0..127); `[21]` = pattern no banco (1..16); `[36]` = tempo × 100 | **medido 08/10** (1-01, 1-02, 2-01) | 2.1c |
+| bloco 3 `[3]` = índice global do pattern (0..127), `[2]` = o kit atual; `[21]` = pattern no banco; `[36]` = tempo × 100 | `[2]`=`[3]`=x **medido 08/10** (1-01, 1-02, 2-01); a separação kit `[2]` / pattern `[3]` **medida 15/10** pelo PC de kit, o `[3]` como pattern **(deduzido)** até o F5 | 2.1c, 7.10 |
 | blocos de pattern: `x` = índice global do pattern | **medido 08/10** (boot do App em 1-01, 1-02 e 2-01, conferidos no painel) | 2.1c |
 | velocity no byte do meio da nota; `[64..79]` = probability | **medido 10/10** (C5: velocity 90 → 40 no byte do meio; PROB 100 → 50 em `[64+s]`) | 7.6 |
 | comando de escrita: `01 bloco x y índice u32` → `03 …` | **medido 08/10** (App escrevendo; nunca por nós) | 2.1c |
@@ -429,7 +429,7 @@ da Chart. Se a Roland publicou algum mapa SysEx, é lá. Baixar antes da C1.
 | **escrita nossa de um step (`01`) obedecida: bumbo some/volta, LED apaga/acende vermelho** | **medido 08/10, OUVIDO** (C3.1, C3.2) | 3.1 |
 | **escrita nossa de parâmetro de kit (TUNE do sample do BD) obedecida** | **medido 08/10, OUVIDO** e conferido no App (C3.3) | 3.1 |
 | os 74 parâmetros das controladoras (mixer, reverb, delay nos 4 types, LFO, MASTER FX nos 19 types): endereço e faixa | **medido 09–10/10** (o App escrevendo; nunca por nós) | 7.5 |
-| x dos blocos de kit = o do bloco 3 `[2..4]` quando os três coincidem | **medido 10/10** (F2.9: no 1-02, o PAN escrito com x = 1 mudou o som tocando); qual dos três é "o kit" segue **(deduzido)** | 7.5 |
+| x dos blocos de kit = o do bloco 3 `[2..4]` quando os três coincidem | **medido 10/10** (F2.9: no 1-02, o PAN escrito com x = 1 mudou o som tocando); com eles diferentes, o kit é o `[2]` (15/10, só ele mudou com o PC de kit); os blocos de kit no x do `[2]` **(deduzido)** até o F5 | 7.5, 7.10 |
 | escrita nossa de parâmetro pelas controladoras | **medido 10/10, OUVIDO** (ROTEIRO-F2 inteiro) e conferido no App | 7.5 |
 | os 8 tracks do meio (SD..CC) nos parâmetros por track: o mesmo passo do BD ao RC | **(deduzido)** — o App foi visto só no BD e no RC; SD PAN/RVB/DLY **ouvidos** no F2.2 | 7.5 |
 | **a sessão serial morre com 1–3 s sem pedido**: depois disso a máquina não responde; uma conexão nova (aperto de novo) volta na hora | **medido 10/10** (1 s ok, 3 s não; lendo a cada 1–2 s, viva por 47 s) | 2.1c |
@@ -980,7 +980,7 @@ As mudanças de chain e de LAST feitas com a máquina tocando aparecem no log co
 - **O knob TEMPO** muda dois valores, ambos × 100:
   - o **cabeçalho `[16]`**, o tempo do pattern, com centésimos: 129.01 → `3265`, 128.03 → `3203`;
   - o **bloco 3 `[36]`**, o tempo atual.
-- **Trocar de pattern pelo painel** muda o bloco 3 `[2]`, `[3]`, `[4]` (pattern/kit), `[21]`
+- **Trocar de pattern pelo painel** muda o bloco 3 `[2]` (o kit do pattern), `[3]` (o pattern), `[4]`, `[21]`
   (o número) e `[36]` (o tempo do pattern novo), igual ao Program Change.
 
 **BPM digitável (fase 2j, liberado pelo Luan em 12/10/2026):** o campo BPM do topo escreve
@@ -1123,6 +1123,10 @@ o mesmo botão volta aos steps. Tudo chama as mesmas ações da tela (o mesmo po
 
 ### 7.9 Fase 2l — a aba Ritmos e o Kit por Program Change (13/10/2026; NÃO testada no hardware até o `ROTEIRO-F5.md`)
 
+**Revista na 7.10 (15/10/2026):** os botões Kit, BPM, Auto BPM, Auto kit e Mix dub deram
+lugar a um Play e um Restaurar, e o kit passou a ser lido no bloco 3 `[2]`. O resto desta
+seção (o diário, o portão, os avisos, a biblioteca) continua valendo.
+
 O pedido do Luan foi uma aba de ritmos prontos inspirada na Grooves do tr8s-grid, com a
 família reggae/dub, pelo menos 2 variações por ritmo, preferência pelos kits analógicos e
 pesquisa de acurácia. As decisões dele em 13/10/2026: botão **Kit por Program Change**,
@@ -1218,6 +1222,56 @@ O que só tinha "conhecimento geral" está escrito assim no campo `fonte`.
 **Pesquisados e não incluídos**, por falta de uma grade com fonte: funk 150 (só a história
 do Polyvox e o tempo), brega funk, pisadinha e Baltimore club.
 
+### 7.10 O bloco 3 `[2]` é o kit; a aba Ritmos vira Play + Restaurar (15/10/2026)
+
+**O que o Luan viu na máquina:** só o botão Kit funcionava. O Escrever não mudava o que
+tocava, o BPM da aba não mudava, e a segunda escrita parou em "o pattern mudou no meio".
+
+**O que os logs e as fotos de sessão mostram** (`tr1000-grid-agente.log`,
+`tr1000-sessoes/2026-10-15-*`):
+
+| quando | o quê | bloco 3 `[2..4]` | `[36]` |
+|---|---|---|---|
+| 11:37 | ON no 1-01 | `[0, 0, 0]` | 12800 |
+| 11:40:54 | PC de kit 40 (canal 1) | **`[40, 0, 0]`** | **12800**, o do 1-01 (o x 40 tem 12600) |
+| 11:50:38 | PC de pattern 0 (canal 10) | `[0, 0, 0]` | — |
+| 11:51:59 | PC de kit 44 no meio de um ritmo | `[44, 0, 0]` | — |
+
+Nas trocas pelo painel, o `[36]` sempre passou a ser o tempo do pattern novo; depois do PC
+de kit, não. E o Luan viu o visor **continuar em 1-01**, com só o som do kit mudando.
+
+**A conclusão:** o `[2]` é o **kit atual**; o pattern é o `[3]`. Nas trocas pelo painel os
+dois vêm iguais, porque cada pattern de fábrica carrega o kit de mesmo número. Por isso a
+medida de 08/10 tomou o `[2]` pelo pattern. O `[4]` não segue regra clara (1-03 → 3,
+1-07 → 6) e fica fora do código.
+
+**O que isso explicava:** depois do PC de kit, o motor achou que estava no "3-09". As 158
+escritas e o BPM foram para a memória do x 40, que não tocava: a foto das 11:41:51 mostra
+os steps do Steppers e o tempo 75 lá. Na segunda tentativa, o Auto kit mudou o `[2]` no meio
+e o gerador parou. Essas escritas ficaram só na memória; religar descarta.
+
+**O que mudou no código:**
+- `tr1000_serial.OFF_PATTERN_GLOBAL = 3` e `OFF_KIT_ATUAL = 2`. O `x_kit` do motor sai só do
+  `[2]`; o "kit incerto" dos três diferentes acabou.
+- **A aba Ritmos** (decisões do Luan, 15/10/2026):
+  - um menu com os 64 kits, que começa no kit sugerido pelo ritmo;
+  - **▶ Play** (`motor.tocar_ritmo`): no pattern da tela, o kit (PC no Kit Ch. 1, só se
+    for outro, conferido pelo `[2]`), as variações e a chain, **sempre** o tempo
+    (`cab[16]` e `b3[36]`) e o mix dub do ritmo que o tem, com o kit confirmado. **Sem Start:**
+    a máquina segue como está;
+  - **Restaurar** (o Desfazer de antes, com o mesmo diário).
+- **Os kits sugeridos** da `biblioteca.py` saíram da lista de 64 pelo **nome** e pelo estilo
+  (Dub Techno Kit no dub, Backline Kit no reggae, Glitchy DnB Kit, Trance Kit, 727 Kit 2 nos
+  brasileiros…), sem ouvir. Quem cita uma máquina na fonte (808, 909, 707, Jungle) ficou
+  com ela.
+
+**Medido / deduzido / não testado:**
+- **Medido (15/10):** o PC de kit muda só o `[2]`, e o pattern tocando fica.
+- **Deduzido, até o ROTEIRO-F5:** o `[3]` é o pattern quando difere do `[2]`; os blocos de
+  kit seguem o x do `[2]`.
+- **Não testado:** o Play inteiro na máquina, o Restaurar do kit e o som de cada kit
+  sugerido.
+
 ### 7.5 Fase 1b — as controladoras de knobs (09–10/10/2026; F2 PASSOU no hardware em 10/10)
 
 **Resultado do ROTEIRO-F2 (10/10/2026, o Luan na frente da máquina):**
@@ -1293,9 +1347,8 @@ Tudo vai para a `parametros.py`, com a captura de origem.
 - **Escritas juntadas:** só o último valor de cada knob, no máximo a cada 30 ms.
 - **Os TYPEs e SYNCs** são relidos a cada releitura de 0,5 s, porque o painel pode tê-los
   trocado. Um knob cujo endereço mudou volta ao pickup.
-- **O x do kit** sai do bloco 3: `[2]`, `[3]` e `[4]` vieram sempre iguais, e o x dos
-  blocos de kit também. Com eles diferentes, os knobs de kit param; o GAIN, que mora no
-  pattern, segue.
+- **O x do kit** sai do bloco 3 `[2]` (desde 15/10/2026, 7.10). Antes o motor exigia
+  `[2]`, `[3]` e `[4]` iguais e parava os knobs de kit quando não vinham (1-03, 1-04, 1-09…).
 - **Leitura:** as capturas B2 entraram nas `CAPTURAS_DE_REFERENCIA`, porque nelas o App
   lê de volta, um a um, cada parâmetro que escreve. Nos blocos de kit e de pattern, as
   faixas lidas com x = 0 valem para todo x de 0..127.

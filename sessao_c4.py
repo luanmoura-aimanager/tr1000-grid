@@ -60,7 +60,8 @@ def chaves_do_pattern(x):
 
 def pattern_atual(c):
     """(nome '1-01', x, tempo) lidos do bloco 3: o pattern SELECIONADO no
-    painel. x e o indice global ([2]), que e o x dos blocos de pattern."""
+    painel. x e o indice global ([3]; o [2] e o kit, 15/10/2026), que e o x
+    dos blocos de pattern."""
     b3 = _ler_bloco(c, 3)
     x = b3[ts.OFF_PATTERN_GLOBAL]
     return ts.nome_do_pattern(x), x, b3[ts.OFF_TEMPO_ATUAL] / 100
@@ -132,13 +133,13 @@ def chaves_da_foto(x):
 
 def tirar_foto(c):
     """Le a foto inteira do pattern selecionado. -> (nome, x, {(bloco, x, y):
-    [u32]}). O x e o do bloco 3 [2]; com [3]/[4] diferentes (kit != pattern?)
-    avisa: os blocos de kit seriam lidos no x do pattern."""
+    [u32]}). O x e o do bloco 3 [3]; com o kit ([2]) diferente, avisa: os
+    blocos de kit seriam lidos no x do pattern."""
     b3 = _ler_bloco(c, 3)
     x = b3[ts.OFF_PATTERN_GLOBAL]
-    if len({b3[2], b3[3], b3[4]}) != 1:
-        print(f"(!) bloco 3 [2..4] = {b3[2:5]}: kit e pattern diferentes - "
-              f"os blocos de kit vao no x {x} do pattern")
+    if b3[ts.OFF_KIT_ATUAL] != x:
+        print(f"(!) bloco 3 [2..4] = {b3[2:5]}: kit {b3[ts.OFF_KIT_ATUAL] + 1} no pattern "
+              f"x {x} - os blocos de kit vao no x {x} do pattern")
     vals = {}
     for b, xx, y, i, n in chaves_da_foto(x):
         vals[(b, xx, y)] = c.ler(b, xx, y, i, n)

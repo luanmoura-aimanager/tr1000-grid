@@ -302,18 +302,14 @@ def _preset_sc(a):
 
 
 def _ritmo(a):
+    """O Play: o ritmo e o kit do menu (qualquer um da lista com nome)."""
     id = str(a["id"])
     if id not in R.POR_ID:
         raise ValueError(f"ritmo {id!r} desconhecido")
-    HOST.enfileirar(HOST.motor.escrever_ritmo, id, bool(a.get("auto_bpm")),
-                    bool(a.get("auto_kit")), bool(a.get("mix")))
-
-
-def _kit(a):
-    n = _faixa(a, "n", 0, len(R.KITS) - 1)
+    n = _faixa(a, "kit", 0, len(R.KITS) - 1)
     if not R.KITS[n]:
         raise ValueError(f"kit {n} sem nome")
-    HOST.enfileirar(HOST.motor.trocar_kit, n)
+    HOST.enfileirar(HOST.motor.tocar_ritmo, id, n)
 
 
 ACOES = {
@@ -340,12 +336,11 @@ ACOES = {
     "ptn": lambda a: HOST.enfileirar(HOST.motor.trocar_pattern, _faixa(a, "x", 0, 127)),
     # a foto da sessao: so no app, nunca na maquina
     "sessao": lambda a: HOST.enfileirar(HOST.motor.pedir_foto, "botao"),
-    # os ritmos prontos (aba Ritmos): a escrita e o desfazer andam no motor, aos
-    # pedacos; o kit por Program Change no Kit Ch. (aprovado pelo Luan em
-    # 13/10/2026, nao medido ate o ROTEIRO-F5)
+    # os ritmos prontos (aba Ritmos): o Play (kit por Program Change no Kit
+    # Ch., aprovado pelo Luan em 13/10/2026) e o Restaurar andam no motor, aos
+    # pedacos
     "ritmo": _ritmo,
     "desfazer_ritmo": lambda a: HOST.enfileirar(HOST.motor.desfazer_ritmo),
-    "kit": _kit,
     "quer_kit": lambda a: setattr(HOST.motor, "quer_kit", bool(a["sim"])),
     "reler": lambda a: HOST.enfileirar(HOST.motor.reler, True),
 }

@@ -501,9 +501,15 @@ def grade_de_steps(valores):
     return "".join(out)
 
 
-# Bloco 3 (sistema/performance), medido em 08/10/2026 em 1-01, 1-02 e 2-01:
-OFF_PATTERN_GLOBAL = 2      # indice global 0..127 = o x dos blocos de pattern
-                            # (medido: 0, 1, 16; [3] e [4] repetem o mesmo valor)
+# Bloco 3 (sistema/performance), medido em 08/10/2026 em 1-01, 1-02 e 2-01.
+# Nas trocas pelo painel [2] e [3] vem sempre iguais (cada pattern de fabrica
+# carrega o kit de mesmo numero), e por isso o 08/10 tomou o [2] pelo pattern.
+# Em 15/10/2026 o Program Change de KIT 40, com a maquina em 1-01, deu
+# [2..4] = [40, 0, 0], o tempo atual [36] ficou o do 1-01 e o painel ficou em
+# 1-01 (visto pelo Luan): o [2] e o KIT, o [3] o pattern (deduzido; ROTEIRO-F5).
+# O [4] nao segue regra clara (1-03 -> 3, 1-07 -> 6) e fica fora.
+OFF_KIT_ATUAL = 2           # x dos blocos de kit (15/10: so ele mudou com o PC de kit)
+OFF_PATTERN_GLOBAL = 3      # indice global 0..127 = o x dos blocos de pattern
 OFF_PATTERN_NO_BANCO = 21   # 1..16 dentro do banco (medido: 1, 2, 1)
 OFF_TEMPO_ATUAL = 36        # tempo x 100 (medido: 12800, 12200, 16500)
 

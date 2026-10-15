@@ -1,13 +1,11 @@
-// ritmos.mjs - os ritmos prontos (biblioteca.py): escolher, ver as variacoes e
-// escrever no pattern que esta na tela. O molde e a aba Grooves do tr8s-grid,
-// com duas diferencas: cada ritmo tem 2+ variacoes (e um fill), e antes de
-// escrever o motor tira a foto da sessao e guarda o diario do Desfazer.
+// ritmos.mjs - os ritmos prontos (biblioteca.py): escolher, ver as variacoes,
+// escolher o kit e dar Play: o motor escreve no pattern que esta na tela as
+// variacoes e a chain, o tempo, o kit e o mix (decisao do Luan, 15/10/2026).
+// Antes, a foto da sessao; depois, o diario do Restaurar.
 import { h, attr, texto } from "../dom.mjs";
 import { t } from "../i18n.mjs";
 
 const CHAVE_SEL = "tr1000-ritmo";
-const CHAVE_OPC = "tr1000-ritmo-opcoes";
-const CONFIRMA_MS = 2000;
 // steps por tempo (seminima) em cada Scale (campos.SCALES)
 const PASSOS_POR_TEMPO = { "8th(T)": 3, "16th(T)": 6, "16th": 4, "32nd": 8 };
 
@@ -15,8 +13,7 @@ let D = null,
   ctx = null;
 let sel = null; // o ritmo escolhido (o objeto de D.ritmos)
 let varVista = null; // a variacao no preview
-let opcoes = { auto_bpm: true, auto_kit: false, mix: true };
-let armadoAte = 0;
+let kitN = null; // o kit do menu (comeca no sugerido pelo ritmo)
 const el = {};
 
 function ler(chave, padrao) {
@@ -82,7 +79,7 @@ function montarLista() {
 function escolher(r) {
   sel = r;
   varVista = Object.keys(r.variacoes)[0];
-  armadoAte = 0;
+  kitN = r.kit_n;
   guardar(CHAVE_SEL, r.id);
   montarLista();
   montarSel();
@@ -110,23 +107,6 @@ function montarPreview() {
     );
 }
 
-function toggle(chave, rotulo) {
-  const b = h(
-    "button.bt.bt-peq",
-    {
-      type: "button",
-      "aria-pressed": opcoes[chave] ? "true" : "false",
-      onclick: () => {
-        opcoes[chave] = !opcoes[chave];
-        guardar(CHAVE_OPC, opcoes);
-        attr(b, "aria-pressed", opcoes[chave] ? "true" : "false");
-      },
-    },
-    rotulo,
-  );
-  return b;
-}
-
 function montarSel() {
   if (!sel) {
     el.sel.replaceChildren(h("p.nota", {}, t("Escolha um ritmo na lista.")));
@@ -152,12 +132,25 @@ function montarSel() {
     ),
   );
   el.preview = h("div.grade-rolo");
-  el.escrever = h(
-    "button.bt",
-    { type: "button", onclick: escrever },
-    t("Escrever"),
+  el.play = h("button.bt", { type: "button", onclick: tocar }, `▶ ${t("Play")}`);
+  el.kit = h(
+    "select",
+    { "aria-label": t("kit") },
+    D.kits
+      .map((nome, n) => [nome, n])
+      .filter(([nome]) => nome)
+      .map(([nome, n]) =>
+        h(
+          "option",
+          { value: n },
+          `${n + 1} ${nome}${n === r.kit_n ? ` (${t("sugerido")})` : ""}`,
+        ),
+      ),
   );
-  el.tMix = r.mix ? toggle("mix", t("Mix dub")) : null;
+  el.kit.value = String(kitN);
+  el.kit.addEventListener("change", () => {
+    kitN = +el.kit.value;
+  });
   el.sel.replaceChildren(
     h("h2", {}, r.nome),
     h(
@@ -169,70 +162,21 @@ function montarSel() {
     h("p.nota", {}, `${t("fonte")}: ${r.fonte}`),
     el.abasVar,
     el.preview,
-    h(
-      "div.fila",
-      {},
-      h(
-        "button.bt.bt-peq",
-        {
-          type: "button",
-          title: t("Program Change no Kit Ch. 1 (não medido: ROTEIRO-F5)"),
-          onclick: () => ctx.acao("kit", { n: r.kit_n }),
-        },
-        `${t("kit")} → ${r.kit}`,
-      ),
-      h(
-        "button.bt.bt-peq",
-        {
-          type: "button",
-          onclick: () => ctx.acao("tempo", { x100: Math.round(r.bpm * 100) }),
-        },
-        `BPM → ${r.bpm}`,
-      ),
-    ),
-    h(
-      "div.fila",
-      {},
-      toggle("auto_bpm", t("Auto BPM")),
-      toggle("auto_kit", t("Auto kit")),
-      el.tMix,
-    ),
-    h("div.fila", {}, el.escrever),
+    h("div.fila", {}, el.kit, el.play),
     h(
       "p.nota",
       {},
       t(
-        "Escreve as variações e a chain no pattern da tela (só na memória: o WRITE é no painel). Antes, a foto da sessão vai para o app; o Desfazer devolve o que estava.",
+        "O Play escreve no pattern da tela as variações e a chain, o BPM, o kit e o mix (só na memória: o WRITE é no painel). Antes, a foto da sessão vai para o app; o Restaurar devolve o que estava.",
       ),
     ),
   );
   montarPreview();
 }
 
-function escrever() {
+function tocar() {
   if (!sel) return;
-  const agora = Date.now();
-  if (agora > armadoAte) {
-    armadoAte = agora + CONFIRMA_MS;
-    texto(el.escrever, t("Confirmar?"));
-    attr(el.escrever, "aria-pressed", "true");
-    setTimeout(() => {
-      if (Date.now() >= armadoAte) {
-        texto(el.escrever, t("Escrever"));
-        attr(el.escrever, "aria-pressed", "false");
-      }
-    }, CONFIRMA_MS + 50);
-    return;
-  }
-  armadoAte = 0;
-  texto(el.escrever, t("Escrever"));
-  attr(el.escrever, "aria-pressed", "false");
-  ctx.acao("ritmo", {
-    id: sel.id,
-    auto_bpm: !!opcoes.auto_bpm,
-    auto_kit: !!opcoes.auto_kit,
-    mix: !!(opcoes.mix && sel.mix),
-  });
+  ctx.acao("ritmo", { id: sel.id, kit: kitN });
 }
 
 const FASES = {
@@ -252,7 +196,6 @@ export default {
   montar(painel, c) {
     ctx = c;
     D = c.D;
-    opcoes = Object.assign(opcoes, ler(CHAVE_OPC, {}));
     el.filtro = h("input.filtro", {
       type: "search",
       placeholder: t("filtrar (nome, estilo, kit)"),
@@ -267,7 +210,7 @@ export default {
     el.desfazer = h(
       "button.bt",
       { type: "button", onclick: () => ctx.acao("desfazer_ritmo", {}) },
-      t("Desfazer"),
+      t("Restaurar"),
     );
     el.desfazerNome = h("span.fraco");
     painel.append(
@@ -306,7 +249,10 @@ export default {
     );
     const id = ler(CHAVE_SEL, null);
     sel = D.ritmos.find((r) => r.id === id) || null;
-    if (sel) varVista = Object.keys(sel.variacoes)[0];
+    if (sel) {
+      varVista = Object.keys(sel.variacoes)[0];
+      kitN = sel.kit_n;
+    }
     montarLista();
     montarSel();
   },
@@ -338,6 +284,6 @@ export default {
       ["foto", "kit", "lendo", "escrevendo", "desfazendo"].includes(r.fase);
     attr(el.desfazer, "disabled", !E.ligado || !E.ritmo_desfazer || ocupado);
     texto(el.desfazerNome, E.ritmo_desfazer || "");
-    if (el.escrever) attr(el.escrever, "disabled", !E.ligado || ocupado);
+    if (el.play) attr(el.play, "disabled", !E.ligado || ocupado);
   },
 };

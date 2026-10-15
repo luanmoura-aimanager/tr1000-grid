@@ -56,9 +56,10 @@ No Safari, abra `http://127.0.0.1:8734/` e use **Arquivo › Adicionar ao Dock**
   - **Mixer**;
   - **Efeitos**;
   - **Ritmos:** 83 ritmos prontos (`biblioteca.py`), com a família reggae/dub inteira,
-    cada um com 2+ variações e um fill. Escreve no pattern da tela depois da foto da
-    sessão e tem **Desfazer**. Nada disso foi ouvido na máquina ainda: o Kit (Program Change),
-    a escrita, o Desfazer e o Mix dub são o `ROTEIRO-F5.md`.
+    cada um com 2+ variações, um fill e um kit sugerido, que o menu troca por qualquer um
+    dos 64. O **▶ Play** escreve no pattern da tela o kit, as variações e a chain, o BPM e
+    o mix, depois da foto da sessão; o **Restaurar** devolve o que estava. Nada disso foi
+    ouvido na máquina ainda: é o `ROTEIRO-F5.md`.
 - **PT | EN** no topo troca a língua da tela.
 - **PTN:** clique e digite outro pattern (`1-05`). Vai por Program Change, e só foi testado
   no `ROTEIRO-F4.md`.
