@@ -19,6 +19,7 @@ import {
   VEL_FRACA,
   TRACKS_LAYER,
   CENA_CCS,
+  FUNC_CCS,
   PLAY,
 } from "../guia_textos.mjs";
 
@@ -48,7 +49,7 @@ const C = {
   blueW: "#16306a",
   lblue: "#79c6ff",
   pink: "#ff1f7a",
-  soando: "#1fa63a",
+  soando: "#145c22", // lp.cor_borda(COR_SOANDO, False): escurecido
   soandoW: "#0e3d17",
   dim: "#3b3f43",
   faint: "#18191a",
@@ -119,8 +120,8 @@ function inicial() {
     parParam: 0,
     fill: 0,
     chain: 0b11,
-    first: 0,
-    last: 11,
+    first: Array(8).fill(0), // por variacao, como o cabecalho
+    last: [11, 15, 15, 15, 15, 15, 15, 15],
     scale: 2,
     rota: FONTES_ROTA.map((_, i) => (i === 0 ? 1 : 0)),
     sc: 3,
@@ -229,8 +230,9 @@ function corPerf(l, s) {
   if (l === PERF.chain && s < 8) return (S.chain >> s) & 1 ? C.blue : C.blueW;
   if (l === PERF.loop) return S.loop === s ? C.white : C.faint;
   if (l === PERF.last) {
-    if (s === S.last) return C.amber;
-    return S.first <= s && s < S.last ? C.amberW : null;
+    const v = S.varEdit;
+    if (s === S.last[v]) return C.amber;
+    return S.first[v] <= s && s < S.last[v] ? C.amberW : null;
   }
   if (l === PERF.scale && s < D.scales.length)
     return S.scale === s ? C.white : C.faint;
@@ -267,8 +269,11 @@ function hsv(hue) {
   };
   return [f(5), f(3), f(1)];
 }
+// sem movimento as manchas nao somem sozinhas: guarda so as ultimas
+const MAX_MANCHAS = 4;
 function novaOnda(l, s, t) {
   // sem movimento (reduced-motion), a onda vira uma mancha parada
+  if (REDUZ) ondas = ondas.slice(-(MAX_MANCHAS - 1));
   ondas.push({
     l,
     s,
@@ -316,7 +321,7 @@ function txtPad(l, s) {
     if (l === PERF.mute && PERF.fills.includes(s))
       return `FILL\n${PERF.fills.indexOf(s) + 1}`;
     if (l === PERF.chain && s < 8) return D.variacoes[s];
-    if (l === PERF.last && s === S.last) return "LAST";
+    if (l === PERF.last && s === S.last[S.varEdit]) return "LAST";
     if (l === PERF.scale && s < D.scales.length)
       return D.scales[s].replace("(T)", "\nT");
   }
@@ -382,8 +387,8 @@ function borda(kind, i) {
 function lugar(kind, i) {
   const cc = {
     topE: CENA_CCS[i],
-    ladoE: 98 - i,
-    topD: 91 + i,
+    ladoE: FUNC_CCS[FUNC_CCS.length - 1 - i], // motor: FUNC_CCS[-1 - linha]
+    topD: FUNC_CCS[i],
     ladoD: CENA_CCS[i],
   }[kind];
   return fmt(T.lugar[kind], { n: i + 1, cc });
@@ -676,7 +681,7 @@ function tocarPerf(l, s, ev) {
     if (nova) S.chain = nova;
   } else if (l === PERF.loop) S.loop = s;
   else if (l === PERF.last) {
-    if (s >= S.first) S.last = s;
+    if (s >= S.first[S.varEdit]) S.last[S.varEdit] = s;
   } else if (l === PERF.scale && s < D.scales.length) S.scale = s;
 }
 function soltar() {
@@ -792,7 +797,11 @@ function botao(cls, kind, i, j) {
   b.addEventListener("keydown", (ev) => {
     if (ev.key !== "Enter" && ev.key !== " ") return;
     ev.preventDefault();
-    tocar(kind, i, j, ev);
+    if (!ev.repeat) tocar(kind, i, j, ev);
+  });
+  // o STEP LOOP segurado pelo teclado solta como pelo ponteiro
+  b.addEventListener("keyup", (ev) => {
+    if (ev.key === "Enter" || ev.key === " ") soltar();
   });
   return b;
 }
@@ -855,10 +864,9 @@ function montarBancada() {
           sel =
             pg === "standby"
               ? { kind: "pad", i: 3, j: 4 }
-              : {
-                  kind: "topD",
-                  i: pg === "steps" ? 0 : PAGINAS.indexOf(pg) + 4,
-                };
+              : pg === "steps"
+                ? { kind: "pad", i: 0, j: 0 }
+                : { kind: "topD", i: PAGINAS.indexOf(pg) + 4 };
           pintar();
         },
       },
@@ -951,13 +959,10 @@ function montarMapa() {
       h("td", {}, rico(L(x.steps))),
     ];
     // "=" junta a celula com a da esquerda
-    const span = 1 + (x.par === "=" ? 1 : 0) + (x.perf === "=" ? 1 : 0);
-    if (x.par === "=") celulas[1].setAttribute("colspan", span);
-    else {
-      const c = h("td", {}, rico(L(x.par)));
-      if (x.perf === "=") c.setAttribute("colspan", 2);
-      celulas.push(c);
-      if (x.perf !== "=") celulas.push(h("td", {}, rico(L(x.perf))));
+    for (const v of [x.par, x.perf]) {
+      const ultima = celulas[celulas.length - 1];
+      if (v === "=") ultima.setAttribute("colspan", +(ultima.getAttribute("colspan") || 1) + 1);
+      else celulas.push(h("td", {}, rico(L(v))));
     }
     return h("tr", {}, celulas);
   });
@@ -1010,6 +1015,7 @@ function montarSegredos() {
               onclick: () => {
                 const [pg, kind, i, j] = x.go;
                 S.loop = null;
+                S.banco = 1; // as posicoes dos exemplos sao as do banco ▲
                 mudarPagina(pg);
                 sel = { kind, i, j };
                 pintar();

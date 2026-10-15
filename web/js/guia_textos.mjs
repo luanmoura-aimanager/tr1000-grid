@@ -48,6 +48,7 @@ export const FONTES_ROTA = [
 export const VEL_FRACA = 80; // motor.VEL_FRACA_ABAIXO
 export const TRACKS_LAYER = 4; // motor.TRACKS_LAYER: BD SD LT HT
 export const CENA_CCS = [89, 79, 69, 59, 49, 39, 29, 19]; // launchpad.CENA_CCS
+export const FUNC_CCS = [91, 92, 93, 94, 95, 96, 97, 98]; // launchpad.FUNC_CCS
 export const PLAY = 6; // o playhead do exemplo, parado no step 7
 
 // ── os textos ────────────────────────────────────────────────
@@ -681,7 +682,7 @@ export const T = {
     { pt: "PAR", en: "PAR" },
     { pt: "PERF e ROUT", en: "PERF and ROUT" },
   ],
-  // [botao, cc, steps, par, perf/rout]; par null = "igual"; perf "=" junta com a PAR
+  // [botao, cc, steps, par, perf/rout]; "=" junta a celula com a da esquerda
   mapaLinhas: [
     {
       b: { pt: "Topo do esquerdo · A–H", en: "Left top · A–H" },

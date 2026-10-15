@@ -2037,9 +2037,18 @@ class TesteGuia(unittest.TestCase):
     def test_o_guia_nunca_escreve(self):
         # nem importa o rede.mjs, nem chama acao/fetch: o import e a chamada,
         # nao a palavra (o comentario do guia.mjs fala do rede.mjs)
+        import re
         for rel in ("abas/guia.mjs", "guia_textos.mjs"):
             src = self._fonte(rel)
-            self.assertNotRegex(src, r'from\s+"[^"]*rede\.mjs"|import\(', rel)
+            # qualquer import do rede.mjs (com from ou so de efeito, aspas
+            # simples ou duplas) e qualquer import() dinamico
+            self.assertNotRegex(src, r"""\bimport\b[^;]*?['"][^'"]*rede\.mjs['"]|\bimport\s*\(""", rel)
+        # e o guia so importa dom.mjs, i18n.mjs e os proprios textos - nenhum
+        # deles fala com o servidor
+        imports = re.findall(r"""\bfrom\s+['"]([^'"]+)['"]""", self._fonte("abas/guia.mjs"))
+        self.assertEqual(sorted(imports), ["../dom.mjs", "../guia_textos.mjs", "../i18n.mjs"])
+        for rel in ("dom.mjs", "i18n.mjs"):
+            self.assertNotRegex(self._fonte(rel), r"\bfetch\s*\(|rede\.mjs|EventSource", rel)
             self.assertNotRegex(src, r"\bacao\s*\(|\bfetch\s*\(|new\s+EventSource|XMLHttpRequest", rel)
             self.assertNotRegex(src, r"\bsendBeacon\b|\bWebSocket\b", rel)
 
@@ -2068,7 +2077,7 @@ class TesteGuia(unittest.TestCase):
         js = ('import * as G from "./web/js/guia_textos.mjs";'
               'console.log(JSON.stringify({par: G.PAR_PARAMS, niveis: G.NIVEIS_PAR, escolha: G.PAR_ESCOLHA,'
               '  perf: G.PERF, rout: G.ROUT, fontes: G.FONTES_ROTA, fraca: G.VEL_FRACA,'
-              '  layer: G.TRACKS_LAYER, cena: G.CENA_CCS}));')
+              '  layer: G.TRACKS_LAYER, cena: G.CENA_CCS, func: G.FUNC_CCS}));')
         g = self._node(js)
         self.assertEqual(g["par"], list(campos.PAR_PARAMS))
         self.assertEqual(g["niveis"], {k: list(v) for k, v in campos.NIVEIS_PAR.items()})
@@ -2082,6 +2091,7 @@ class TesteGuia(unittest.TestCase):
         self.assertEqual(g["fontes"], [f.upper() for f in motor.FONTES_ROTA])
         self.assertEqual((g["fraca"], g["layer"]), (motor.VEL_FRACA_ABAIXO, motor.TRACKS_LAYER))
         self.assertEqual(g["cena"], list(lp.CENA_CCS))
+        self.assertEqual(g["func"], list(lp.FUNC_CCS))
 
 
 class TesteStandby(unittest.TestCase):
