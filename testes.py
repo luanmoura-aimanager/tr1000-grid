@@ -707,7 +707,8 @@ class TesteSessaoC4(unittest.TestCase):
         for passo in (0, 4, 8, 12):
             bd[passo * 4] = bd[passo * 4 + 1] = 0xA503C
         b3 = [0] * 292
-        b3[2], b3[21], b3[36] = 1, 2, 12200       # 1-02, 122 BPM (medido 08/10)
+        b3[2] = b3[3] = 1                         # 1-02 e o kit dele
+        b3[21], b3[36] = 2, 12200                 # 122 BPM (medido 08/10)
         m.blocos = {(3, 0, 0): b3, (116, 1, 0): nome, (118, 1, 0): bd}
         m.zeros_ok = True                 # os outros 119 blocos: vazios
         saida = self._com_maquina(m, sessao_c4.cmd_pattern)
@@ -723,7 +724,7 @@ class TesteSessaoC4(unittest.TestCase):
         import sessao_c4
         m = _MaquinaFalsa()
         b3 = [0] * 292
-        b3[2] = 130                               # fora de 0..127: nao existe
+        b3[3] = 130                               # fora de 0..127: nao existe
         m.blocos = {(3, 0, 0): b3}
         saida = self._com_maquina(m, sessao_c4.cmd_pattern)
         self.assertIn("fora do que se pode ler", saida)
@@ -798,6 +799,10 @@ def motor_cru(maquina=None):
     m.conexao.__enter__()
     m.x_pattern = 0
     m.modo_geral = motor.MODO_ON
+    # o Program Change (PTN e kit) cai aqui, nunca numa porta MIDI de verdade
+    m.pc_out = _PortaLP()
+    m.pc_out.bytes = []
+    m.pc_out.send_bytes = m.pc_out.bytes.append
     for tr in range(10):
         m.cache[(0, tr)] = [0] * 131
     return m
@@ -823,7 +828,7 @@ class TesteRevisaoPR4(unittest.TestCase):
     def test_leitura_recusada_nao_derruba_o_tick(self):
         maq = _MaquinaFalsa()
         b3 = [0] * 292
-        b3[2] = 130                                    # fora de 0..127
+        b3[3] = 130                                    # fora de 0..127
         maq.blocos = {(3, 0, 0): b3}
         m = motor_cru(maq)
         m.proxima_releitura = 0
@@ -1082,7 +1087,7 @@ class TesteMotor(unittest.TestCase):
     def test_troca_de_pattern_no_painel_rele_com_o_novo_x(self):
         maq = _MaquinaFalsa()
         b3 = [0] * 292
-        b3[2] = 16                                            # 2-01
+        b3[2] = b3[3] = 16                                    # 2-01 e o kit dele
         maq.blocos = {(3, 0, 0): b3}
         m = motor_cru(maq)
         self.assertTrue(m.reler())
@@ -1259,19 +1264,21 @@ class TesteControladorasNoMotor(unittest.TestCase):
         girar(m, "bd.pan", 10)                             # longe do 1000 do kit novo
         self.assertEqual(len(_escritas(maq)), n)
 
-    def test_kit_incerto_para_os_knobs_de_kit_mas_nao_o_gain(self):
+    def test_pc_de_kit_muda_so_o_2_e_o_pattern_fica(self):
+        # 15/10/2026: o PC de kit 40 no 1-01 deu [2..4] = [40, 0, 0], e o
+        # painel ficou em 1-01 - o [2] e o kit, o [3] o pattern
         maq = _MaquinaFalsa()
         b3 = [0] * 292
-        b3[3] = 5                                          # [2] 0, [3] 5, [4] 0
         maq.blocos = {(3, 0, 0): b3}
         m = motor_com_knobs(maq)
         m.reler()
-        self.assertIsNone(m.x_kit)
-        girar(m, "bd.pan", 0, 64)
-        girar(m, "reverb.time", 0, 64)
-        girar(m, "mfx.p1", 0, 64)
-        girar(m, "bd.gain", 0, 64)                         # o gain mora no PATTERN
-        self.assertEqual([e[0] for e in _escritas(maq)], [116])
+        b3[2] = 40
+        m.reler()
+        self.assertEqual((m.x_pattern, m.x_kit), (0, 40))
+        maq.valores[(13, 40, 0, 556)] = 64
+        girar(m, "bd.pan", 0, 64)                          # o kit 40 e o enderecado
+        self.assertTrue(_escritas(maq))
+        self.assertEqual({x for _b, x, *_ in _escritas(maq)}, {40})
 
     def test_mfx_segue_o_type_e_o_sync_da_maquina(self):
         maq = _MaquinaFalsa()
@@ -3176,15 +3183,24 @@ class TesteEscritaRitmo(unittest.TestCase):
         motor.DIR_SESSOES = self.antes
         self.tmp.cleanup()
 
-    def _motor(self):
+    def _motor(self, obedece=True):
+        """A maquina falsa obedece ao PC do kit (o bloco 3 [2] muda) ou o
+        ignora."""
         m = motor_cru()
         m.ESPERA_KIT = 0.0
+        m.reler = lambda forcar=False: False
+
+        def pc(b):
+            m.pc_out.bytes.append(b)
+            if obedece:
+                m.x_kit = b[1]
+        m.pc_out.send_bytes = pc
         return m
 
     def test_escreve_o_one_drop_num_pattern_vazio(self):
         import ritmos
         m = self._motor()
-        m.escrever_ritmo("one_drop")
+        m.tocar_ritmo("one_drop")
         _rodar_ritmo(m)
         self.assertEqual(m.ritmo_estado["fase"], "pronto")
         w = {(b, y, i): v for b, x, y, i, v in _escritas(m.maquina)}
@@ -3213,7 +3229,7 @@ class TesteEscritaRitmo(unittest.TestCase):
             return orig(pac)
         conexao_serial.conferir_pacote = espia
         try:
-            m.escrever_ritmo("dub_roots")
+            m.tocar_ritmo("dub_roots")
             _rodar_ritmo(m)
         finally:
             conexao_serial.conferir_pacote = orig
@@ -3227,7 +3243,7 @@ class TesteEscritaRitmo(unittest.TestCase):
     def test_aos_pedacos(self):
         m = self._motor()
         m.ESCRITAS_POR_TICK = 3
-        m.escrever_ritmo("steppers")
+        m.tocar_ritmo("steppers")
         while m.ritmo_estado["fase"] != "escrevendo":
             m._andar_ritmo()
         antes = len(_escritas(m.maquina))
@@ -3239,7 +3255,7 @@ class TesteEscritaRitmo(unittest.TestCase):
 
     def test_foto_e_leitura_uma_variacao_por_tick(self):
         m = self._motor()
-        m.escrever_ritmo("one_drop")
+        m.tocar_ritmo("one_drop")
         lidas = []
         orig = m._ler_variacao
         m._ler_variacao = lambda x, v: lidas.append(v) or orig(x, v)
@@ -3253,7 +3269,7 @@ class TesteEscritaRitmo(unittest.TestCase):
     def test_pattern_trocado_no_meio_para(self):
         m = self._motor()
         m.ESCRITAS_POR_TICK = 1
-        m.escrever_ritmo("steppers")
+        m.tocar_ritmo("steppers")
         while m.ritmo_estado["fase"] != "escrevendo" or m.ritmo_estado["feito"] < 5:
             m._andar_ritmo()
         m.x_pattern = 9
@@ -3265,7 +3281,7 @@ class TesteEscritaRitmo(unittest.TestCase):
     def test_sem_foto_nada_escrito(self):
         m = self._motor()
         m._passos_da_foto = lambda motivo: iter([""])
-        m.escrever_ritmo("one_drop")
+        m.tocar_ritmo("one_drop")
         _rodar_ritmo(m)
         self.assertEqual(m.ritmo_estado["fase"], "falhou")
         self.assertEqual(_escritas(m.maquina), [])
@@ -3276,7 +3292,7 @@ class TesteEscritaRitmo(unittest.TestCase):
         sd[campos.STEP_DIRECAO] = 3                          # R-L
         m.maquina.blocos = {(118, 0, 1): sd}
         m.maquina.valores[(117, 0, 0, campos.INI_ACC)] = 0x1111
-        m.escrever_ritmo("one_drop")
+        m.tocar_ritmo("one_drop")
         _rodar_ritmo(m)
         avisos = " | ".join(m.ritmo_estado["avisos"])
         self.assertIn("SD em R-L na A", avisos)
@@ -3284,21 +3300,38 @@ class TesteEscritaRitmo(unittest.TestCase):
         self.assertNotIn((118, 0, 1, 1249 + campos.STEP_DIRECAO),
                          [(b, x, y, i) for b, x, y, i, _v in _escritas(m.maquina)])
 
-    def test_auto_bpm_escreve_os_dois_tempos(self):
+    def test_o_tempo_vai_sempre_nos_dois(self):
         m = self._motor()
-        m.escrever_ritmo("one_drop", auto_bpm=True)
+        m.tocar_ritmo("one_drop")
         _rodar_ritmo(m)
         w = {(b, x, i): v for b, x, _y, i, v in _escritas(m.maquina)}
         self.assertEqual(w[(campos.CAB, 0, campos.INI_CAB + campos.CAB_TEMPO)], 7600)
         self.assertEqual(w[(campos.B3, 0, campos.INI_B3 + campos.B3_TEMPO)], 7600)
 
-    def test_mix_sem_kit_certo_nao_escreve(self):
+    def test_pc_que_nao_sai_nao_escreve_o_mix(self):
         m = self._motor()
-        m.x_kit = None
-        m.escrever_ritmo("dub_roots", mix=True)
+        m.trocar_kit = lambda n: False                            # sem a porta 'TR-1000'
+        m.tocar_ritmo("dub_roots")
         _rodar_ritmo(m)
-        self.assertIn("o mix nao foi escrito", " ".join(m.ritmo_estado["avisos"]))
+        self.assertEqual(m.ritmo_estado["fase"], "pronto")
+        self.assertIn("o Program Change do kit nao saiu", " ".join(m.ritmo_estado["avisos"]))
         self.assertFalse(any(b == 156 or b < 100 and b != 3 for b, *_ in _escritas(m.maquina)))
+
+    def test_kit_do_menu_e_o_que_sai(self):
+        m = self._motor()
+        m.x_kit = 0
+        m.tocar_ritmo("one_drop", 7)
+        _rodar_ritmo(m)
+        self.assertEqual(m.pc_out.bytes, [[0xC0, 7]])
+        self.assertEqual(m.ritmo_diario["kit"], 0)
+
+    def test_kit_que_ja_toca_nao_manda_pc(self):
+        m = self._motor()
+        m.x_kit = 7
+        m.tocar_ritmo("one_drop", 7)
+        _rodar_ritmo(m)
+        self.assertEqual(m.pc_out.bytes, [])
+        self.assertEqual(m.ritmo_estado["fase"], "pronto")
 
     def test_desfazer_devolve_o_que_estava(self):
         import ritmos
@@ -3310,7 +3343,7 @@ class TesteEscritaRitmo(unittest.TestCase):
         cab[campos.CAB_TEMPO], cab[campos.CAB_VARIACOES] = 12000, 1
         m.maquina.blocos = {(118, 0, 0): bd, (campos.CAB, 0, 0): cab}
         m.maquina.valores[(campos.B3, 0, 0, campos.INI_B3 + campos.B3_TEMPO)] = 12000
-        m.escrever_ritmo("one_drop", auto_bpm=True)
+        m.tocar_ritmo("one_drop")
         _rodar_ritmo(m)
         escritas = [ritmos.Escrita(b, x, y, i, v, None) for b, x, y, i, v in _escritas(m.maquina)]
         diario = list(m.ritmo_diario["escritas"])
@@ -3331,7 +3364,7 @@ class TesteEscritaRitmo(unittest.TestCase):
 
     def test_valor_antigo_fora_do_portao_nao_volta_e_avisa(self):
         m = self._motor()
-        m.escrever_ritmo("one_drop", auto_bpm=True)          # o tempo antigo (falso) e 0
+        m.tocar_ritmo("one_drop")          # o tempo antigo (falso) e 0
         _rodar_ritmo(m)
         m.desfazer_ritmo()
         _rodar_ritmo(m)
@@ -3340,7 +3373,7 @@ class TesteEscritaRitmo(unittest.TestCase):
 
     def test_erro_inesperado_nao_deixa_a_tela_ocupada(self):
         m = self._motor()
-        m.escrever_ritmo("one_drop")
+        m.tocar_ritmo("one_drop")
         m._ler_variacao = lambda x, v: {}[("boom", v)]          # KeyError, nao ErroConexao
         _rodar_ritmo(m)
         self.assertEqual(m.ritmo_estado["fase"], "falhou")
@@ -3348,11 +3381,11 @@ class TesteEscritaRitmo(unittest.TestCase):
 
     def test_ritmo_que_falha_no_comeco_nao_apaga_o_desfazer_do_anterior(self):
         m = self._motor()
-        m.escrever_ritmo("one_drop")
+        m.tocar_ritmo("one_drop")
         _rodar_ritmo(m)
         anterior = m.ritmo_diario
         m.maquina.calada = True                                  # a primeira escrita falha
-        m.escrever_ritmo("steppers")
+        m.tocar_ritmo("steppers")
         _rodar_ritmo(m)
         self.assertEqual(m.ritmo_estado["fase"], "falhou")
         self.assertIs(m.ritmo_diario, anterior)
@@ -3368,7 +3401,7 @@ class TesteEscritaRitmo(unittest.TestCase):
         escrever = m._escrever
         m._escrever = lambda b, x, y, i, v: False if b == 156 else escrever(b, x, y, i, v)
         try:
-            m.escrever_ritmo("dub_roots", mix=True)
+            m.tocar_ritmo("dub_roots", 5)
             _rodar_ritmo(m)
         finally:
             controladoras.resolver = orig
@@ -3376,15 +3409,10 @@ class TesteEscritaRitmo(unittest.TestCase):
         self.assertIn("rs.dly: escrita recusada", avisos)
         self.assertEqual(m.ritmo_diario["params"], [])
 
-    def test_auto_kit_que_nao_troca_avisa_e_nao_escreve_o_mix(self):
-        m = self._motor()
-        saida = _PortaLP()
-        saida.bytes = []
-        saida.send_bytes = saida.bytes.append
-        m.pc_out = saida
+    def test_kit_que_nao_troca_avisa_e_nao_escreve_o_mix(self):
+        m = self._motor(obedece=False)                           # a maquina ignorou o PC
         m.x_kit = 12
-        m.reler = lambda forcar=False: False                     # a maquina ignorou o PC
-        m.escrever_ritmo("dub_roots", auto_kit=True, mix=True)
+        m.tocar_ritmo("dub_roots")
         _rodar_ritmo(m)
         self.assertEqual(m.ritmo_estado["fase"], "pronto")
         self.assertIn("o kit nao trocou", " ".join(m.ritmo_estado["avisos"]))
@@ -3393,7 +3421,7 @@ class TesteEscritaRitmo(unittest.TestCase):
 
     def test_desfazer_com_send_que_nao_volta_guarda_o_send(self):
         m = self._motor()
-        m.escrever_ritmo("one_drop")
+        m.tocar_ritmo("one_drop")
         _rodar_ritmo(m)
         m.ritmo_diario["params"] = [("sd.dly", (156, 5, 1, 900), 0)]
         escrever = m._escrever
@@ -3408,7 +3436,7 @@ class TesteEscritaRitmo(unittest.TestCase):
     def test_desligar_no_meio_guarda_o_diario(self):
         m = self._motor()
         m.ESCRITAS_POR_TICK = 1
-        m.escrever_ritmo("steppers")
+        m.tocar_ritmo("steppers")
         while m.ritmo_estado["fase"] != "escrevendo" or m.ritmo_estado["feito"] < 3:
             m._andar_ritmo()
         m.soltar_maquina()
@@ -3437,7 +3465,7 @@ class TesteKitPC(unittest.TestCase):
         self.assertEqual(len(saida.bytes), 1)
         self.assertEqual(_escritas(m.maquina), [])           # nao passa pela serial
 
-    def test_auto_kit_manda_o_pc_do_ritmo_e_o_desfazer_volta(self):
+    def test_play_manda_o_pc_do_kit_sugerido_e_o_desfazer_volta(self):
         import ritmos
         tmp = tempfile.TemporaryDirectory()
         antes, motor.DIR_SESSOES = motor.DIR_SESSOES, tmp.name
@@ -3447,9 +3475,10 @@ class TesteKitPC(unittest.TestCase):
             saida = self._saida(m)
             m.x_kit = 44
             m.reler = lambda forcar=False: False             # sem o bloco 3 falso
-            m.escrever_ritmo("one_drop", auto_kit=True)
+            m.tocar_ritmo("one_drop")
             _rodar_ritmo(m)
-            self.assertEqual(saida.bytes, [[0xC0, ritmos.KIT_POR_NOME["TR-808-1000"]]])
+            sugerido = ritmos.KIT_POR_NOME[ritmos.POR_ID["one_drop"]["kit"]]
+            self.assertEqual(saida.bytes, [[0xC0, sugerido]])
             m.desfazer_ritmo()
             _rodar_ritmo(m)
             self.assertEqual(saida.bytes[-1], [0xC0, 44])
@@ -3461,16 +3490,18 @@ class TesteKitPC(unittest.TestCase):
         import servidor
         servidor.HOST.motor = m = motor_cru()
         try:
-            for nome, args in (("kit", {"n": 64}), ("kit", {"n": 128}), ("kit", {"n": -1}),
-                               ("ritmo", {"id": "nao_existe"})):
+            for nome, args in (("ritmo", {"id": "one_drop", "kit": 64}),
+                               ("ritmo", {"id": "one_drop", "kit": 128}),
+                               ("ritmo", {"id": "one_drop", "kit": -1}),
+                               ("ritmo", {"id": "nao_existe", "kit": 0})):
                 with self.subTest(nome=nome, args=args):
                     with self.assertRaises(ValueError):
                         servidor.ACOES[nome](args)
             self.assertTrue(m.fila_cmd.empty())
-            servidor.ACOES["kit"]({"n": 40})
-            servidor.ACOES["ritmo"]({"id": "one_drop", "auto_bpm": True})
+            servidor.ACOES["ritmo"]({"id": "one_drop", "kit": 40})
             servidor.ACOES["desfazer_ritmo"]({})
-            self.assertEqual(m.fila_cmd.qsize(), 3)
+            self.assertEqual(m.fila_cmd.qsize(), 2)
+            self.assertNotIn("kit", servidor.ACOES)
         finally:
             servidor.HOST.motor = None
 

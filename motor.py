@@ -87,10 +87,8 @@ PASSOS = 16
 DIR_SESSOES = os.path.expanduser("~/Library/Application Support/tr1000-sessoes")
 MAX_SESSOES = 200
 RELER_A_CADA = 0.5                                  # s
-# O x do KIT: nas capturas do App, bloco 3 [2] (pattern), [3] e [4] vieram
-# sempre iguais - e o x dos blocos de kit foi o mesmo. Qual deles e o kit e
-# DEDUCAO ([3]); com eles diferentes, os knobs de kit ficam parados em vez de
-# escrever num kit que talvez nao seja o que toca.
+# O x do KIT e o bloco 3 [2] (ts.OFF_KIT_ATUAL), o pattern o [3]: o PC de kit
+# de 15/10/2026 so mudou o [2] (REFERENCIA 7.10). Os tres so aparecem no log.
 OFFS_DO_KIT = (2, 3, 4)
 # O bloco de steps inteiro: os 64 slots e PROB/SUB/CYCLE/START (campos.py)
 N_SLOTS = ts.N_STEPS_BLOCO                          # 131
@@ -404,16 +402,17 @@ class Motor:
         novo = self._ler_variacao(x, self.variacao)
         cab = self._ler(ts.BLOCO_CAB_PATTERN, x, 0, *cs.faixa_do_bloco(ts.BLOCO_CAB_PATTERN, x, 0))
         acc = self._ler(ts.BLOCO_VAR0 + ts.BLOCOS_POR_VAR * self.variacao, x, 0, campos.INI_ACC, 1)[0]
-        kits = {b3[o] for o in OFFS_DO_KIT}
-        x_kit = kits.pop() if len(kits) == 1 else None
+        x_kit = b3[ts.OFF_KIT_ATUAL]
+        if not 0 <= x_kit < cs.N_PATTERNS:
+            x_kit = None
         if self.pickup is not None:
             if x != self.x_pattern or x_kit != self.x_kit:
                 self.pickup.soltar()                 # outro pattern/kit: pickup de novo
             else:
                 self.pickup.reconferir()             # o painel pode ter mexido
-        if x_kit != self.x_kit and x_kit is None:
-            self.log(f"(!) bloco 3 [2..4] = {[b3[o] for o in OFFS_DO_KIT]}: kit incerto, "
-                     "knobs de kit parados")
+        if x_kit != self.x_kit:
+            self.log(f"kit {'?' if x_kit is None else x_kit + 1} "
+                     f"(bloco 3 [2..4] = {[b3[o] for o in OFFS_DO_KIT]})")
         if x_kit != self.x_kit:
             self.kit_valores = {}                    # outro kit: lido de novo
             self.proximo_kit = 0.0
@@ -1516,7 +1515,10 @@ class Motor:
     ritmo_diario = None                         # o que o Desfazer reescreve
     FASES_OCUPADAS = ("foto", "kit", "lendo", "escrevendo", "desfazendo")
 
-    def escrever_ritmo(self, id, auto_bpm=False, auto_kit=False, mix=False):
+    def tocar_ritmo(self, id, kit_n=None):
+        """O Play da aba Ritmos (decisao do Luan, 15/10/2026): no pattern da
+        tela, o kit (o do ritmo, ou kit_n do menu), as variacoes e a chain, o
+        tempo e o mix. Sem Start: a maquina segue como esta."""
         if self.conexao is None or self.x_pattern is None:
             self.log("(!) ligue (ON) antes de escrever um ritmo")
             return
@@ -1524,9 +1526,11 @@ class Motor:
             self.log("(!) ja tem um ritmo sendo escrito")
             return
         r = ritmos.POR_ID[id]
+        if kit_n is None:
+            kit_n = ritmos.KIT_POR_NOME[r["kit"]]
         self.ritmo_estado = {"id": id, "nome": r["nome"], "fase": "foto", "feito": 0,
                              "total": 0, "avisos": []}
-        self.ritmo_passos = self._passos_do_ritmo(r, auto_bpm, auto_kit, mix)
+        self.ritmo_passos = self._passos_do_ritmo(r, kit_n)
 
     def desfazer_ritmo(self):
         if self.conexao is None:
@@ -1616,7 +1620,7 @@ class Motor:
             yield
         return True
 
-    def _passos_do_ritmo(self, r, auto_bpm, auto_kit, mix):
+    def _passos_do_ritmo(self, r, kit_n):
         est = self.ritmo_estado
         x = self.x_pattern
         # 1. a foto (so leitura, um JSON no app). Sem foto, nada e escrito
@@ -1638,18 +1642,18 @@ class Motor:
 
         def assumir():
             self.ritmo_diario = diario
-        # 2. o kit, antes: o mix e um parametro do kit que vai tocar
-        kit_ok = True
-        if auto_kit:
+        # 2. o kit, antes: o mix e um parametro do kit que vai tocar. Ja e esse:
+        # nada sai. O kit le-se no bloco 3 [2], que o PC muda sem mexer no
+        # pattern (15/10/2026)
+        kit_ok = self.x_kit == kit_n
+        if not kit_ok:
             est["fase"] = "kit"
-            alvo = ritmos.KIT_POR_NOME[r["kit"]]
             kit_antes = self.x_kit
-            if self.trocar_kit(alvo):
+            if self.trocar_kit(kit_n):
                 diario["kit"] = kit_antes
                 assumir()
                 if kit_antes is None:
-                    est["avisos"].append("o kit de antes era incerto (bloco 3 [2..4] "
-                                         "diferentes): o Desfazer nao volta o kit")
+                    est["avisos"].append("o kit de antes era desconhecido: o Desfazer nao volta o kit")
                 ate = time.time() + self.ESPERA_KIT
                 while time.time() < ate:
                     yield
@@ -1658,14 +1662,13 @@ class Motor:
                 except ERROS_DE_LEITURA as e:
                     self._ritmo_falhou(f"nao reli depois do kit: {e}")
                     return
-                if self.x_kit != alvo:
-                    kit_ok = False
+                kit_ok = self.x_kit == kit_n
+                if not kit_ok:
                     est["avisos"].append(
-                        f"o kit nao trocou para {r['kit']} (o motor le o kit "
-                        f"{'incerto' if self.x_kit is None else self.x_kit + 1}; Rx Program "
+                        f"o kit nao trocou para {ritmos.KITS[kit_n]} (o motor le o kit "
+                        f"{'?' if self.x_kit is None else self.x_kit + 1}; Rx Program "
                         "Change? Kit Ch.?) - o mix nao sera escrito")
             else:
-                kit_ok = False
                 est["avisos"].append("o Program Change do kit nao saiu (porta 'TR-1000'?) - "
                                      "o mix nao sera escrito")
         # 3. o que a maquina tem agora: as variacoes, o accent, o cabecalho
@@ -1684,20 +1687,20 @@ class Motor:
                 yield
             cab = self._ler(campos.CAB, x, 0, *cs.faixa_do_bloco(campos.CAB, x, 0))
             escritas = ritmos.escritas_do_ritmo(r, x, lidos, cab, grade)
-            if auto_bpm:
-                x100 = round(r["bpm"] * 100)
-                tempo_b3 = self._ler(campos.B3, 0, 0, campos.INI_B3 + campos.B3_TEMPO, 1)[0]
-                for bloco, xx, i, antigo in ((campos.CAB, x, campos.INI_CAB + campos.CAB_TEMPO,
-                                              cab[campos.CAB_TEMPO]),
-                                             (campos.B3, 0, campos.INI_B3 + campos.B3_TEMPO,
-                                              tempo_b3)):
-                    if antigo != x100:
-                        escritas.append(ritmos.Escrita(bloco, xx, 0, i, x100, antigo))
+            # o tempo: o do pattern e o atual, os dois que o knob TEMPO muda (c5d)
+            x100 = round(r["bpm"] * 100)
+            tempo_b3 = self._ler(campos.B3, 0, 0, campos.INI_B3 + campos.B3_TEMPO, 1)[0]
+            for bloco, xx, i, antigo in ((campos.CAB, x, campos.INI_CAB + campos.CAB_TEMPO,
+                                          cab[campos.CAB_TEMPO]),
+                                         (campos.B3, 0, campos.INI_B3 + campos.B3_TEMPO,
+                                          tempo_b3)):
+                if antigo != x100:
+                    escritas.append(ritmos.Escrita(bloco, xx, 0, i, x100, antigo))
         except ERROS_DE_LEITURA as e:
             self._ritmo_falhou(f"leitura falhou: {e} - nada escrito")
             return
         est["avisos"] = self._avisos_do_ritmo(lidos, acentos) + est["avisos"]
-        com_mix = bool(mix and r.get("mix"))
+        com_mix = bool(r.get("mix"))
         est["total"] = len(escritas) + (len(r["mix"]) if com_mix else 0)
         # 4. as escritas do pattern, so a diferenca
         est["fase"] = "escrevendo"
@@ -1709,9 +1712,7 @@ class Motor:
         # 5. o mix (os sends), com o valor de antes lido na hora
         n_mix = 0
         if com_mix:
-            if self.x_kit is None:
-                est["avisos"].append("kit incerto (bloco 3 [2..4] diferentes): o mix nao foi escrito")
-            elif not kit_ok:
+            if not kit_ok:
                 pass                                 # o aviso ja esta la
             else:
                 for id, valor in r["mix"].items():

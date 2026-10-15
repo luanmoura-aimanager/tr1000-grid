@@ -17,8 +17,9 @@ Convencoes:
   - Nao ha SHUFFLE gravavel. O swing de tercina sai da Scale 16th(T) com
     last 12 (12 steps = 2 tempos; a chain AB = 1 compasso), ou 8th(T) com
     last 12 (12 steps = 1 compasso).
-  - Kit: prefere os analogicos (TR-808-1000, TR-909-1000, os OG). Qual kit
-    da TR-1000 usa circuito analogico nao foi medido.
+  - Kit: o SUGERIDO, que o menu da aba troca. Desde 15/10/2026 (pedido do
+    Luan: mais kits que 808/909) sai da lista de 64 pelo NOME e pelo estilo,
+    sem ouvir; quem cita uma maquina na fonte (808, 909, 707...) fica com ela.
 
 REGGAE: tudo em MEIO-TEMPO (60..90 BPM), o compasso dos produtores e da
 notacao da Wikipedia (One drop rhythm: bd no 2 e no 4 a ♩ = 80). Nessa
@@ -35,7 +36,7 @@ RITMOS = [
     # ── ska ───────────────────────────────────────────────────────────
     {
         "id": "ska_knibb", "nome": "Ska (Lloyd Knibb)", "estilo": "ska",
-        "bpm": 120, "kit": "TR-808 OG 1",
+        "bpm": 120, "kit": "Backline Kit",
         "fonte": "Gil Sharone, Wicked Beats (Hudson Music, 2017), cap. Ska: cross-stick "
                  "com o bumbo no 2 e no 4, chimbal aberto em colcheia, pedal no 2 e no 4, "
                  "'swish' no 'a' do 2 e do 4; q = 110-136",
@@ -61,7 +62,7 @@ RITMOS = [
     },
     {
         "id": "ska_2tone", "nome": "2-Tone (ska de 1979)", "estilo": "ska",
-        "bpm": 150, "kit": "TR-909-1000",
+        "bpm": 150, "kit": "Backline Kit",
         "fonte": "conhecimento geral (Specials, Selecter, Madness); Wicked Beats tem o "
                  "capitulo 2-Tone - a celula: o ska com a pegada do punk",
         "obs": "o 2-Tone acelera o ska e poe a caixa cheia do rock no 2 e no 4",
@@ -82,7 +83,7 @@ RITMOS = [
     # ── rocksteady ────────────────────────────────────────────────────
     {
         "id": "rocksteady", "nome": "Rocksteady", "estilo": "rocksteady",
-        "bpm": 90, "kit": "TR-808 OG 1",
+        "bpm": 90, "kit": "Backline Kit",
         "fonte": "Wikipedia, Rocksteady ('rocksteady is really slow ska', Lynn Taitt; "
                  "Joe Isaacs e Winston Grennan); a celula: o ska mais lento, com o "
                  "bumbo migrando para o backbeat - o embriao do one drop (deduzido)",
@@ -103,7 +104,7 @@ RITMOS = [
     # ── one drop ──────────────────────────────────────────────────────
     {
         "id": "one_drop", "nome": "One drop (reto)", "estilo": "reggae",
-        "bpm": 76, "kit": "TR-808-1000",
+        "bpm": 76, "kit": "Backline Kit",
         "fonte": "Wikipedia, One drop rhythm (bumbo e cross-stick juntos, o 1 vazio; "
                  "chimbal em colcheia a q = 80); bonedo.de (Reggae am Schlagzeug: "
                  "chimbal acentuado no 2 e no 4)",
@@ -125,7 +126,7 @@ RITMOS = [
     },
     {
         "id": "one_drop_barrett", "nome": "One drop (Carlton Barrett, tercina)",
-        "estilo": "reggae", "bpm": 72, "kit": "TR-808-1000",
+        "estilo": "reggae", "bpm": 72, "kit": "Backline Kit",
         "scale": "16th(T)", "last": 12,
         "fonte": "Wikipedia, Carlton Barrett ('broken triplet' no chimbal; o one drop); "
                  "bonedo.de (colcheias 'geshuffelt'); Wicked Beats, cap. One Drop "
@@ -151,7 +152,7 @@ RITMOS = [
     },
     {
         "id": "half_drop", "nome": "Half drop", "estilo": "reggae",
-        "bpm": 70, "kit": "TR-808-1000",
+        "bpm": 70, "kit": "Backline Kit",
         "fonte": "dubroom.org (tutorial computer dub 05: steppers, one drop, two drop e "
                  "half drop - o bumbo so no 1 da contagem rapida, a caixa no 3); "
                  "dubroom 15 (o bumbo 1 7 8 9 e o chimbal fraco/forte)",
@@ -173,7 +174,7 @@ RITMOS = [
     # ── rockers / flying cymbal / steppers (Channel One, Bunny Lee) ───
     {
         "id": "rockers", "nome": "Rockers (Channel One)", "estilo": "reggae",
-        "bpm": 78, "kit": "TR-808-1000",
+        "bpm": 78, "kit": "Backline Kit",
         "fonte": "Wikipedia, One drop rhythm (rockers = o backbeat do one drop + bumbo "
                  "em cada tempo); Soundbrenner, Rockers rhythm; The Quietus/Reggaeville "
                  "(Sly Dunbar e os Revolutionaries no Channel One, 1975-76)",
@@ -195,7 +196,7 @@ RITMOS = [
     },
     {
         "id": "flying_cymbal", "nome": "Flying cymbal (Aggrovators)", "estilo": "reggae",
-        "bpm": 76, "kit": "TR-808 OG 2",
+        "bpm": 76, "kit": "Backline Kit",
         "fonte": "Wikipedia, Bunny Lee e Carlton 'Santa' Davis; FACT (2016) e Red Bull "
                  "Music Academy (2013): o chimbal aberto e fechado no contratempo, de "
                  "'None Shall Escape the Judgement' (Johnny Clarke, 1974); a origem no "
@@ -221,7 +222,7 @@ RITMOS = [
     },
     {
         "id": "steppers", "nome": "Steppers (Sly Dunbar)", "estilo": "reggae",
-        "bpm": 75, "kit": "TR-808-1000",
+        "bpm": 75, "kit": "Backline Kit",
         "fonte": "Wikipedia, One drop rhythm (steppers = o backbeat + bumbo em cada "
                  "colcheia); dubroom.org 05 (o bumbo nos quatro da contagem rapida); "
                  "Soundbrenner, Steppers rhythm; Reggaeville (Sly: o 'straight four')",
@@ -272,7 +273,7 @@ RITMOS = [
     # ── dub ───────────────────────────────────────────────────────────
     {
         "id": "dub_roots", "nome": "Dub roots (Tubby / Scientist)", "estilo": "dub",
-        "bpm": 72, "kit": "TR-808-1000",
+        "bpm": 72, "kit": "Dub Techno Kit",
         "fonte": "Wicked Beats, cap. Dub; attackmagazine.com (dub-style drum processing: "
                  "delay de fita e mola na caixa e no chimbal, o bumbo seco); MoPOP / "
                  "FACT (King Tubby: baixo e bateria em primeiro plano, eco e reverb)",
@@ -300,7 +301,7 @@ RITMOS = [
     },
     {
         "id": "dub_steppers", "nome": "Dub steppers", "estilo": "dub",
-        "bpm": 75, "kit": "TR-808 OG 3",
+        "bpm": 75, "kit": "Dub Techno Kit",
         "fonte": "attackmagazine.com (comeca de um steppers seco e manda delay e mola na "
                  "caixa e nos chimbais, o bumbo seco como ancora); dubroom 05",
         "obs": "'Mix dub' manda a caixa e o chimbal aberto para o delay",
@@ -320,7 +321,7 @@ RITMOS = [
     },
     {
         "id": "lovers_rock", "nome": "Lovers rock", "estilo": "reggae",
-        "bpm": 74, "kit": "TR-808 OG 2",
+        "bpm": 74, "kit": "Backline Kit",
         "fonte": "conhecimento geral (Londres, fim dos anos 70; Dennis Bovell): o one "
                  "drop de dinamica baixa, rim leve e chimbal mais cheio",
         "variacoes": {
@@ -340,7 +341,7 @@ RITMOS = [
     # ── nyabinghi ─────────────────────────────────────────────────────
     {
         "id": "nyabinghi", "nome": "Nyabinghi", "estilo": "nyabinghi",
-        "bpm": 128, "kit": "TR-808 OG 1",
+        "bpm": 128, "kit": "Backline Kit",
         "fonte": "Wikipedia, Nyabinghi rhythm (thunder: aberto no 1, abafado no 3; funde: "
                  "o pulso no 2 e no 4; repeater: sincopado em volta do 2 e do 4, "
                  "improvisando); Wicked Beats, cap. Nyabingi",
@@ -389,7 +390,7 @@ RITMOS = [
     },
     {
         "id": "dancehall_90s", "nome": "Dancehall (anos 90)", "estilo": "dancehall",
-        "bpm": 94, "kit": "TR-808-1000",
+        "bpm": 94, "kit": "Hard Perc Kit",
         "fonte": "DancehallMag, 'The Dancehall Drum Pattern, Explained' (2026): bumbo "
                  "1 4 9 12, rim nos contratempos, palma no 'e' do 2 e do 4, colcheias "
                  "no chimbal, 90-95 BPM",
@@ -411,7 +412,7 @@ RITMOS = [
     },
     {
         "id": "dem_bow_riddim", "nome": "Dem Bow (Poco Man Jam, 1990)", "estilo": "dancehall",
-        "bpm": 100, "kit": "TR-808 OG 1",
+        "bpm": 100, "kit": "Hard Perc Kit",
         "fonte": "DancehallMag (2026): o loop de dois compassos do Poco Man Jam (Steely "
                  "& Clevie) - bumbo no 1 e no 'e' do 2, caixa no 'e' do 1 e no 3; a "
                  "celula 3-3-2 que o reggaeton herdou (conhecimento geral)",
@@ -459,7 +460,7 @@ RITMOS = [
     },
     {
         "id": "deep_house", "nome": "Deep house", "estilo": "house",
-        "bpm": 122, "kit": "TR-909 OG 2",
+        "bpm": 122, "kit": "Aussie House Kit",
         "fonte": "tr8s-grid (deep_house); conhecimento geral (o rim sincopado do deep)",
         "obs": "auditoria: CH/OH tirados de cima um do outro",
         "variacoes": {
@@ -500,7 +501,7 @@ RITMOS = [
     },
     {
         "id": "jackin_house", "nome": "Jackin' house", "estilo": "house",
-        "bpm": 126, "kit": "TR-909-1000",
+        "bpm": 126, "kit": "Aussie House Kit",
         "fonte": "tr8s-grid (jackin_house); conhecimento geral (o 'jack' de Chicago: a "
                  "caixa fantasma na colcheia)",
         "variacoes": {
@@ -520,7 +521,7 @@ RITMOS = [
     # ── techno ────────────────────────────────────────────────────────
     {
         "id": "techno_pancada", "nome": "Techno reto", "estilo": "techno",
-        "bpm": 132, "kit": "TR-909-1000",
+        "bpm": 132, "kit": "Deep Techno Kit",
         "fonte": "tr8s-grid (techno_pancada); conhecimento geral",
         "obs": "auditoria: o CH em semicolcheia abre buraco onde o OH toca",
         "variacoes": {
@@ -566,7 +567,7 @@ RITMOS = [
     },
     {
         "id": "techno_hipnotico", "nome": "Techno hipnótico", "estilo": "techno",
-        "bpm": 134, "kit": "TR-909 OG 3",
+        "bpm": 134, "kit": "Deep Techno Kit",
         "fonte": "tr8s-grid (techno_hipnotico); conhecimento geral (rim em ciclo de 3 "
                  "contra o 4 do bumbo)",
         "variacoes": {
@@ -585,7 +586,7 @@ RITMOS = [
     },
     {
         "id": "techno_industrial", "nome": "Industrial", "estilo": "techno",
-        "bpm": 138, "kit": "TR-909-1000",
+        "bpm": 138, "kit": "Deep Techno Kit",
         "fonte": "tr8s-grid (techno_industrial); conhecimento geral",
         "obs": "port: o MT do tr8s virou HT",
         "variacoes": {
@@ -604,7 +605,7 @@ RITMOS = [
     },
     {
         "id": "tech_house", "nome": "Tech house", "estilo": "techno",
-        "bpm": 126, "kit": "TR-909 OG 2",
+        "bpm": 126, "kit": "Deep Techno Kit",
         "fonte": "tr8s-grid (tech_house); conhecimento geral",
         "variacoes": {
             "A": {"BD": "x...|x...|x...|x...",
@@ -626,7 +627,7 @@ RITMOS = [
     },
     {
         "id": "minimal", "nome": "Minimal", "estilo": "techno",
-        "bpm": 128, "kit": "606 Kit",
+        "bpm": 128, "kit": "Deep Techno Kit",
         "fonte": "tr8s-grid (minimal); conhecimento geral",
         "variacoes": {
             "A": {"BD": "x...|x...|x...|x...",
@@ -642,7 +643,7 @@ RITMOS = [
     },
     {
         "id": "dub_techno", "nome": "Dub techno", "estilo": "techno",
-        "bpm": 118, "kit": "TR-909 OG 2",
+        "bpm": 118, "kit": "Dub Techno Kit",
         "fonte": "tr8s-grid (dub_techno); conhecimento geral (Basic Channel / Chain "
                  "Reaction: o acorde e o eco fazem o groove)",
         "obs": "'Mix dub' manda o rim e o chimbal para o delay e o reverb - o dub "
@@ -725,7 +726,7 @@ RITMOS = [
     },
     {
         "id": "trap_meio_tempo", "nome": "Trap (meio tempo)", "estilo": "hip-hop",
-        "bpm": 140, "kit": "TR-808-1000",
+        "bpm": 140, "kit": "Lofi Kit",
         "fonte": "tr8s-grid (trap_meio_tempo); conhecimento geral",
         "obs": "os rolos de chimbal sao o SUB do step (o retrigger da maquina)",
         "variacoes": {
@@ -760,7 +761,7 @@ RITMOS = [
     },
     {
         "id": "dubstep_halftime", "nome": "Dubstep (meio tempo)", "estilo": "hip-hop",
-        "bpm": 140, "kit": "TR-808 OG 3",
+        "bpm": 140, "kit": "Downstep Life",
         "fonte": "tr8s-grid (dubstep_halftime); conhecimento geral (Skream/Benga/Mala: "
                  "140 com a caixa so no 3)",
         "obs": "o groove esta no que NAO toca - resistir a encher os vazios",
@@ -782,7 +783,7 @@ RITMOS = [
     # ── drum'n'bass / breakbeat ───────────────────────────────────────
     {
         "id": "dnb_twostep", "nome": "Two-step DnB", "estilo": "drum'n'bass",
-        "bpm": 174, "kit": "Jungle Kit",
+        "bpm": 174, "kit": "Glitchy DnB Kit",
         "fonte": "tr8s-grid (dnb_twostep); conhecimento geral",
         "variacoes": {
             "A": {"BD": "x...|....|..x.|....",
@@ -858,7 +859,7 @@ RITMOS = [
     },
     {
         "id": "big_beat", "nome": "Big beat", "estilo": "breakbeat",
-        "bpm": 120, "kit": "TR-909 OG 3",
+        "bpm": 120, "kit": "Uncut Rhythm Kit",
         "fonte": "tr8s-grid (big_beat); conhecimento geral (Chemical Brothers / Fatboy "
                  "Slim)",
         "variacoes": {
@@ -877,7 +878,7 @@ RITMOS = [
     # ── funk / disco / pop ────────────────────────────────────────────
     {
         "id": "funk_cold_sweat", "nome": "Funk (Cold Sweat)", "estilo": "funk",
-        "bpm": 108, "kit": "TR-909 OG 1",
+        "bpm": 108, "kit": "Uncut Rhythm Kit",
         "fonte": "bonedo.de, 'James Brown Cold Sweat' (Clyde Stubblefield): figura de "
                  "2 compassos - o 1 pesado; no 1o compasso a segunda caixa atrasada "
                  "uma colcheia; no 2o quase sem backbeat; o chimbal aberto por uma "
@@ -899,7 +900,7 @@ RITMOS = [
     },
     {
         "id": "disco", "nome": "Disco", "estilo": "disco",
-        "bpm": 118, "kit": "TR-909-1000",
+        "bpm": 118, "kit": "707 & 727 Kit",
         "fonte": "tr8s-grid (disco); conhecimento geral (o chimbal aberto no contratempo "
                  "da Philadelphia - a mesma raiz do flying cymbal)",
         "obs": "auditoria: CH/OH tirados de cima um do outro",
@@ -923,7 +924,7 @@ RITMOS = [
     },
     {
         "id": "pop_billie", "nome": "Pop reto (Billie Jean)", "estilo": "pop",
-        "bpm": 117, "kit": "TR-808 OG 2",
+        "bpm": 117, "kit": "707 & 727 Kit",
         "fonte": "tr8s-grid (pop_billie); conhecimento geral (LinnDrum, 1982: bumbo no "
                  "1 e no 3, caixa no 2 e no 4, chimbal em colcheia)",
         "variacoes": {
@@ -940,7 +941,7 @@ RITMOS = [
     },
     {
         "id": "neo_soul", "nome": "Neo-soul", "estilo": "r&b",
-        "bpm": 88, "kit": "TR-808 OG 2",
+        "bpm": 88, "kit": "Lofi Kit",
         "fonte": "tr8s-grid (neo_soul); conhecimento geral (o 'atras do tempo' do Dilla)",
         "obs": "o atraso do Dilla e o START do step: o B empurra a caixa e os fantasmas",
         "variacoes": {
@@ -958,7 +959,7 @@ RITMOS = [
     # ── latino / caribe ───────────────────────────────────────────────
     {
         "id": "reggaeton_dembow", "nome": "Reggaeton (dembow)", "estilo": "reggaeton",
-        "bpm": 95, "kit": "TR-808-1000",
+        "bpm": 95, "kit": "Hard Perc Kit",
         "fonte": "tr8s-grid (reggaeton_dembow); DancehallMag (2026): o Dem Bow do "
                  "Poco Man Jam, que o reggaeton herdou; conhecimento geral (bumbo nos "
                  "4, caixa no 3-3-2: 4 e 7 de cada metade)",
@@ -980,7 +981,7 @@ RITMOS = [
     },
     {
         "id": "dembow_cru", "nome": "Dembow dominicano", "estilo": "reggaeton",
-        "bpm": 115, "kit": "TR-808 OG 1",
+        "bpm": 115, "kit": "Hard Perc Kit",
         "fonte": "tr8s-grid (dembow_cru); conhecimento geral (o dembow dominicano, mais "
                  "seco e rapido que o reggaeton)",
         "variacoes": {
@@ -999,7 +1000,7 @@ RITMOS = [
     # ── brasil ────────────────────────────────────────────────────────
     {
         "id": "funk_tamborzao", "nome": "Funk carioca (tamborzão)", "estilo": "funk brasileiro",
-        "bpm": 130, "kit": "TR-808-1000", "scale": "8th(T)", "last": 12,
+        "bpm": 130, "kit": "808 Kit", "scale": "8th(T)", "last": 12,
         "fonte": "tr8s-grid (funk_tamborzao); Caceres & Ferrari (RIEB/USP: Volt Mix nos "
                  "90, tamborzao 2000-2009, beatbox de 2010); Loopcloud (~130 BPM). A "
                  "celula em tercina e do tr8s - NAO conferida em transcricao",
@@ -1037,7 +1038,7 @@ RITMOS = [
     },
     {
         "id": "samba_batucada", "nome": "Samba (batucada)", "estilo": "samba",
-        "bpm": 100, "kit": "727 Kit 1",
+        "bpm": 100, "kit": "727 Kit 2",
         "fonte": "tr8s-grid (samba_batucada); conhecimento geral (surdo de primeira no "
                  "2, de segunda marcando o 1; caixa em semicolcheia)",
         "obs": "port: surdo no BD (marcacao fraca no 1 e 3, resposta forte no 2 e 4), "
@@ -1060,7 +1061,7 @@ RITMOS = [
     },
     {
         "id": "samba_reggae", "nome": "Samba-reggae", "estilo": "samba",
-        "bpm": 96, "kit": "TR-808 OG 1",
+        "bpm": 96, "kit": "727 Kit 2",
         "fonte": "tr8s-grid (samba_reggae); conhecimento geral (Neguinho do Samba / "
                  "Olodum, Salvador, anos 80)",
         "variacoes": {
@@ -1081,7 +1082,7 @@ RITMOS = [
     },
     {
         "id": "partido_alto", "nome": "Partido alto", "estilo": "samba",
-        "bpm": 100, "kit": "727 Kit 1",
+        "bpm": 100, "kit": "727 Kit 2",
         "fonte": "tr8s-grid (partido_alto); conhecimento geral (a figura do partido alto "
                  "no tamborim/pandeiro, surdo no 2 e no 4, palmas de roda)",
         "variacoes": {
@@ -1099,7 +1100,7 @@ RITMOS = [
     },
     {
         "id": "bossa_nova", "nome": "Bossa nova", "estilo": "bossa nova",
-        "bpm": 132, "kit": "TR-808 OG 2",
+        "bpm": 132, "kit": "727 Kit 2",
         "fonte": "tr8s-grid (bossa_nova); conhecimento geral (a clave da bossa no rim - "
                  "1 4 7 11 14 -, o surdo pontuado no bumbo)",
         "variacoes": {
@@ -1117,7 +1118,7 @@ RITMOS = [
     },
     {
         "id": "baiao", "nome": "Baião", "estilo": "forró",
-        "bpm": 104, "kit": "TR-808 OG 1",
+        "bpm": 104, "kit": "727 Kit 2",
         "fonte": "tr8s-grid (baiao); ANPPOM 2018 (o triangulo em semicolcheia "
                  "acentuando o contratempo; zabumba nos graves, celula em 2/4: "
                  "colcheia pontuada + semicolcheia); Soundbrenner, Baião",
@@ -1139,7 +1140,7 @@ RITMOS = [
     },
     {
         "id": "xote", "nome": "Xote", "estilo": "forró",
-        "bpm": 92, "kit": "TR-808 OG 1",
+        "bpm": 92, "kit": "727 Kit 2",
         "fonte": "tr8s-grid (xote); conhecimento geral",
         "variacoes": {
             "A": {"BD": "x...|...o|x...|...o",
@@ -1154,7 +1155,7 @@ RITMOS = [
     },
     {
         "id": "maracatu", "nome": "Maracatu (baque virado)", "estilo": "maracatu",
-        "bpm": 105, "kit": "TR-808 OG 3",
+        "bpm": 105, "kit": "727 Kit 2",
         "fonte": "tr8s-grid (maracatu); conhecimento geral (alfaias, caixa e gongue do "
                  "baque virado, simplificados ao que cabe em 16)",
         "obs": "alfaias no BD/LT (tune grave, decay longo), gongue no RS",
@@ -1177,7 +1178,7 @@ RITMOS = [
     },
     {
         "id": "frevo", "nome": "Frevo", "estilo": "frevo",
-        "bpm": 152, "kit": "TR-808 OG 2",
+        "bpm": 152, "kit": "727 Kit 2",
         "fonte": "tr8s-grid (frevo); conhecimento geral (a caixa no 3+3+2 dobrado, o "
                  "surdo empurrando a virada do tempo)",
         "variacoes": {
@@ -1194,7 +1195,7 @@ RITMOS = [
     },
     {
         "id": "ijexa", "nome": "Ijexá (afoxé)", "estilo": "afoxé",
-        "bpm": 96, "kit": "727 Kit 1",
+        "bpm": 96, "kit": "727 Kit 2",
         "fonte": "tr8s-grid (ijexa); Per Musi/UFMG e ANPPOM 2018 (o agogo/ga e a linha "
                  "guia; rumpi e le repetem a base, o rum improvisa por cima)",
         "obs": "port: o MT do tr8s virou LT (rumpi/le); agogo no RS, xequere no CH, rum "
@@ -1216,7 +1217,7 @@ RITMOS = [
     },
     {
         "id": "coco", "nome": "Coco", "estilo": "coco",
-        "bpm": 104, "kit": "727 Kit 1",
+        "bpm": 104, "kit": "727 Kit 2",
         "fonte": "tr8s-grid (coco); conhecimento geral (o ganza carrega o coco)",
         "variacoes": {
             "A": {"BD": "x...|..x.|..x.|....",
@@ -1234,7 +1235,7 @@ RITMOS = [
     },
     {
         "id": "carimbo", "nome": "Carimbó", "estilo": "carimbó",
-        "bpm": 110, "kit": "727 Kit 1",
+        "bpm": 110, "kit": "727 Kit 2",
         "fonte": "tr8s-grid (carimbo); conhecimento geral (curimbo grave pergunta, o "
                  "medio responde; milheiro em semicolcheia)",
         "obs": "port: o MT do tr8s virou HT",
@@ -1256,7 +1257,7 @@ RITMOS = [
     # ── africa ────────────────────────────────────────────────────────
     {
         "id": "afrobeat", "nome": "Afrobeat (Tony Allen)", "estilo": "afrobeat",
-        "bpm": 110, "kit": "TR-808 OG 2",
+        "bpm": 110, "kit": "Hard Perc Kit",
         "fonte": "tr8s-grid (afrobeat); conhecimento geral (Tony Allen simplificado ao "
                  "que cabe em 16: o sino no ride, o bumbo conversando com a caixa)",
         "variacoes": {
@@ -1274,7 +1275,7 @@ RITMOS = [
     },
     {
         "id": "gqom", "nome": "Gqom", "estilo": "afro / sul-africano",
-        "bpm": 124, "kit": "TR-808-1000",
+        "bpm": 124, "kit": "Hard Perc Kit",
         "fonte": "tr8s-grid (gqom); conhecimento geral (Durban: o vazio no 1, o peso na "
                  "sincopa e nos toms)",
         "variacoes": {
@@ -1293,7 +1294,7 @@ RITMOS = [
     },
     {
         "id": "amapiano", "nome": "Amapiano", "estilo": "afro / sul-africano",
-        "bpm": 112, "kit": "TR-808 OG 1",
+        "bpm": 112, "kit": "Hard Perc Kit",
         "fonte": "tr8s-grid (amapiano); conhecimento geral (o log drum sincopado; o "
                  "shaker e o rim andando)",
         "obs": "o log drum e um tom de bumbo grave com pitch: afinar o BD (ou usar o LT) "
@@ -1315,7 +1316,7 @@ RITMOS = [
     # ── garage / footwork ─────────────────────────────────────────────
     {
         "id": "garage_2step", "nome": "UK garage (2-step)", "estilo": "garage",
-        "bpm": 132, "kit": "TR-909 OG 2",
+        "bpm": 132, "kit": "Westend Kit",
         "fonte": "tr8s-grid (garage_2step); conhecimento geral (o bumbo que pula o 3 e o "
                  "chimbal saltado)",
         "variacoes": {
@@ -1334,7 +1335,7 @@ RITMOS = [
     },
     {
         "id": "footwork", "nome": "Footwork", "estilo": "footwork",
-        "bpm": 160, "kit": "TR-808-1000",
+        "bpm": 160, "kit": "808 Kit",
         "fonte": "tr8s-grid (footwork); conhecimento geral (Chicago: os toms em tercina)",
         "obs": "os toms em tercina sao o SUB 1/3",
         "variacoes": {
@@ -1355,7 +1356,7 @@ RITMOS = [
     # ── rock ──────────────────────────────────────────────────────────
     {
         "id": "punk_dbeat", "nome": "Punk (d-beat)", "estilo": "rock",
-        "bpm": 180, "kit": "TR-909 OG 1",
+        "bpm": 180, "kit": "Regular Kit",
         "fonte": "Wikipedia, D-beat (Discharge, 1982; a grade de 16 em colcheias: bumbo "
                  "1 4 6, caixa 3 7 - aqui em semicolcheia, 1 compasso = 2 da grade)",
         "obs": "auditoria: o tr8s tinha o bumbo e a caixa juntos no 7 e no 15; a celula "
@@ -1374,7 +1375,7 @@ RITMOS = [
     },
     {
         "id": "rock_basico", "nome": "Rock de garagem", "estilo": "rock",
-        "bpm": 132, "kit": "TR-909 OG 1",
+        "bpm": 132, "kit": "Regular Kit",
         "fonte": "tr8s-grid (rock_basico); conhecimento geral",
         "variacoes": {
             "A": {"BD": "x...|...x|x...|....",
@@ -1394,7 +1395,7 @@ RITMOS = [
     # ── trance / psy ──────────────────────────────────────────────────
     {
         "id": "trance_uplifting", "nome": "Trance (uplifting)", "estilo": "trance",
-        "bpm": 138, "kit": "TR-909-1000",
+        "bpm": 138, "kit": "Trance Kit",
         "fonte": "tr8s-grid (trance_uplifting); conhecimento geral",
         "variacoes": {
             "A": {"BD": "X...|X...|X...|X...",
@@ -1414,7 +1415,7 @@ RITMOS = [
     },
     {
         "id": "trance_progressive", "nome": "Trance (progressive)", "estilo": "trance",
-        "bpm": 132, "kit": "TR-909 OG 2",
+        "bpm": 132, "kit": "Trance Kit",
         "fonte": "tr8s-grid (trance_progressive); conhecimento geral",
         "variacoes": {
             "A": {"BD": "x...|x...|x...|x...",
@@ -1434,7 +1435,7 @@ RITMOS = [
     },
     {
         "id": "psy_fullon", "nome": "Psytrance (full-on)", "estilo": "psytrance",
-        "bpm": 145, "kit": "TR-909-1000",
+        "bpm": 145, "kit": "Trance Kit",
         "fonte": "tr8s-grid (psy_fullon); conhecimento geral (o grave no contratempo e "
                  "o baixo, nao a bateria)",
         "variacoes": {
@@ -1453,7 +1454,7 @@ RITMOS = [
     },
     {
         "id": "psy_prog", "nome": "Psytrance (progressivo)", "estilo": "psytrance",
-        "bpm": 140, "kit": "TR-909 OG 1",
+        "bpm": 140, "kit": "Trance Kit",
         "fonte": "tr8s-grid (psy_prog); conhecimento geral",
         "variacoes": {
             "A": {"BD": "x...|x...|x...|x...",
@@ -1471,7 +1472,7 @@ RITMOS = [
     # ── ambient ───────────────────────────────────────────────────────
     {
         "id": "ambient_mare", "nome": "Ambient (maré)", "estilo": "ambient",
-        "bpm": 76, "kit": "TR-808 OG 3",
+        "bpm": 76, "kit": "Ground Swell",
         "fonte": "tr8s-grid (ambient_mare)",
         "obs": "reverb e delay altos (o 'Mix dub' faz isso) - o espaco e o instrumento",
         "variacoes": {
@@ -1491,7 +1492,7 @@ RITMOS = [
     },
     {
         "id": "ambient_pulso", "nome": "Ambient (pulso)", "estilo": "ambient",
-        "bpm": 90, "kit": "TR-808 OG 2",
+        "bpm": 90, "kit": "Ground Swell",
         "fonte": "tr8s-grid (ambient_pulso)",
         "variacoes": {
             "A": {"BD": "x...|....|x...|....",
@@ -1558,7 +1559,7 @@ RITMOS = [
     },
     {
         "id": "cumbia", "nome": "Cumbia", "estilo": "latino",
-        "bpm": 92, "kit": "727 Kit 1",
+        "bpm": 92, "kit": "727 Kit 2",
         "fonte": "Wikipedia, Güira (o 'golpe'/galope da cumbia: escovada no tempo com o "
                  "'e-a' antes; guiro de cabaca ou guira de metal); jamzone.musicwill "
                  "(comecar a 60-70 e subir a 88). Bumbo e conga: conhecimento geral",
@@ -1582,7 +1583,7 @@ RITMOS = [
     },
     {
         "id": "italo_disco", "nome": "Italo disco / hi-NRG", "estilo": "disco",
-        "bpm": 124, "kit": "TR-808-1000",
+        "bpm": 124, "kit": "707 & 727 Kit",
         "fonte": "conhecimento geral (anos 80: bumbo nos 4, palma/caixa no 2 e no 4, "
                  "aberto no contratempo, o baixo em oitavas em colcheia faz o resto)",
         "variacoes": {
@@ -1603,7 +1604,7 @@ RITMOS = [
     },
     {
         "id": "ebm", "nome": "EBM", "estilo": "techno",
-        "bpm": 124, "kit": "TR-909 OG 3",
+        "bpm": 124, "kit": "Deep Techno Kit",
         "fonte": "conhecimento geral (DAF, Front 242, Nitzer Ebb: bumbo reto, caixa "
                  "pesada no 2 e no 4; o sequenciador de baixo em semicolcheia e o motor)",
         "variacoes": {
@@ -1641,7 +1642,7 @@ RITMOS = [
     },
     {
         "id": "motorik", "nome": "Motorik (krautrock)", "estilo": "rock",
-        "bpm": 148, "kit": "TR-808 OG 1",
+        "bpm": 148, "kit": "Regular Kit",
         "fonte": "conhecimento geral (Klaus Dinger, Neu! 'Hallogallo', 1972: a batida "
                  "reta e sem fim - colcheias no chimbal, caixa no 2 e no 4, o bumbo "
                  "empurrando o 3)",
@@ -1660,7 +1661,7 @@ RITMOS = [
     },
     {
         "id": "new_jack_swing", "nome": "New jack swing", "estilo": "r&b",
-        "bpm": 104, "kit": "TR-808-1000", "scale": "16th(T)", "last": 12,
+        "bpm": 104, "kit": "Lofi Kit", "scale": "16th(T)", "last": 12,
         "fonte": "conhecimento geral (Teddy Riley, fim dos 80: semicolcheias swingadas, "
                  "caixa e palma secas no 2 e no 4, bumbo sincopado)",
         "obs": "Scale 16th(T), last 12: 6 steps por tempo, cada variacao e MEIO "
@@ -1680,7 +1681,7 @@ RITMOS = [
     },
     {
         "id": "afrobeats", "nome": "Afrobeats (Lagos)", "estilo": "afro / sul-africano",
-        "bpm": 106, "kit": "TR-808 OG 2",
+        "bpm": 106, "kit": "Hard Perc Kit",
         "fonte": "conhecimento geral (o afrobeats nigeriano dos anos 2010: bumbo em "
                  "tresillo, rim no contratempo, shaker em semicolcheia, palma no 2 e "
                  "no 4) - nao conferido em transcricao",
@@ -1701,7 +1702,7 @@ RITMOS = [
     },
     {
         "id": "afro_house", "nome": "Afro house", "estilo": "afro / sul-africano",
-        "bpm": 122, "kit": "TR-909 OG 2",
+        "bpm": 122, "kit": "Hard Perc Kit",
         "fonte": "conhecimento geral (bumbo reto, shaker em semicolcheia, congas "
                  "sincopadas e o rim em tresillo)",
         "variacoes": {
@@ -1740,7 +1741,7 @@ RITMOS = [
     },
     {
         "id": "hardstyle", "nome": "Hardstyle", "estilo": "hardcore",
-        "bpm": 150, "kit": "TR-909-1000",
+        "bpm": 150, "kit": "HardTechnoKit",
         "fonte": "conhecimento geral (bumbo reto com cauda; a 'reverse bass' no "
                  "contratempo e o sintetizador)",
         "variacoes": {

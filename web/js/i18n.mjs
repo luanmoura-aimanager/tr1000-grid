@@ -140,20 +140,15 @@ const EN = {
   escrita: "writing",
   kit: "kit",
   fonte: "source",
-  Escrever: "Write",
-  "Confirmar?": "Confirm?",
-  Desfazer: "Undo",
-  "Auto BPM": "Auto BPM",
-  "Auto kit": "Auto kit",
-  "Mix dub": "Dub mix",
+  Play: "Play",
+  Restaurar: "Restore",
+  sugerido: "suggested",
   "Escolha um ritmo na lista.": "Pick a rhythm from the list.",
   "nenhum ritmo com esse filtro": "no rhythm matches this filter",
   "filtrar (nome, estilo, kit)": "filter (name, style, kit)",
   "nada escrito ainda": "nothing written yet",
-  "Program Change no Kit Ch. 1 (não medido: ROTEIRO-F5)":
-    "Program Change on Kit Ch. 1 (not measured: ROTEIRO-F5)",
-  "Escreve as variações e a chain no pattern da tela (só na memória: o WRITE é no painel). Antes, a foto da sessão vai para o app; o Desfazer devolve o que estava.":
-    "Writes the variations and the chain into the pattern on screen (memory only: WRITE is on the panel). Before that, the session snapshot goes to the app; Undo brings back what was there.",
+  "O Play escreve no pattern da tela as variações e a chain, o BPM, o kit e o mix (só na memória: o WRITE é no painel). Antes, a foto da sessão vai para o app; o Restaurar devolve o que estava.":
+    "Play writes the variations and the chain, the BPM, the kit and the mix into the pattern on screen (memory only: WRITE is on the panel). Before that, the session snapshot goes to the app; Restore brings back what was there.",
   "Nenhum ritmo foi ouvido na TR-1000 ainda: a fonte de cada um está no ritmo, e o som é o ROTEIRO-F5.":
     "No rhythm has been heard on the TR-1000 yet: each one carries its source, and the sound check is ROTEIRO-F5.",
   "tirando a foto da sessão…": "taking the session snapshot…",
@@ -210,6 +205,10 @@ const LOG_EN = [
   [
     /^(\S+ )?kit (\d+) (.*) pedido \(Program Change (\d+), canal (\d+)\)$/,
     "$1kit $2 $3 requested (Program Change $4, channel $5)",
+  ],
+  [
+    /^(\S+ )?kit (\S+) \(bloco 3 \[2\.\.4\] = (.*)\)$/,
+    "$1kit $2 (block 3 [2..4] = $3)",
   ],
   [/^(\S+ )?ritmo (.*) desfeito$/, "$1rhythm $2 undone"],
   [/^(\S+ )?ritmo (.*) escrito no (\S+): (\d+) escritas \((\d+) de mix\)$/,

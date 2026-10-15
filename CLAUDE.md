@@ -66,14 +66,20 @@ grid — escreve na máquina. **Toda saída da serial passa por um único portã
   - o **Program Change do PTN** digitado na tela (`motor.trocar_pattern`, Pattern
     Ch. 10), pedido do Luan em 12/10/2026. Só sai com o Luan digitando, nunca sozinho;
   - o **Program Change do KIT** (`motor.trocar_kit`, Kit Ch. 1, só índice de kit com
-    nome em `ritmos.KITS`), aprovado pelo Luan em 13/10/2026 para a aba Ritmos. Sai no
-    botão Kit ou no "Auto kit" ligado. **Não medido** até o ROTEIRO-F5: o número do kit,
-    o canal e o efeito no bloco 3 [2..4].
+    nome em `ritmos.KITS`), aprovado pelo Luan em 13/10/2026 para a aba Ritmos. Sai só no
+    **▶ Play** da aba, com o kit do menu, e no Restaurar. Medido em 15/10/2026: muda só o
+    bloco 3 `[2]` (o kit), e o pattern tocando fica (REFERENCIA 7.10). O número do kit
+    segue **não medido** até o ROTEIRO-F5.
 - **A aba Ritmos** (`ritmos.py` + `biblioteca.py`) escreve só o que a regra acima já
-  permite: steps, campos do step, cabeçalho, tempo e os sends (`*.rvb`, `*.dly`). A
-  escrita anda aos pedaços, depois da foto da sessão, e guarda um diário para o
-  **Desfazer**, a primeira restauração do projeto (decisão do Luan, 13/10/2026). Um
-  valor antigo que o portão recusa não volta: o Desfazer avisa.
+  permite: steps, campos do step, cabeçalho, tempo e os sends (`*.rvb`, `*.dly`). Desde
+  15/10/2026 é um **▶ Play** só (`motor.tocar_ritmo`): no pattern da tela, o kit, as
+  variações e a chain, sempre o tempo e o mix do ritmo; **sem Start**. A escrita anda aos
+  pedaços, depois da foto da sessão, e guarda um diário para o **Restaurar**, a primeira
+  restauração do projeto (decisão do Luan, 13/10/2026). Um valor antigo que o portão
+  recusa não volta: o Restaurar avisa.
+- **O bloco 3:** o `[3]` é o pattern e o `[2]` o kit (`OFF_PATTERN_GLOBAL`,
+  `OFF_KIT_ATUAL`). Até 15/10/2026 o código lia o pattern no `[2]`; os dois só diferem
+  depois de um PC de kit (REFERENCIA 7.10).
 - Fora isso, só o aperto de mão.
 - **Quem escreve é o Luan:** o grid só escreve quando ele aperta um pad ou gira um knob; o
   `sessao_c3.py` só com `sim`/`--sim` digitado por ele. **O agente nunca roda uma
