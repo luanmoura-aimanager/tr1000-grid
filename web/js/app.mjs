@@ -9,8 +9,9 @@ import pattern from "./abas/pattern.mjs";
 import mixer from "./abas/mixer.mjs";
 import efeitos from "./abas/efeitos.mjs";
 import ritmos from "./abas/ritmos.mjs";
+import guia from "./abas/guia.mjs";
 
-const ABAS = [pattern, mixer, efeitos, ritmos];
+const ABAS = [pattern, mixer, efeitos, ritmos, guia];
 const ESTADO_A_CADA = 250; // ms
 const N_AH = 8; // A..H
 

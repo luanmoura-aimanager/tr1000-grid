@@ -50,7 +50,7 @@ python3 criar_app.py            # "TR-1000 Controller.app" no Desktop
 
 No Safari, abra `http://127.0.0.1:8734/` e use **Arquivo › Adicionar ao Dock**.
 
-- **Quatro abas:**
+- **Cinco abas:**
   - **Pattern**, com o que era a Performance: variações edita / toca / fill, STEP LOOP,
     Scale e FIRST/LAST;
   - **Mixer**;
@@ -60,6 +60,10 @@ No Safari, abra `http://127.0.0.1:8734/` e use **Arquivo › Adicionar ao Dock**
     dos 64. O **▶ Play** escreve no pattern da tela o kit, as variações e a chain, o BPM e
     o mix, depois da foto da sessão; o **Restaurar** devolve o que estava. Nada disso foi
     ouvido na máquina ainda: é o `ROTEIRO-F5.md`.
+  - **Guia:** como usar os dois Launchpads, numa bancada que simula as páginas Steps, PAR,
+    PERF, ROUT e o standby, com a ficha de cada botão, as cores, as bordas por página, os
+    "menus secretos" e o que foi testado. É só simulação: **não escreve na máquina**
+    (`TesteGuia`). Os textos em PT e EN estão no `web/js/guia_textos.mjs`.
 - **PT | EN** no topo troca a língua da tela.
 - **PTN:** clique e digite outro pattern (`1-05`). Vai por Program Change, e só foi testado
   no `ROTEIRO-F4.md`.

@@ -1,0 +1,76 @@
+/* guia.css - a aba Guia (guia.mjs). Os tokens sao os do app.css; as classes
+ * levam "g-" para nao colidir com .cel, .mute e a grade da aba Pattern. Os
+ * aparelhos sao desenhados como na mesa: o esquerdo girado 90 graus. */
+.g-topo{ display:grid; gap:var(--e2); }
+.g-eyebrow{ font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--fraco); }
+.g-titulo{ margin:0; font-size:26px; font-weight:800; letter-spacing:.02em; }
+.g-lede{ margin:0; max-width:80ch; color:var(--tinta2); font-size:14px; }
+.g-passos{ display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:var(--e3); }
+.g-passo{ display:grid; gap:var(--e1); align-content:start; }
+.g-passo p{ margin:0; color:var(--tinta2); }
+.g-n{ font-size:11px; font-weight:700; letter-spacing:.08em; color:var(--acento); }
+
+/* ── a bancada ────────────────────────────────────────── */
+.g-bancada{ display:grid; grid-template-columns:minmax(0, auto) minmax(240px, 1fr); gap:var(--e4); align-items:start; }
+@media (max-width:1040px){ .g-bancada{ grid-template-columns:1fr; } }
+.g-aparelhos{ display:flex; flex-wrap:wrap; gap:var(--e4); }
+.g-unidade{ display:grid; gap:var(--e2); }
+.g-lp{ --c:30px; background:#0a0b0c; border:1px solid #2b2f33; border-radius:14px; padding:12px 12px 10px;
+       display:grid; grid-template-columns:repeat(9, var(--c)); grid-auto-rows:var(--c); gap:5px; }
+@media (max-width:380px){ .g-lp{ --c:26px; gap:4px; padding:10px 10px 8px; } }
+.g-cel{ all:unset; box-sizing:border-box; width:var(--c); height:var(--c); display:grid; place-items:center;
+        font:600 8px/1.05 var(--f-mono); text-align:center; overflow:hidden; white-space:pre-line;
+        cursor:pointer; user-select:none; -webkit-user-select:none; touch-action:manipulation; }
+.g-pad{ border-radius:4px; background:#1f2225; }
+.g-bt{ border-radius:3px; background:#2d3135; width:calc(var(--c) - 4px); height:calc(var(--c) - 4px);
+       justify-self:center; align-self:center; font-size:7px; }
+.g-logo{ border-radius:3px; border:1px dashed #2d3135; color:#8d979d; width:calc(var(--c) - 4px);
+         height:calc(var(--c) - 4px); justify-self:center; align-self:center; font-size:7px; }
+.g-apagado{ color:#8d979d; }
+.g-cel:focus-visible{ outline:2px solid var(--acento); outline-offset:2px; }
+.g-cel[data-sel]{ box-shadow:0 0 0 2px #ffd23f, 0 0 10px 2px rgba(255,210,63,.45); }
+.g-step{ height:18px; width:calc(var(--c) - 2px); justify-self:center; background:#000; color:#fff;
+         font-size:11px; font-weight:600; line-height:18px; text-align:center; border-radius:2px; }
+.g-rot{ font-size:11px; color:var(--fraco); text-align:center; }
+.g-ficha{ background:var(--painel2); border:1px solid var(--linha2); border-radius:var(--r2); padding:var(--e3) var(--e4);
+          display:grid; gap:var(--e2); align-content:start; position:sticky; top:96px; min-width:0; }
+@media (max-width:1040px){ .g-ficha{ position:static; } }
+.g-ficha h3{ margin:0; font-size:18px; }
+.g-onde{ font-size:11px; color:var(--fraco); }
+.g-desc{ display:grid; gap:var(--e2); }
+.g-desc p{ margin:0; color:var(--tinta2); font-size:13.5px; max-width:70ch; }
+
+/* ── o status: testado / em parte / nao testado ───────── */
+.g-pill{ justify-self:start; align-self:start; font:600 10px var(--f-mono); letter-spacing:.04em; padding:2px 8px;
+         border-radius:999px; border:1px solid currentColor; white-space:nowrap; }
+.g-pill[data-s="ok"]{ color:var(--ok); }
+.g-pill[data-s="part"]{ color:var(--c-acc); }
+.g-pill[data-s="no"]{ color:var(--erro); }
+
+/* ── cores, mapa, segredos, testado ───────────────────── */
+.g-legenda{ display:grid; grid-template-columns:repeat(auto-fill, minmax(230px, 1fr)); gap:var(--e2) var(--e4); }
+.g-grupo-cor{ display:grid; gap:var(--e2); }
+.g-grupo-cor + .g-grupo-cor{ padding-top:var(--e3); border-top:1px solid var(--linha); }
+.g-grupo-cor h3{ margin:0; font-size:13px; color:var(--tinta); }
+.g-amostra{ display:flex; align-items:flex-start; gap:9px; color:var(--tinta2); min-width:0; }
+.g-cores{ flex:none; display:flex; gap:2px; padding-top:2px; }
+.g-cores i{ width:16px; height:16px; border-radius:3px; border:1px solid var(--linha2); }
+.g-cores i + i{ width:8px; }
+.g-tabela{ overflow-x:auto; }
+.g-tabela table{ border-collapse:collapse; width:100%; min-width:720px; }
+.g-tabela th, .g-tabela td{ text-align:left; padding:8px 10px; border-bottom:1px solid var(--linha); vertical-align:top; color:var(--tinta2); }
+.g-tabela th{ font:600 11px var(--f-mono); letter-spacing:.06em; text-transform:uppercase; color:var(--fraco); }
+.g-tabela td:first-child{ color:var(--tinta); font-weight:600; white-space:nowrap; }
+.g-tabela tr:last-child td{ border-bottom:0; }
+.g-cc{ display:block; font-size:10px; font-weight:400; color:var(--fraco); }
+.g-segredos{ display:grid; grid-template-columns:repeat(auto-fill, minmax(280px, 1fr)); gap:var(--e3); }
+.g-segredo{ background:var(--painel2); border:1px solid var(--linha); border-radius:var(--r2); padding:var(--e3);
+            display:grid; gap:var(--e2); grid-template-rows:auto auto 1fr auto; }
+.g-segredo-topo{ display:flex; justify-content:space-between; align-items:center; gap:var(--e2); }
+.g-segredo-topo .g-onde{ color:var(--acento); text-transform:uppercase; letter-spacing:.06em; }
+.g-segredo h3{ margin:0; font-size:14px; }
+.g-segredo p{ margin:0; color:var(--tinta2); }
+.g-segredo .bt{ justify-self:start; }
+.g-teste{ display:grid; gap:var(--e2); align-content:start; }
+.g-teste ul{ margin:0; padding-left:18px; display:grid; gap:6px; color:var(--tinta2); }
+@media (prefers-reduced-motion:no-preference){ .g-cel{ transition:background-color .12s ease; } }

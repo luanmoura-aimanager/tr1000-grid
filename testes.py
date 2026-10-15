@@ -2007,12 +2007,91 @@ class TesteFase2b(unittest.TestCase):
                     fonte += f.read()
         usadas = set(re.findall(r'\bt\(\s*"((?:[^"\\]|\\.)*)"', fonte)) | \
             set(re.findall(r"\bt\(\s*'((?:[^'\\]|\\.)*)'", fonte)) | \
-            set(re.findall(r'data-t="([^"]+)"', fonte)) | {"Pattern", "Mixer", "Efeitos"}
+            set(re.findall(r'data-t="([^"]+)"', fonte)) | {"Pattern", "Mixer", "Efeitos", "Guia"}
         en = i18n[i18n.index("const EN = {"):i18n.index("\n};")]
         chaves = set(re.findall(r'^  "((?:[^"\\]|\\.)*)":', en, re.M)) | \
             set(re.findall(r"^  '((?:[^'\\]|\\.)*)':", en, re.M)) | \
             set(re.findall(r"^  ([A-Za-zÀ-ú_]+):", en, re.M))
         self.assertEqual(usadas - chaves, set(), "frase sem traducao")
+
+
+class TesteGuia(unittest.TestCase):
+    """A aba Guia (web/js/abas/guia.mjs): uma simulacao dos Launchpads que
+    NUNCA escreve na maquina, com os textos em pt e en e as constantes do
+    motor copiadas sem divergir."""
+
+    def _fonte(self, rel):
+        with open(os.path.join(AQUI, "web", "js", rel)) as f:
+            return f.read()
+
+    def _node(self, js):
+        import shutil, subprocess, json
+        node = shutil.which("node")
+        if not node:
+            self.skipTest("sem node")
+        r = subprocess.run([node, "--input-type=module", "-e", js], cwd=AQUI,
+                           capture_output=True, text=True)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        return json.loads(r.stdout)
+
+    def test_o_guia_nunca_escreve(self):
+        # nem importa o rede.mjs, nem chama acao/fetch: o import e a chamada,
+        # nao a palavra (o comentario do guia.mjs fala do rede.mjs)
+        import re
+        for rel in ("abas/guia.mjs", "guia_textos.mjs"):
+            src = self._fonte(rel)
+            # qualquer import do rede.mjs (com from ou so de efeito, aspas
+            # simples ou duplas) e qualquer import() dinamico
+            self.assertNotRegex(src, r"""\bimport\b[^;]*?['"][^'"]*rede\.mjs['"]|\bimport\s*\(""", rel)
+        # e o guia so importa dom.mjs, i18n.mjs e os proprios textos - nenhum
+        # deles fala com o servidor
+        imports = re.findall(r"""\bfrom\s+['"]([^'"]+)['"]""", self._fonte("abas/guia.mjs"))
+        self.assertEqual(sorted(imports), ["../dom.mjs", "../guia_textos.mjs", "../i18n.mjs"])
+        for rel in ("dom.mjs", "i18n.mjs"):
+            self.assertNotRegex(self._fonte(rel), r"\bfetch\s*\(|rede\.mjs|EventSource", rel)
+            self.assertNotRegex(src, r"\bacao\s*\(|\bfetch\s*\(|new\s+EventSource|XMLHttpRequest", rel)
+            self.assertNotRegex(src, r"\bsendBeacon\b|\bWebSocket\b", rel)
+
+    def test_todo_texto_tem_pt_e_en(self):
+        js = ('import {T} from "./web/js/guia_textos.mjs";'
+              'const ruins = [];'
+              'const andar = (o, c) => { if (Array.isArray(o)) return o.forEach((x, i) => andar(x, c + "." + i));'
+              '  if (!o || typeof o !== "object") return;'
+              '  if ("pt" in o || "en" in o) for (const k of ["pt", "en"])'
+              '    if (typeof o[k] !== "string" || !o[k].trim()) ruins.push(c + "." + k);'
+              '  for (const [k, v] of Object.entries(o)) andar(v, c + "." + k); };'
+              'andar(T, "T"); console.log(JSON.stringify(ruins));')
+        self.assertEqual(self._node(js), [])
+
+    def test_os_mesmos_placeholders_em_pt_e_en(self):
+        js = ('import {T} from "./web/js/guia_textos.mjs";'
+              'const ruins = []; const ph = (s) => (s.match(/\\{\\w+\\}/g) || []).sort().join();'
+              'const andar = (o, c) => { if (!o || typeof o !== "object") return;'
+              '  if (typeof o.pt === "string" && typeof o.en === "string" && ph(o.pt) !== ph(o.en)) ruins.push(c);'
+              '  for (const [k, v] of Object.entries(o)) andar(v, c + "." + k); };'
+              'andar(T, "T"); console.log(JSON.stringify(ruins));')
+        self.assertEqual(self._node(js), [])
+
+    def test_constantes_batem_com_o_motor(self):
+        import launchpad as lp
+        js = ('import * as G from "./web/js/guia_textos.mjs";'
+              'console.log(JSON.stringify({par: G.PAR_PARAMS, niveis: G.NIVEIS_PAR, escolha: G.PAR_ESCOLHA,'
+              '  perf: G.PERF, rout: G.ROUT, fontes: G.FONTES_ROTA, fraca: G.VEL_FRACA,'
+              '  layer: G.TRACKS_LAYER, cena: G.CENA_CCS, func: G.FUNC_CCS}));')
+        g = self._node(js)
+        self.assertEqual(g["par"], list(campos.PAR_PARAMS))
+        self.assertEqual(g["niveis"], {k: list(v) for k, v in campos.NIVEIS_PAR.items()})
+        self.assertEqual(g["escolha"], list(campos.PAR_ESCOLHA))
+        self.assertEqual(g["perf"], {"mute": motor.PERF_MUTE, "chain": motor.PERF_CHAIN,
+                                     "loop": motor.PERF_LOOP, "last": motor.PERF_LAST,
+                                     "scale": motor.PERF_SCALE, "fills": list(motor.PERF_FILLS)})
+        self.assertEqual(g["rout"], {"sc1": motor.ROUT_SC1, "sc2": motor.ROUT_SC2,
+                                     "chaves": motor.ROUT_CHAVES,
+                                     "polarity": list(motor.ROUT_POLARITY), "hld": list(motor.ROUT_HLD)})
+        self.assertEqual(g["fontes"], [f.upper() for f in motor.FONTES_ROTA])
+        self.assertEqual((g["fraca"], g["layer"]), (motor.VEL_FRACA_ABAIXO, motor.TRACKS_LAYER))
+        self.assertEqual(g["cena"], list(lp.CENA_CCS))
+        self.assertEqual(g["func"], list(lp.FUNC_CCS))
 
 
 class TesteStandby(unittest.TestCase):

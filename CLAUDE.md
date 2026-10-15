@@ -80,6 +80,9 @@ grid — escreve na máquina. **Toda saída da serial passa por um único portã
   pedaços, depois da foto da sessão, e guarda um diário para o **Restaurar**, a primeira
   restauração do projeto (decisão do Luan, 13/10/2026). Um valor antigo que o portão
   recusa não volta: o Restaurar avisa.
+- **A aba Guia** (`abas/guia.mjs` + `guia_textos.mjs`) é só simulação dos Launchpads: não
+  escreve nem lê a máquina, não importa o `rede.mjs` (`TesteGuia`). Os textos dela ficam em
+  `{pt, en}` no `guia_textos.mjs`, fora do dicionário do `i18n.mjs`.
 - **O bloco 3:** o `[3]` é o pattern e o `[2]` o kit (`OFF_PATTERN_GLOBAL`,
   `OFF_KIT_ATUAL`). Até 15/10/2026 o código lia o pattern no `[2]`; os dois só diferem
   depois de um PC de kit (REFERENCIA 7.10).
