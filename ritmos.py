@@ -12,9 +12,9 @@ Formato de um ritmo (biblioteca.RITMOS):
     id         identificador unico
     nome       como aparece na aba
     estilo     chave de agrupamento
-    bpm        o tempo sugerido (o "Auto BPM" escreve; senao e so texto)
-    kit        NOME de um kit da lista KITS (o "Auto kit" manda o Program
-               Change; senao e so sugestao). Prefere os analogicos.
+    bpm        o tempo que o Play escreve
+    kit        NOME do kit SUGERIDO, da lista KITS: o menu da aba comeca nele e
+               troca por qualquer outro; o Play manda o Program Change
     scale      "16th" (padrao), "8th(T)", "16th(T)" ou "32nd" (campos.SCALES)
     last       o comprimento das variacoes (padrao 16)
     fonte      de onde veio o padrao - mostrado na aba
@@ -260,7 +260,7 @@ def escritas_de_steps(grade, lidos):
     So a diferenca: um slot que ja tem o valor nao e escrito; um step que o
     ritmo deixa vazio so e escrito se toca (vira FF). Os campos do step so
     importam nos steps que tocam: la, o que o ritmo nao diz volta ao NEUTRO.
-    O DIRECTION ([96]) nao e tocado: e so leitura."""
+    O DIRECTION ([96]) e a parte: escritas_da_direcao."""
     out = []
     for tr, passos in grade.items():
         atual = lidos[tr]
@@ -311,6 +311,16 @@ def escritas_do_ritmo(r, x, lidos_por_var, cab, grade=None):
         if cab[pos] != quer[pos]:
             out.append(Escrita(campos.CAB, x, 0, campos.INI_CAB + pos, quer[pos], cab[pos]))
     return out
+
+
+def escritas_da_direcao(x, direcoes):
+    """O DIRECTION de volta a FWD, para o ritmo tocar reto (pedido do Luan,
+    15/10/2026; o 1-01 de fabrica tem o SD em R-L). `direcoes` = {(v, track):
+    o [96] lido}; so os que nao sao FWD. O painel muda as 12 variacoes juntas
+    (medido 12/10): quem chama le as 12. -> [Escrita]."""
+    i = ts.INDICE_STEPS + campos.STEP_DIRECAO
+    return [Escrita(ts.bloco_de_steps(v), x, tr, i, 0, d)
+            for (v, tr), d in sorted(direcoes.items()) if d != 0]
 
 
 def desfazer(escritas):

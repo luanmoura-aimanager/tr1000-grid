@@ -22,7 +22,8 @@ nao existe neste arquivo. O TR-1000 App (original e copia) tem que estar
 FECHADO.
 
 Criterio 4 (cumprido em 08/10/2026): o pattern entra no endereco, no x dos
-blocos de pattern, e o x e o indice global do bloco 3 [2] (REFERENCIA 2.1c).
+blocos de pattern, e o x e o indice global do bloco 3 [3] (REFERENCIA 2.1c;
+o [2] e o kit, 7.10).
 `pattern` le o bloco 3, calcula o x e le o pattern inteiro - so se o App ja
 leu aquele x numa captura de referencia.
 
@@ -117,31 +118,35 @@ def mudancas(amostras):
     return out
 
 
-def chaves_da_foto(x):
+def chaves_da_foto(x, x_kit=None):
     """[(bloco, x, y, indice, n)]: a maior faixa de cada chave que o App leu
     com x = 0, com o x trocado pelo do pattern atual nos blocos de pattern e
-    de kit (os outros sao do sistema, x = 0 sempre). Uma leitura por chave: o
-    diff (ts.ultimos_valores) guarda uma resposta por (bloco, x, y)."""
+    pelo do kit (x_kit; sem ele, o do pattern) nos de kit. Os outros sao do
+    sistema, x = 0 sempre. Uma leitura por chave: o diff (ts.ultimos_valores)
+    guarda uma resposta por (bloco, x, y)."""
+    x_kit = x if x_kit is None else x_kit
     out = []
     for (b, x0, y) in sorted(cs.leituras_do_app()):
         if x0 != 0:
             continue
-        xx = x if (b in cs.BLOCOS_DE_PATTERN or b in cs.blocos_com_x()) else 0
+        if b in cs.BLOCOS_DE_PATTERN:
+            xx = x
+        elif b in cs.blocos_com_x():
+            xx = x_kit
+        else:
+            xx = 0
         out.append((b, xx, y) + tuple(cs.faixa_do_bloco(b, xx, y)))
     return out
 
 
 def tirar_foto(c):
     """Le a foto inteira do pattern selecionado. -> (nome, x, {(bloco, x, y):
-    [u32]}). O x e o do bloco 3 [3]; com o kit ([2]) diferente, avisa: os
-    blocos de kit seriam lidos no x do pattern."""
+    [u32]}). O x do pattern e o bloco 3 [3]; os blocos de kit vao no x do kit,
+    o [2] (revisao do PR #21)."""
     b3 = _ler_bloco(c, 3)
     x = b3[ts.OFF_PATTERN_GLOBAL]
-    if b3[ts.OFF_KIT_ATUAL] != x:
-        print(f"(!) bloco 3 [2..4] = {b3[2:5]}: kit {b3[ts.OFF_KIT_ATUAL] + 1} no pattern "
-              f"x {x} - os blocos de kit vao no x {x} do pattern")
     vals = {}
-    for b, xx, y, i, n in chaves_da_foto(x):
+    for b, xx, y, i, n in chaves_da_foto(x, b3[ts.OFF_KIT_ATUAL]):
         vals[(b, xx, y)] = c.ler(b, xx, y, i, n)
     return ts.nome_do_pattern(x), x, vals
 

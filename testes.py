@@ -720,6 +720,18 @@ class TesteSessaoC4(unittest.TestCase):
         # 1 aperto + bloco 3 + cabecalho + 12 bancos x 10 tracks
         self.assertEqual(len(m.recebido), 1 + 1 + 1 + 120)
 
+    def test_foto_le_os_blocos_de_kit_no_x_do_kit(self):
+        # revisao do PR #21: depois de um PC de kit, [2] (kit) != [3] (pattern)
+        import sessao_c4
+        ks = sessao_c4.chaves_da_foto(0, 40)
+        kit = [k for k in ks if k[0] not in conexao_serial.BLOCOS_DE_PATTERN
+               and k[0] in conexao_serial.blocos_com_x()]
+        pat = [k for k in ks if k[0] in conexao_serial.BLOCOS_DE_PATTERN]
+        self.assertTrue(kit and pat)
+        self.assertEqual({k[1] for k in kit}, {40})
+        self.assertEqual({k[1] for k in pat}, {0})
+        self.assertEqual(sessao_c4.chaves_da_foto(3), sessao_c4.chaves_da_foto(3, 3))
+
     def test_pattern_fora_de_0_127_nao_e_lido(self):
         import sessao_c4
         m = _MaquinaFalsa()
@@ -1275,6 +1287,11 @@ class TesteControladorasNoMotor(unittest.TestCase):
         b3[2] = 40
         m.reler()
         self.assertEqual((m.x_pattern, m.x_kit), (0, 40))
+        b3[2] = 100                                        # kit sem nome: parado
+        m.reler()
+        self.assertIsNone(m.x_kit)
+        b3[2] = 40
+        m.reler()
         maq.valores[(13, 40, 0, 556)] = 64
         girar(m, "bd.pan", 0, 64)                          # o kit 40 e o enderecado
         self.assertTrue(_escritas(maq))
@@ -1541,7 +1558,13 @@ class TesteCampos(unittest.TestCase):
         self.assertFalse(ok(118, 0, 1, 1249 + 117, 0xFFFFFF9B))  # -101
         self.assertTrue(ok(118, 0, 4, 1249 + 8, 0x8A503C))     # ALT no RS
         self.assertFalse(ok(118, 0, 0, 1249 + 8, 0x8A503C))    # ALT no BD: nao
-        self.assertFalse(ok(118, 0, 1, 1249 + 96, 0))          # [96]: sem leitura
+        # o DIRECTION (liberado 15/10/2026): so FWD e R-L, os medidos
+        self.assertTrue(ok(118, 0, 1, 1249 + 96, 0))           # FWD
+        self.assertTrue(ok(151, 9, 1, 1249 + 96, 3))           # R-L (Fill 4)
+        self.assertFalse(ok(118, 0, 1, 1249 + 96, 1))          # BWD: nao medido
+        self.assertFalse(ok(118, 0, 1, 1249 + 96, 5))          # RND: nao medido
+        self.assertFalse(ok(116, 0, 0, 1249 + 96, 0))          # fora do bloco de steps
+        self.assertFalse(ok(3, 0, 0, 1249 + 96, 0))
         self.assertTrue(ok(116, 3, 0, 988 + 36, 3))            # Scale 32nd
         self.assertFalse(ok(116, 3, 0, 988 + 36, 4))
         self.assertTrue(ok(116, 0, 0, 988 + 18, 3))            # chain A+B
@@ -3139,6 +3162,15 @@ class TesteRitmos(unittest.TestCase):
         self.assertEqual([(e.indice, e.valor) for e in d],
                          [(campos.INI_CAB + campos.CAB_SCALE, 0), (1249 + 64, 37), (1249, 0xFF)])
 
+    def test_direcao_so_o_que_nao_e_fwd_e_o_desfazer_volta(self):
+        import ritmos
+        es = ritmos.escritas_da_direcao(4, {(0, 1): 3, (0, 0): 0, (11, 1): 3})
+        self.assertEqual([(e.bloco, e.x, e.y, e.indice, e.valor, e.antigo) for e in es],
+                         [(118, 4, 1, 1345, 0, 3), (151, 4, 1, 1345, 0, 3)])
+        self.assertEqual({(e.indice, e.valor) for e in ritmos.desfazer(es)}, {(1345, 3)})
+        for e in es + ritmos.desfazer(es):
+            self.assertTrue(conexao_serial.escrita_permitida(e.bloco, e.x, e.y, e.indice, e.valor))
+
     def test_linha_detalhada_e_erros(self):
         import ritmos
         ps = ritmos.linha(("x...", {1: {"sub": "1/3"}, 3: {"vel": 66, "alt": True}}), 4, 4)
@@ -3286,19 +3318,72 @@ class TesteEscritaRitmo(unittest.TestCase):
         self.assertEqual(m.ritmo_estado["fase"], "falhou")
         self.assertEqual(_escritas(m.maquina), [])
 
-    def test_aviso_do_direction_e_do_accent(self):
-        m = self._motor()
+    def _sd_em_rl(self, m):
+        """O SD em R-L nas 12 variacoes, como o 1-01 de fabrica: no bloco
+        inteiro (as variacoes do ritmo) e no [96] sozinho (as outras)."""
         sd = [0] * 131
-        sd[campos.STEP_DIRECAO] = 3                          # R-L
-        m.maquina.blocos = {(118, 0, 1): sd}
+        sd[campos.STEP_DIRECAO] = 3
+        blocos = [tr1000_serial.bloco_de_steps(v) for v in range(12)]
+        m.maquina.blocos = {(b, 0, 1): list(sd) for b in blocos}
+        for b in blocos:
+            m.maquina.valores[(b, 0, 1, 1249 + campos.STEP_DIRECAO)] = 3
+        return blocos
+
+    def test_direction_vira_fwd_nas_12_e_o_accent_avisa(self):
+        m = self._motor()
+        blocos = self._sd_em_rl(m)
         m.maquina.valores[(117, 0, 0, campos.INI_ACC)] = 0x1111
         m.tocar_ritmo("one_drop")
         _rodar_ritmo(m)
+        self.assertEqual(m.ritmo_estado["fase"], "pronto")
         avisos = " | ".join(m.ritmo_estado["avisos"])
-        self.assertIn("SD em R-L na A", avisos)
+        self.assertIn("SD: R-L -> FWD", avisos)
+        self.assertEqual(avisos.count("-> FWD"), 1)          # uma linha por track
         self.assertIn("a A tem accent", avisos)
-        self.assertNotIn((118, 0, 1, 1249 + campos.STEP_DIRECAO),
-                         [(b, x, y, i) for b, x, y, i, _v in _escritas(m.maquina)])
+        w = {(b, y, i): v for b, x, y, i, v in _escritas(m.maquina)}
+        for b in blocos:
+            self.assertEqual(w[(b, 1, 1249 + campos.STEP_DIRECAO)], 0)
+        self.assertNotIn((118, 0, 1249 + campos.STEP_DIRECAO), w)   # o BD ja era FWD
+
+    def test_restaurar_volta_o_direction(self):
+        m = self._motor()
+        blocos = self._sd_em_rl(m)
+        m.tocar_ritmo("one_drop")
+        _rodar_ritmo(m)
+        m.maquina.recebido.clear()
+        m.desfazer_ritmo()
+        _rodar_ritmo(m)
+        w = {(b, y, i): v for b, x, y, i, v in _escritas(m.maquina)}
+        for b in blocos:
+            self.assertEqual(w[(b, 1, 1249 + campos.STEP_DIRECAO)], 3)
+
+    def test_play_pelo_reler_de_verdade(self):
+        # o bug de 15/10: o PC de kit muda o [2]; o motor nao pode achar que o
+        # pattern mudou (o reler real, sem atalho)
+        m = motor_cru()
+        m.ESPERA_KIT = 0.0
+        b3 = [0] * 292
+        m.maquina.blocos = {(3, 0, 0): b3}
+        m.pc_out.send_bytes = lambda b: (m.pc_out.bytes.append(b), b3.__setitem__(2, b[1]))
+        m.reler()
+        self.assertEqual((m.x_pattern, m.x_kit), (0, 0))
+        m.tocar_ritmo("one_drop", 40)
+        _rodar_ritmo(m)
+        self.assertEqual(m.ritmo_estado["fase"], "pronto", m.ritmo_estado["avisos"])
+        self.assertEqual((m.x_pattern, m.x_kit), (0, 40))
+        self.assertEqual(m.pc_out.bytes, [[0xC0, 40]])
+        self.assertEqual({x for b, x, *_ in _escritas(m.maquina) if b != campos.B3}, {0})
+
+    def test_restaurar_com_outro_pattern_nao_volta_o_kit(self):
+        m = self._motor()
+        m.x_kit = 0
+        m.tocar_ritmo("one_drop", 7)
+        _rodar_ritmo(m)
+        m.x_pattern = 5                                          # o painel trocou
+        m.desfazer_ritmo()
+        _rodar_ritmo(m)
+        self.assertEqual(m.pc_out.bytes, [[0xC0, 7]])            # nenhum PC de volta
+        self.assertIn("o kit de antes nao voltou", " ".join(m.ritmo_estado["avisos"]))
 
     def test_o_tempo_vai_sempre_nos_dois(self):
         m = self._motor()

@@ -9,9 +9,9 @@ a escala vem do que o Luan leu no visor do App. A regra de escrita
 DENTRO da faixa medida - e nada mais.
 
 Enderecamento (REFERENCIA 2.1c):
-  - x: o pattern/kit selecionado (bloco 3 [2..4]; nas capturas o pattern N
-    usou o kit N, entao o x do kit e o do pattern coincidiram - o kit esta em
-    [3] por DEDUCAO, a confirmar trocando o kit no painel)
+  - x: o kit (bloco 3 [2]) nos blocos de kit, o pattern ([3]) nos de pattern.
+    Nas capturas o pattern N usou o kit N e os dois coincidiram; o PC de kit
+    de 15/10/2026 mudou so o [2] (REFERENCIA 7.10)
   - y: o track (0..9 = BD..RC) quando o parametro e por track
 
 Os ids sao os mesmos do mapa das controladoras (controladoras.ROTULOS).

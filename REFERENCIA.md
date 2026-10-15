@@ -1184,7 +1184,8 @@ um ritmo que falha no começo não apaga o Desfazer do anterior.
 - com o pattern trocado, o tempo atual (bloco 3) não volta.
 
 **Os avisos:**
-- o DIRECTION ≠ FWD, que é só leitura (o caso do SD em R-L da fase 2k);
+- o DIRECTION ≠ FWD, que era só leitura (o caso do SD em R-L da fase 2k); desde 15/10 o
+  Play o põe em FWD (7.10);
 - o accent na variação, que não é gravável.
 
 **Os limites da máquina e as saídas usadas:**
@@ -1264,6 +1265,21 @@ e o gerador parou. Essas escritas ficaram só na memória; religar descarta.
   (Dub Techno Kit no dub, Backline Kit no reggae, Glitchy DnB Kit, Trance Kit, 727 Kit 2 nos
   brasileiros…), sem ouvir. Quem cita uma máquina na fonte (808, 909, 707, Jungle) ficou
   com ela.
+
+**O DIRECTION em FWD (fase 2n, pedido do Luan depois do primeiro Play):** no 1-01 o SD
+vem em R-L de fábrica, e o ritmo tocava embaralhado ("2 1 4 3…"). O portão passou a
+aceitar o `[96]` do bloco de steps, só com **0 (FWD) e 3 (R-L)**, os dois medidos na 7.8. O
+Play lê o `[96]` dos 10 tracks nas **12 variações** (o painel muda as 12 juntas) e escreve
+0 onde não é FWD. O Restaurar volta o 3; outro valor antigo (BWD, RND…) o portão recusa, e
+a aba avisa. **Não testado:** a escrita do `[96]` por nós (só o painel foi visto escrevendo).
+
+**As correções da revisão do PR #21 (na mesma fase):**
+- o Restaurar não manda o PC do kit antigo se o pattern da tela mudou, como já fazia com o
+  tempo;
+- a foto do `sessao_c4.py` lê os blocos de kit no x do kit (`[2]`);
+- o `x_kit` só vale para kit com nome (`ritmos.KITS`); outro valor para os knobs de kit;
+- um teste roda o Play pelo `reler` de verdade, com o PC de kit mudando o `[2]`. Com o
+  pattern de volta no `[2]`, ele falha.
 
 **Medido / deduzido / não testado:**
 - **Medido (15/10):** o PC de kit muda só o `[2]`, e o pattern tocando fica.

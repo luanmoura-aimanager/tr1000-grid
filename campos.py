@@ -37,6 +37,9 @@ CAMPOS_STEP = {
 # o SD do 1-01 de R-L para FWD = 3 -> 0). A ordem dos nomes e a do manual.
 STEP_DIRECAO = 96
 DIRECOES = ["FWD", "BWD", "P-P", "R-L", "L-R", "RND", "DNK", "DNK2"]
+# A escrita do DIRECTION, liberada pelo Luan em 15/10/2026 para o Play da aba
+# Ritmos (o ritmo toca reto): so os dois valores medidos, FWD e R-L
+DIRECOES_MEDIDAS = (0, 3)
 SUB_NOMES = ["OFF", "1/2", "1/3", "1/4", "Flam", "Triplet 1", "Triplet 2", "Triplet 3",
              "Triplet 4", "Quad 1", "Quad 2", "Quad 3", "Quad 4", "Quad 5"]
 CYCLE_NOMES = ([f"{a}/{b}" for b in range(1, 9) for a in range(1, b + 1)]
@@ -131,6 +134,8 @@ def _no_b3(indice):
 
 def _no_step(indice, valor, track):
     rel = indice - INI_STEPS
+    if rel == STEP_DIRECAO:
+        return valor in DIRECOES_MEDIDAS
     for nome, (pos, mn, mx) in CAMPOS_STEP.items():
         if pos <= rel < pos + N_STEPS:
             v = com_sinal(valor) if mn < 0 else valor

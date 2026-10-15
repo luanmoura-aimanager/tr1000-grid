@@ -186,8 +186,8 @@ const FASES = {
   escrevendo: "escrevendo…",
   pronto: "pronto",
   falhou: "falhou",
-  desfazendo: "desfazendo…",
-  desfeito: "desfeito",
+  desfazendo: "restaurando…",
+  desfeito: "restaurado",
 };
 
 export default {
