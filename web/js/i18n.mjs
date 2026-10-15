@@ -136,6 +136,8 @@ const EN = {
   Desligado: "Off",
   // ritmos
   Ritmos: "Rhythms",
+  // guia (os textos do guia estao no guia_textos.mjs, em pt e en)
+  Guia: "Guide",
   ritmos: "rhythms",
   escrita: "writing",
   kit: "kit",
